@@ -113,7 +113,7 @@ export const config = {
     streakBonusMax: 250,
     giveMin: 10,
     betMin: 20,
-    betMax: 200000,
+    betMax: 20000,
     startBalance: 10000,
   },
   rob: {
