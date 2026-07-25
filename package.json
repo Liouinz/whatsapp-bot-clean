@@ -1,0 +1,24 @@
+{
+  "name": "community-bot",
+  "version": "3.0.0",
+  "private": true,
+  "description": "WhatsApp Community Bot — Turso-Session, Preflight, LID-Admin-Fix, Gemini-Fallback, Glassmorphism-Panel.",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.14.0",
+    "@whiskeysockets/baileys": "^6.7.9",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^8.0.0",
+    "pino": "^9.0.0",
+    "qrcode": "^1.5.3"
+  }
+}
