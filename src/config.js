@@ -22,11 +22,11 @@ export const config = {
   ownerNumbers: OWNER_NUMBERS,
   botOwnerNumbers: BOT_OWNER_NUMBERS,
 
-  databaseUrl: process.env.DATABASE_URL || '',
-  databaseKey: process.env.DATABASE_KEY || '',
-  accessSecret: process.env.ACCESS_SECRET || '',
-  selfUrl: process.env.SELF_URL || '',
-  geminiApiKey: process.env.GEMINI_API_KEY || '',
+  databaseUrl: (process.env.DATABASE_URL || '').trim(),
+  databaseKey: (process.env.DATABASE_KEY || '').trim(),
+  accessSecret: (process.env.ACCESS_SECRET || '').trim(),
+  selfUrl: (process.env.SELF_URL || '').trim(),
+  geminiApiKey: (process.env.GEMINI_API_KEY || '').trim(),
 
   send: {
     jitterMinMs: 0,
