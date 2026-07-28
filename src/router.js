@@ -17,6 +17,7 @@ import { resolveCustom, listCustom } from './commands/custom.js';
 import { checkGameAnswer } from './commands/games.js';
 import { checkMillionaireAnswer } from './commands/millionaer.js';
 import { unknownCommandReply, askAi } from './ai.js';
+import TTLCache from './core/cache/ttlCache.js';
 
 import { adminCommands } from './commands/admin.js';
 import { communityCommands } from './commands/community.js';
@@ -97,14 +98,11 @@ export async function setCommandEnabled(name, enabled) {
 
 // ── Dedupe (LRU) + Sender-Rate-Limit ───────────────────────────────
 
-const seenIds = new Set();
+const seenIds = new TTLCache({ maxSize: config.messages.dedupeCacheSize, ttlMs: 300_000 });
 function isDuplicate(id) {
   if (!id) return false;
   if (seenIds.has(id)) return true;
-  seenIds.add(id);
-  if (seenIds.size > config.messages.dedupeCacheSize) {
-    seenIds.delete(seenIds.values().next().value);
-  }
+  seenIds.set(id, true);
   return false;
 }
 
@@ -170,7 +168,7 @@ function contextInfo(msg) {
 
 // ── XP (mit Cooldown, Level-Up-Erkennung) ──────────────────────────
 
-const xpCooldown = new Map(); // group|user → letzter XP-Zeitpunkt
+const xpCooldown = new TTLCache({ ttlMs: config.xp.cooldownMs, maxSize: 3000 });
 const xpTotals = new Map(); // group|user → bekannter XP-Stand (RAM)
 
 /** Nach einem Komplett-Reset der DB: XP-RAM-Stände verwerfen. */
@@ -183,10 +181,9 @@ async function grantXp(chatJid, userJid, name, settings) {
   if (!xpEnabled()) return; // XP-System global deaktiviert
   const user = resolveLid(userJid);
   const key = `${chatJid}|${user}`;
-  const now = Date.now();
-  if (now - (xpCooldown.get(key) || 0) < config.xp.cooldownMs) return;
-  xpCooldown.set(key, now);
-  if (xpCooldown.size > 3000) xpCooldown.delete(xpCooldown.keys().next().value);
+  
+  if (xpCooldown.has(key)) return;
+  xpCooldown.set(key, true);
 
   if (!xpTotals.has(key)) {
     const rows = await dbRows('SELECT xp FROM xp WHERE group_jid = ? AND user_jid = ?', [chatJid, user]);
@@ -220,8 +217,8 @@ async function grantXp(chatJid, userJid, name, settings) {
 
 // ── Slowmode (Mindestabstand zwischen Nachrichten pro Person) ──────
 
-const slowmodeLast = new Map(); // group|user → letzter Nachrichten-Zeitpunkt
-const slowmodeHinted = new Map(); // group|user → letzter Hinweis (nicht bei jeder Löschung nerven)
+const slowmodeLast = new TTLCache({ maxSize: 3000 });
+const slowmodeHinted = new TTLCache({ ttlMs: 60_000, maxSize: 3000 });
 
 async function checkSlowmode(msg, chatJid, senderIds, settings, senderName) {
   const secs = Number(settings.slowmode_secs || 0);
@@ -232,16 +229,14 @@ async function checkSlowmode(msg, chatJid, senderIds, settings, senderName) {
   const last = slowmodeLast.get(key) || 0;
   if (now - last >= secs * 1000) {
     slowmodeLast.set(key, now);
-    if (slowmodeLast.size > 3000) slowmodeLast.delete(slowmodeLast.keys().next().value);
     return false;
   }
   // Zu schnell → Nachricht löschen (wenn möglich), sparsam hinweisen
   try {
     await state.sock.sendMessage(chatJid, { delete: msg.key });
   } catch { /* ohne Admin-Rechte bleibt sie eben stehen */ }
-  if (now - (slowmodeHinted.get(key) || 0) > 60_000) {
-    slowmodeHinted.set(key, now);
-    if (slowmodeHinted.size > 3000) slowmodeHinted.delete(slowmodeHinted.keys().next().value);
+  if (!slowmodeHinted.has(key)) {
+    slowmodeHinted.set(key, true);
     const wait = Math.ceil((secs * 1000 - (now - last)) / 1000);
     await sendText(chatJid, `🐢 *${senderName}*, hier ist Slowmode aktiv — bitte noch ${wait} s warten.`);
   }
@@ -250,7 +245,7 @@ async function checkSlowmode(msg, chatJid, senderIds, settings, senderName) {
 
 // ── AFK-Erwähnungen (mit Anti-Spam-Cooldown) ───────────────────────
 
-const afkNoticeCooldown = new Map(); // chat|afkUser → Zeitpunkt
+const afkNoticeCooldown = new TTLCache({ ttlMs: 120_000, maxSize: 3000 });
 
 async function notifyAfkMentions(msg, chatJid) {
   const ci = contextInfo(msg);
@@ -264,9 +259,8 @@ async function notifyAfkMentions(msg, chatJid) {
     if (!afk || notified.has(afk.user)) continue;
     notified.add(afk.user);
     const key = `${chatJid}|${afk.user}`;
-    if (Date.now() - (afkNoticeCooldown.get(key) || 0) < 2 * 60_000) continue;
-    afkNoticeCooldown.set(key, Date.now());
-    if (afkNoticeCooldown.size > 3000) afkNoticeCooldown.delete(afkNoticeCooldown.keys().next().value);
+    if (afkNoticeCooldown.has(key)) continue;
+    afkNoticeCooldown.set(key, true);
     await replyTo(msg, `💤 Diese Person ist gerade *AFK* (seit ${fmtSince(afk.since)}): _${afk.reason}_`);
   }
 }
@@ -382,7 +376,7 @@ async function handleMessage(msg) {
     };
   }
 
-  // Bei fromMe ist der Absender IMMER die eigene Nummer — remoteJid wäre in
+  // Bei fromMe is der Absender IMMER die eigene Nummer — remoteJid wäre in
   // DMs der Chat-Partner und damit die falsche Person.
   const senderIds = fromSelf ? [state.botJidPn, state.botJidLid].filter(Boolean) : senderCandidates(msg);
   const sender = fromSelf ? state.botJidPn : senderJid(msg);
