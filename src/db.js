@@ -4,15 +4,7 @@ import { logger } from './logger.js';
 export { PROTECTED_TABLES, assertNotAuthWrite, deleteTargetTable } from './core/database/guard.js';
 export { getDb, dbRun, dbRows } from './core/database/client.js';
 export { DATA_TABLES, PROTECTED_TABLES_SET, initDb } from './core/database/schema.js';
-
-import { getDb } from './core/database/client.js';
-import { DATA_TABLES, PROTECTED_TABLES_SET } from './core/database/schema.js';
-
-export async function wipeAllData() {
-  const db = getDb();
-  const tables = DATA_TABLES.filter((t) => !PROTECTED_TABLES_SET.has(t));
-  await db.batch(tables.map((t) => ({ sql: `DELETE FROM ${t}`, args: [] })), 'write');
-}
+export { wipeAllData } from './core/database/wipe.js';
 
 export function todayKey() {
   return new Date().toISOString().slice(0, 10);
