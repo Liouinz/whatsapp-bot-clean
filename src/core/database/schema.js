@@ -32,7 +32,11 @@ export async function initDb() {
     `CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, group_jid TEXT, target TEXT, by_jid TEXT, detail TEXT, created_at INTEGER)`,
     `CREATE TABLE IF NOT EXISTS ai_usage (day TEXT PRIMARY KEY, calls INTEGER DEFAULT 0)`,
     `CREATE TABLE IF NOT EXISTS rob_cooldown (group_jid TEXT, user_jid TEXT, last_rob INTEGER, PRIMARY KEY (group_jid, user_jid))`,
-    `CREATE TABLE IF NOT EXISTS user_titles (user_jid TEXT PRIMARY KEY, title TEXT)`
+    `CREATE TABLE IF NOT EXISTS user_titles (user_jid TEXT PRIMARY KEY, title TEXT)`,
+    `CREATE TABLE IF NOT EXISTS scheduled_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, group_jid TEXT, target_time INTEGER, message TEXT, by_jid TEXT)`,
+    `CREATE TABLE IF NOT EXISTS inventory (user_jid TEXT, item_id TEXT, amount INTEGER DEFAULT 0, PRIMARY KEY (user_jid, item_id))`,
+    `CREATE TABLE IF NOT EXISTS prestige (user_jid TEXT PRIMARY KEY, level INTEGER DEFAULT 0)`,
+    `CREATE TABLE IF NOT EXISTS user_achievements (user_jid TEXT, achievement_id TEXT, unlocked_at INTEGER, PRIMARY KEY (user_jid, achievement_id))`
   ];
 
   for (const sql of schemas) {

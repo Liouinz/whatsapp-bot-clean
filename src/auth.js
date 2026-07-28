@@ -93,7 +93,9 @@ export async function useTursoAuthState(session = 'main') {
       await flushOnExit();
       process.exit(0);
     });
-    process.on('beforeExit', flushOnExit);
+    process.on('beforeExit', async () => {
+      await flushOnExit();
+    });
   }
 
   const readKeys = async (fullIds) => {
