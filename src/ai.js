@@ -7,8 +7,14 @@ import { BOT_NAME, PREFIX, config } from './config.js';
 import { state, rolloverDay } from './state.js';
 import { dbRun, dbRows, bufferStat, todayKey } from './db.js';
 import { logError, setErrorSummarizer } from './logger.js';
+import TTLCache from './core/cache/ttlCache.js';
 
-const userCooldown = new Map();
+const userCooldown = new TTLCache({
+  ttlMs: config.ai.userCooldownMs,
+  maxSize: 2000,
+  cleanupIntervalMs: 60_000,
+});
+
 let dailyCalls = 0;
 let dailyDay = todayKey();
 let summaryBudget = 10;
@@ -87,12 +93,9 @@ export function getAiQuota() {
 }
 
 export async function unknownCommandReply(userJid, commandText, knownCommands) {
-  const now = Date.now();
-  const last = userCooldown.get(userJid) || 0;
-  if (now - last < config.ai.userCooldownMs) return { blocked: 'cooldown' };
+  if (userCooldown.has(userJid)) return { blocked: 'cooldown' };
   if (!quotaOk()) return { blocked: 'quota' };
-  userCooldown.set(userJid, now);
-  if (userCooldown.size > 2000) userCooldown.delete(userCooldown.keys().next().value);
+  userCooldown.set(userJid, true);
 
   countCall();
   const prompt =
@@ -107,12 +110,9 @@ export async function unknownCommandReply(userJid, commandText, knownCommands) {
 }
 
 export async function askAi(userJid, question) {
-  const now = Date.now();
-  const last = userCooldown.get(userJid) || 0;
-  if (now - last < config.ai.userCooldownMs) return { blocked: 'cooldown' };
+  if (userCooldown.has(userJid)) return { blocked: 'cooldown' };
   if (!quotaOk()) return { blocked: 'quota' };
-  userCooldown.set(userJid, now);
-  if (userCooldown.size > 2000) userCooldown.delete(userCooldown.keys().next().value);
+  userCooldown.set(userJid, true);
 
   countCall();
   const q = String(question || '').trim().slice(0, 500);
