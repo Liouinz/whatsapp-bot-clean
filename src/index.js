@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { loadCommands } from './loader.js';
+import { createDashboard } from './dashboard.js';
 
 let watchdogTimer = null;
 
@@ -27,6 +28,12 @@ async function main() {
   try {
     const commands = await loadCommands();
     logger.success(`${commands.size} Befehle erfolgreich geladen.`, 'Bootstrap');
+
+    const app = createDashboard();
+    const port = process.env.PORT || 3000;
+    app.listen(port, () => {
+      logger.success(`Control Center Dashboard läuft auf Port ${port}`, 'Bootstrap');
+    });
 
     const mockSock = {
       ws: { isOpen: true },

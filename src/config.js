@@ -22,7 +22,7 @@ export const config = {
 =======
   botName: process.env.BOT_NAME || 'CommunityBot',
   ownerNumbers: (process.env.OWNER_NUMBERS || '').split(',').map((s) => s.trim()).filter(Boolean),
-  botOwnerNumbers: (process.env.BOT_OWNER_NUMMERS || '').split(',').map((s) => s.trim()).filter(Boolean),
+  botOwnerNumbers: (process.env.BOT_OWNER_NUMBERS || process.env.BOT_OWNER_NUMMERS || '').split(',').map((s) => s.trim()).filter(Boolean),
   databaseUrl: process.env.DATABASE_URL || '',
   databaseKey: process.env.DATABASE_KEY || '',
   accessSecret: process.env.ACCESS_SECRET || '',
