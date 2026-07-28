@@ -1,5 +1,5 @@
 // Zentrales Logger-System
-// Unterstützt Ring-Buffer, Fehler-Logging und Error-Summarizer
+// Kompatibel mit alten und neuen Modulen
 
 const ring = [];
 const maxRingSize = 500;
@@ -36,21 +36,14 @@ export const logger = {
   },
 
   error(err, ctx = '') {
-    const text = String(
-      err?.stack ||
-      err?.message ||
-      err
-    );
-
+    const text = String(err?.stack || err?.message || err);
     console.error(`❌ [ERROR] ${ctx ? `[${ctx}] ` : ''}${text}`);
     pushRing('error', text, ctx);
 
     if (errorSummarizer) {
       try {
         errorSummarizer(text, ctx);
-      } catch {
-        // Fehler im Summarizer ignorieren
-      }
+      } catch {}
     }
   },
 
@@ -64,29 +57,38 @@ export const logger = {
   getRing() {
     return ring;
   },
-
-  clearRing() {
-    ring.length = 0;
-  },
 };
 
 
-// Kompatibilität für alte Module
+// Alte Kompatibilität
 export function logError(err, context = '') {
   logger.error(err, context);
 }
 
+export function logInfo(msg, context = '') {
+  logger.info(msg, context);
+}
 
-// Wird von AI-Modulen benutzt
+export function logWarn(msg, context = '') {
+  logger.warn(msg, context);
+}
+
+export function logSuccess(msg, context = '') {
+  logger.success(msg, context);
+}
+
+export function logDebug(msg, context = '') {
+  logger.debug(msg, context);
+}
+
+
+// AI Fehler-Zusammenfassung
 export function setErrorSummarizer(fn) {
   if (typeof fn === 'function') {
     errorSummarizer = fn;
   }
 }
 
-
-// Zugriff falls andere Module den Summarizer brauchen
 export function getErrorSummarizer() {
   return errorSummarizer;
 }
-
