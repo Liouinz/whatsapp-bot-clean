@@ -1,4 +1,4 @@
-import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, jidNormalizedUser } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import { config } from './config.js';
 import { logger } from './logger.js';
@@ -7,8 +7,9 @@ import { createDashboard } from './dashboard.js';
 import { initDb, getDb } from './db.js';
 import { useTursoAuthState } from './auth.js';
 import { handleUpsert, loadToggles } from './router.js';
-import { loadMutes } from './moderation.js';
+import { loadMutes, handleJoin } from './moderation.js';
 import { initAiUsage } from './ai.js';
+import { state } from './state.js';
 
 let watchdogTimer = null;
 let botSock = null;
@@ -32,13 +33,13 @@ process.on('unhandledRejection', (reason) => {
 
 async function startWhatsApp() {
   logger.info('Starte Baileys WhatsApp Socket...', 'Baileys');
-  const { state, saveCreds } = await useTursoAuthState('main');
+  const { state: authState, saveCreds } = await useTursoAuthState('main');
   const { version, isLatest } = await fetchLatestBaileysVersion();
   logger.info(`Baileys Version v${version.join('.')}, isLatest: ${isLatest}`, 'Baileys');
 
   const sock = makeWASocket({
     version,
-    auth: state,
+    auth: authState,
     printQRInTerminal: true,
     logger: {
       trace: () => {},
@@ -51,12 +52,22 @@ async function startWhatsApp() {
   });
 
   botSock = sock;
+  state.sock = sock;
 
   sock.ev.process(async (events) => {
     if (events['connection.update']) {
       const update = events['connection.update'];
-      const { connection, lastDisconnect } = update;
+      const { connection, lastDisconnect, qr } = update;
+      
+      if (qr) {
+        state.currentQr = qr;
+        state.qrUpdatedAt = Date.now();
+      }
+
+      state.connection = connection || state.connection;
+
       if (connection === 'close') {
+        state.lastConnectedAt = null;
         const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
         logger.warn(`Verbindung geschlossen wegen ${lastDisconnect?.error}, Code: ${statusCode}`, 'Baileys');
         if (statusCode !== DisconnectReason.loggedOut) {
@@ -65,6 +76,12 @@ async function startWhatsApp() {
           logger.error('Bot wurde ausgeloggt. Auth-Daten müssen neu gepaart werden.', 'Baileys');
         }
       } else if (connection === 'open') {
+        state.lastConnectedAt = Date.now();
+        state.reconnectAttempts = 0;
+        if (sock.user?.id) {
+          state.botJidPn = jidNormalizedUser(sock.user.id);
+          state.botJidLid = sock.user.lid ? jidNormalizedUser(sock.user.lid) : null;
+        }
         logger.success('WhatsApp Verbindung erfolgreich aufgebaut!', 'Baileys');
       }
     }
@@ -79,6 +96,17 @@ async function startWhatsApp() {
         await handleUpsert(m);
       } catch (err) {
         logger.error(err, 'Router');
+      }
+    }
+
+    if (events['group-participants.update']) {
+      const { id, participants, action } = events['group-participants.update'];
+      if (action === 'add') {
+        try {
+          await handleJoin(id, participants);
+        } catch (err) {
+          logger.error(err, 'GroupParticipantsUpdate');
+        }
       }
     }
   });
