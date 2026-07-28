@@ -6,7 +6,9 @@ import { loadCommands } from './loader.js';
 import { createDashboard } from './dashboard.js';
 import { initDb, getDb } from './db.js';
 import { useTursoAuthState } from './auth.js';
-import { handleUpsert } from './router.js';
+import { handleUpsert, loadToggles } from './router.js';
+import { loadMutes } from './moderation.js';
+import { initAiUsage } from './ai.js';
 
 let watchdogTimer = null;
 let botSock = null;
@@ -92,6 +94,14 @@ async function main() {
     logger.info('Initialisiere Datenbank-Tabellen...', 'Bootstrap');
     await initDb();
     logger.success('Datenbank erfolgreich initialisiert.', 'Bootstrap');
+
+    logger.info('Lade Status (Mutes, Toggles, AI-Quota)...', 'Bootstrap');
+    await Promise.all([
+      loadMutes(),
+      loadToggles(),
+      initAiUsage(),
+    ]);
+    logger.success('Runtime-Zustände erfolgreich geladen.', 'Bootstrap');
 
     const commands = await loadCommands();
     logger.success(`${commands.size} Befehle erfolgreich geladen.`, 'Bootstrap');
