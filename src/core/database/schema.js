@@ -14,7 +14,7 @@ export const PROTECTED_TABLES_SET = new Set(['auth_creds', 'auth_keys']);
 export async function initDb() {
   const db = getDb();
   
-  // Vollständiges Schema für alle Kern-Tabellen
+  // Vollständiges Schema für alle Kern-Tabellen mit exakter Spaltenkompatibilität
   const schemas = [
     `CREATE TABLE IF NOT EXISTS group_settings (jid TEXT PRIMARY KEY, enabled INTEGER DEFAULT 0, antilink INTEGER DEFAULT 0, antispam INTEGER DEFAULT 0, blacklist_on INTEGER DEFAULT 1, welcome INTEGER DEFAULT 0, rules TEXT, levelup_announce INTEGER DEFAULT 1, slowmode_secs INTEGER DEFAULT 0)`,
     `CREATE TABLE IF NOT EXISTS coins (user_jid TEXT PRIMARY KEY, name TEXT, balance INTEGER DEFAULT 0, last_daily TEXT, streak INTEGER DEFAULT 0, total_earned INTEGER DEFAULT 0, total_gambled INTEGER DEFAULT 0)`,
@@ -31,7 +31,8 @@ export async function initDb() {
     `CREATE TABLE IF NOT EXISTS antiraid (group_jid TEXT PRIMARY KEY, enabled INTEGER DEFAULT 0, locked_until INTEGER DEFAULT 0)`,
     `CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, group_jid TEXT, target TEXT, by_jid TEXT, detail TEXT, created_at INTEGER)`,
     `CREATE TABLE IF NOT EXISTS ai_usage (day TEXT PRIMARY KEY, calls INTEGER DEFAULT 0)`,
-    `CREATE TABLE IF NOT EXISTS rob_cooldown (group_jid TEXT, user_jid TEXT, last_rob INTEGER, PRIMARY KEY (group_jid, user_jid))`
+    `CREATE TABLE IF NOT EXISTS rob_cooldown (group_jid TEXT, user_jid TEXT, last_rob INTEGER, PRIMARY KEY (group_jid, user_jid))`,
+    `CREATE TABLE IF NOT EXISTS user_titles (user_jid TEXT PRIMARY KEY, title TEXT)`
   ];
 
   for (const sql of schemas) {
