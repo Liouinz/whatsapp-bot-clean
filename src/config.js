@@ -13,11 +13,31 @@ export const OWNER_NUMBERS = parseNumbers(process.env.OWNER_NUMBERS);
 export const BOT_OWNER_NUMBERS = parseNumbers(process.env.BOT_OWNER_NUMBERS);
 
 export const config = {
+<<<<<<< HEAD
   send: {
     jitterMinMs: 0,
     jitterMaxMs: 150,
     maxRetries: 2,
     retryBackoffMs: 1500,
+=======
+  botName: process.env.BOT_NAME || 'CommunityBot',
+  ownerNumbers: (process.env.OWNER_NUMBERS || '').split(',').map((s) => s.trim()).filter(Boolean),
+  botOwnerNumbers: (process.env.BOT_OWNER_NUMMERS || '').split(',').map((s) => s.trim()).filter(Boolean),
+  databaseUrl: process.env.DATABASE_URL || '',
+  databaseKey: process.env.DATABASE_KEY || '',
+  accessSecret: process.env.ACCESS_SECRET || '',
+  selfUrl: process.env.SELF_URL || '',
+  geminiApiKey: process.env.GEMINI_API_KEY || '',
+  economy: {
+    startBalance: 1000,
+    betMin: 10,
+    betMax: 100000,
+    dailyMin: 100,
+    dailyMax: 500,
+    streakBonus: 50,
+    streakBonusMax: 1000,
+    giveMin: 10,
+>>>>>>> ae8f584 (feat: Implementiere Loader-Kompatibilitätsschicht und minimale index.js)
   },
   reconnect: {
     baseDelayMs: 500,
