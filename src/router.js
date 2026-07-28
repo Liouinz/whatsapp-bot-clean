@@ -217,7 +217,7 @@ async function grantXp(chatJid, userJid, name, settings) {
 
 // ── Slowmode (Mindestabstand zwischen Nachrichten pro Person) ──────
 
-const slowmodeLast = new TTLCache({ maxSize: 3000 });
+const slowmodeLast = new TTLCache({ maxSize: 3000, ttlMs: 600_000 });
 const slowmodeHinted = new TTLCache({ ttlMs: 60_000, maxSize: 3000 });
 
 async function checkSlowmode(msg, chatJid, senderIds, settings, senderName) {
@@ -349,7 +349,7 @@ async function handleMessage(msg) {
   if (!msg?.message) return;
 
   // Der Bot läuft auf der eigenen Nummer des Owners — dessen Nachrichten kommen
-  // deshalb als fromMe an. BEFEHLE des Owners werden verarbeitet; alles andere
+  // deshalb as fromMe an. BEFEHLE des Owners werden verarbeitet; alles andere
   // (normale eigene Nachrichten und vor allem die Echos der Bot-Antworten
   // selbst) wird verworfen, sonst antwortet der Bot auf sich selbst.
   const fromSelf = !!msg.key?.fromMe;
