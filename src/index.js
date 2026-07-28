@@ -2,6 +2,7 @@ import { config } from './config.js';
 import { logger } from './logger.js';
 import { loadCommands } from './loader.js';
 import { createDashboard } from './dashboard.js';
+import { initDb } from './db.js';
 
 let watchdogTimer = null;
 
@@ -26,6 +27,10 @@ async function main() {
   logger.info(`Starte ${config.botName}...`, 'Bootstrap');
   
   try {
+    logger.info('Initialisiere Datenbank-Tabellen...', 'Bootstrap');
+    await initDb();
+    logger.success('Datenbank erfolgreich initialisiert.', 'Bootstrap');
+
     const commands = await loadCommands();
     logger.success(`${commands.size} Befehle erfolgreich geladen.`, 'Bootstrap');
 

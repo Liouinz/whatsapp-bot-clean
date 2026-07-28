@@ -10,8 +10,11 @@ export function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * Puffer-Flush Logik (Stub für asynchrone Batch-Operationen)
+ */
 export async function flushBuffers() {
-  // Puffer-Flush Logik
+  // Keine aktiven Puffer im aktuellen Direkt-Schreib-Modus erforderlich
 }
 
 export function startFlushLoop() {
