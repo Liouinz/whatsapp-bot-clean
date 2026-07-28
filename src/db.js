@@ -1,11 +1,8 @@
-import { createClient } from '@libsql/client';
 import { config } from './config.js';
 import { logger } from './logger.js';
 
 export { PROTECTED_TABLES, assertNotAuthWrite, deleteTargetTable } from './core/database/guard.js';
-import { assertNotAuthWrite } from './core/database/guard.js';
-
-let client = null;
+export { getDb, dbRun, dbRows } from './core/database/client.js';
 
 const DATA_TABLES = [
   'warnings', 'mutes', 'bans', 'group_settings', 'coins', 'inventory',
@@ -17,17 +14,8 @@ const DATA_TABLES = [
 
 export const PROTECTED_TABLES_SET = new Set(['auth_creds', 'auth_keys']);
 
-export function getDb() {
-  if (!client) {
-    client = createClient({
-      url: config.databaseUrl.trim(),
-      authToken: config.databaseKey.trim(),
-    });
-  }
-  return client;
-}
-
 export async function initDb() {
+  const { getDb } = await import('./core/database/client.js');
   const db = getDb();
   for (const t of DATA_TABLES) {
     await db.execute(`CREATE TABLE IF NOT EXISTS ${t} (id TEXT PRIMARY KEY)`).catch(() => {});
@@ -36,27 +24,8 @@ export async function initDb() {
   await db.execute(`CREATE TABLE IF NOT EXISTS auth_keys (id TEXT PRIMARY KEY, data TEXT)`).catch(() => {});
 }
 
-export async function dbRun(sql, args = []) {
-  assertNotAuthWrite(sql);
-  const db = getDb();
-  try {
-    return await db.execute({ sql, args });
-  } catch (err) {
-    await new Promise((r) => setTimeout(r, 500));
-    return db.execute({ sql, args });
-  }
-}
-
-export async function dbRows(sql, args = []) {
-  try {
-    const res = await dbRun(sql, args);
-    return res.rows;
-  } catch {
-    return [];
-  }
-}
-
 export async function wipeAllData() {
+  const { getDb } = await import('./core/database/client.js');
   const db = getDb();
   const tables = DATA_TABLES.filter((t) => !PROTECTED_TABLES_SET.has(t));
   await db.batch(tables.map((t) => ({ sql: `DELETE FROM ${t}`, args: [] })), 'write');
