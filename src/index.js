@@ -21,6 +21,14 @@ function startWatchdog(sock) {
       logger.warn('WebSocket scheint tot zu sein (ws.isOpen ist false).', 'Watchdog');
     }
   }, config.keepAlive.wsKeepAliveMs);
+  if (watchdogTimer.unref) watchdogTimer.unref();
+}
+
+function stopWatchdog() {
+  if (watchdogTimer) {
+    clearInterval(watchdogTimer);
+    watchdogTimer = null;
+  }
 }
 
 process.on('uncaughtException', (err) => {
@@ -29,6 +37,16 @@ process.on('uncaughtException', (err) => {
 
 process.on('unhandledRejection', (reason) => {
   logger.error(reason, 'unhandledRejection');
+});
+
+process.on('SIGTERM', () => {
+  stopWatchdog();
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  stopWatchdog();
+  process.exit(0);
 });
 
 async function startWhatsApp() {
