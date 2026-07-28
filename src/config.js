@@ -1,3 +1,4 @@
+import dotenv from "dotenv"; dotenv.config();
 // Zentrale Konfiguration — ALLE Stellschrauben an einem Ort, keine Magic Numbers im Code.
 
 if (!process.env.TZ) process.env.TZ = 'Europe/Berlin';
