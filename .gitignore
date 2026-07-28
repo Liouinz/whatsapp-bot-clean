@@ -5,3 +5,4 @@ auth_info/
 /data/
 *.log
 .test-*.db*
+.aider*
