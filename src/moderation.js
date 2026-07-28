@@ -7,6 +7,7 @@ import { sendText } from './queue.js';
 import { logError, logInfo } from './logger.js';
 import { botIsAdmin, isUserAdmin, resolveLid, normalizeId, invalidateGroupMeta } from './permissions.js';
 import { state } from './state.js';
+import TTLCache from './core/cache/ttlCache.js';
 
 // Links: explizite URLs, Einladungs-/Kurzlink-Dienste UND nackte Domains mit
 // Pfad ("beispiel.xyz/abc") — die alte Regex hat t.me/discord.gg/bit.ly & Co.
@@ -98,7 +99,7 @@ export async function activeWarnings(groupJid, userJid) {
 
 /**
  * Warnung aussprechen + Eskalation ausführen.
- * Rückgabe: { count, action } — action ist null | 'mute' | 'kick'.
+ * Rückgabe: { count, action } — action is null | 'mute' | 'kick'.
  * WICHTIG (alter Bug): Beim Limit MUSS wirklich gemutet/gekickt werden.
  */
 export async function addWarning(groupJid, userJid, reason, byJid) {
@@ -130,12 +131,17 @@ export async function clearWarnings(groupJid, userJid) {
 
 // ── Mute (Bot löscht Nachrichten des Gemuteten, solange aktiv) ────
 
-const muteCache = new Map(); // "group|user" → until (ms)
+const muteCache = new TTLCache({ ttlMs: 86400_000, maxSize: 5000 }); // 24h max TTL als Puffer, wird über 'until' geprüft
 
 export async function loadMutes() {
   muteCache.clear();
   const rows = await dbRows('SELECT group_jid, user_jid, until FROM mutes WHERE until > ?', [Date.now()]);
-  for (const r of rows) muteCache.set(`${r.group_jid}|${r.user_jid}`, Number(r.until));
+  for (const r of rows) {
+    const ttl = Number(r.until) - Date.now();
+    if (ttl > 0) {
+      muteCache.set(`${r.group_jid}|${r.user_jid}`, Number(r.until), ttl);
+    }
+  }
 }
 
 export async function muteUser(groupJid, userJid, minutes, byJid, reason = '') {
@@ -147,7 +153,7 @@ export async function muteUser(groupJid, userJid, minutes, byJid, reason = '') {
        ON CONFLICT(group_jid, user_jid) DO UPDATE SET until = excluded.until, by_jid = excluded.by_jid, reason = excluded.reason`,
       [groupJid, user, until, byJid, reason]
     );
-    muteCache.set(`${groupJid}|${user}`, until);
+    muteCache.set(`${groupJid}|${user}`, until, minutes * 60_000);
     await audit('mute', groupJid, user, byJid, `${minutes} Min — ${reason}`);
     return true;
   } catch (err) {
@@ -168,10 +174,11 @@ export function isMuted(groupJid, userCandidates) {
   for (const raw of Array.isArray(userCandidates) ? userCandidates : [userCandidates]) {
     for (const id of [normalizeId(raw), resolveLid(raw)]) {
       if (!id) continue;
-      const until = muteCache.get(`${groupJid}|${id}`);
+      const key = `${groupJid}|${id}`;
+      const until = muteCache.get(key);
       if (until && until > now) return until;
       if (until && until <= now) {
-        muteCache.delete(`${groupJid}|${id}`);
+        muteCache.delete(key);
         dbRun('DELETE FROM mutes WHERE group_jid = ? AND user_jid = ?', [groupJid, id]).catch(() => {});
       }
     }
