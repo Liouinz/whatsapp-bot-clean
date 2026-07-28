@@ -20,6 +20,8 @@ async function withRetry(fn, tries = 4) {
   throw lastErr;
 }
 
+let shutdownListenersRegistered = false;
+
 export async function useTursoAuthState(session = 'main') {
   const db = getDb();
   const exec = (arg) => withRetry(() => db.execute(arg));
@@ -80,15 +82,19 @@ export async function useTursoAuthState(session = 'main') {
   const flushOnExit = async () => {
     await flushPendingWrites();
   };
-  process.on('SIGTERM', async () => {
-    await flushOnExit();
-    process.exit(0);
-  });
-  process.on('SIGINT', async () => {
-    await flushOnExit();
-    process.exit(0);
-  });
-  process.on('beforeExit', flushOnExit);
+
+  if (!shutdownListenersRegistered) {
+    shutdownListenersRegistered = true;
+    process.on('SIGTERM', async () => {
+      await flushOnExit();
+      process.exit(0);
+    });
+    process.on('SIGINT', async () => {
+      await flushOnExit();
+      process.exit(0);
+    });
+    process.on('beforeExit', flushOnExit);
+  }
 
   const readKeys = async (fullIds) => {
     const out = new Map();
