@@ -58,6 +58,27 @@ export const config = {
     startBalance: 10000,
   },
 
+  rob: {
+    cooldownMs: 15 * 60 * 1000,
+    minTargetBalance: 500,
+    percent: 0.15,
+    capAmount: 5000,
+    successChance: 0.45,
+    failPenaltyPct: 0.5,
+  },
+
+  moderation: {
+    warnExpiryDays: 7,
+    warnLimitMute: 3,
+    warnLimitKick: 5,
+    muteMinutesDefault: 30,
+    antiRaid: {
+      joinWindowMs: 10000,
+      joinThreshold: 5,
+      lockMinutes: 15,
+    },
+  },
+
   xp: {
     perMessageMin: 3,
     perMessageMax: 7,
@@ -67,8 +88,8 @@ export const config = {
   },
 
   ai: {
-    model: 'gemini-3-flash-preview',
-    modelLite: 'gemini-3.1-flash-lite',
+    model: 'gemini-1.5-flash',
+    modelLite: 'gemini-1.5-flash-8b',
     userCooldownMs: 30000,
     dailyLimit: 1400,
     timeoutMs: 15000,
