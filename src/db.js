@@ -29,7 +29,6 @@ export function getDb() {
 
 export async function initDb() {
   const db = getDb();
-  // Schema-Initialisierung / Tabellen sicherstellen
   for (const t of DATA_TABLES) {
     await db.execute(`CREATE TABLE IF NOT EXISTS ${t} (id TEXT PRIMARY KEY)`).catch(() => {});
   }
@@ -71,6 +70,14 @@ export async function flushBuffers() {
   // Puffer-Flush Logik
 }
 
+export function startFlushLoop() {
+  // Loop-Stub für Rückwärtskompatibilität
+}
+
+export function stopFlushLoop() {
+  // Stop-Stub für Rückwärtskompatibilität
+}
+
 export function totalXpForLevel(level) {
   return 50 * level * (level + 1);
 }
@@ -81,5 +88,14 @@ export function xpToLevel(xp) {
   return level;
 }
 
-const xpBuffer = new Map();
+export function levelProgress(xp) {
+  const currentLevelXp = totalXpForLevel(xpToLevel(xp));
+  const nextLevelXp = totalXpForLevel(xpToLevel(xp) + 1);
+  const needed = nextLevelXp - currentLevelXp;
+  const progress = xp - currentLevelXp;
+  return { currentLevelXp, nextLevelXp, needed, progress };
+}
+
 export function bufferXp() {}
+export function bufferStat() {}
+export function bufferGroupMessage() {}
