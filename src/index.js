@@ -6,7 +6,7 @@ import { loadCommands } from './loader.js';
 import { createDashboard } from './dashboard.js';
 import { initDb, getDb } from './db.js';
 import { useTursoAuthState } from './auth.js';
-import { handleMessage } from './router.js';
+import { handleUpsert } from './router.js';
 
 let watchdogTimer = null;
 let botSock = null;
@@ -73,14 +73,10 @@ async function startWhatsApp() {
 
     if (events['messages.upsert']) {
       const m = events['messages.upsert'];
-      if (m.type === 'notify') {
-        for (const msg of m.messages) {
-          try {
-            await handleMessage(sock, msg);
-          } catch (err) {
-            logger.error(err, 'Router');
-          }
-        }
+      try {
+        await handleUpsert(m);
+      } catch (err) {
+        logger.error(err, 'Router');
       }
     }
   });
