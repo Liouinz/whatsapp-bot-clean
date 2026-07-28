@@ -5,7 +5,7 @@ export const DATA_TABLES = [
   'user_boosts', 'user_titles', 'game_scores', 'xp', 'user_achievements',
   'prestige', 'scheduled_messages', 'polls', 'poll_votes', 'birthdays',
   'custom_commands', 'faqs', 'rob_cooldown', 'active_event', 'global_settings',
-  'group_daily', 'player_contracts'
+  'group_daily', 'player_contracts', 'quests'
 ];
 
 export const PROTECTED_TABLES_SET = new Set(['auth_creds', 'auth_keys']);
