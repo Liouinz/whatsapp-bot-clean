@@ -599,9 +599,10 @@ export function createDashboard() {
     lastPanelRestartAt = Date.now();
     await audit('restart', '', '', 'panel', '');
     await flushBuffers().catch(() => {}); // gepufferte XP/Zähler retten, bevor der Prozess endet
-    res.json({ ok: true, message: 'Neustart in 2 Sekunden …' });
+    res.json({ ok: true, message: 'Neustart in 0.5 Sekunden …' });
     logInfo('🔄 Neustart über das Panel ausgelöst.');
-    setTimeout(() => process.exit(0), 2000);
+    // FIX: Kurze Pause nach flush
+    setTimeout(() => process.exit(0), 500);
   });
 
   // ── Danger-Zone: komplette Datenbank leeren ──
@@ -628,7 +629,9 @@ export function createDashboard() {
       resetPrestigeCache();
       resetEventCache();
       resetGlobalCache();
-      groupCache = { at: 0, list: [] };
+      // FIX: groupCache als const, daher Mutation statt Reassignment
+      groupCache.at = 0;
+      groupCache.list = [];
       statsCache = { at: 0, data: null };
       await Promise.all([loadToggles(), loadCustomCommands(), loadAfk(), loadMutes(), initAiUsage(), loadActiveMillionaire()]);
       await audit('db-wipe', '', '', 'panel', `${tables} Tabellen geleert`);
@@ -711,7 +714,8 @@ export function createDashboard() {
 
 // ── Hilfen ─────────────────────────────────────────────────────────
 
-let groupCache = { at: 0, list: [] };
+// FIX: groupCache als const
+const groupCache = { at: 0, list: [] };
 
 /** Gruppen-Cache aktiv neu laden (z. B. direkt nach connection: 'open'). */
 export async function refreshGroupCache() {
@@ -765,7 +769,9 @@ async function listGroups() {
   // Ein Batch-Roundtrip statt einem Write pro Gruppe (fire-and-forget)
   if (upserts.length) getDb().batch(upserts, 'write').catch(() => {});
   list.sort((a, b) => a.name.localeCompare(b.name));
-  groupCache = { at: Date.now(), list };
+  // FIX: Mutation statt Reassignment
+  groupCache.at = Date.now();
+  groupCache.list = list;
   return list;
 }
 

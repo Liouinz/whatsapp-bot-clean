@@ -45,7 +45,17 @@ export async function flushBuffers() {
   const db = getDb();
   const promises = [];
   
-  for (const entry of xpBuffer.values()) {
+  // FIX: Buffer-Inhalte kopieren und Maps sofort leeren, um Race Conditions zu vermeiden
+  const xpEntries = Array.from(xpBuffer.values());
+  xpBuffer.clear();
+  
+  const statEntries = Array.from(statBuffer.values());
+  statBuffer.clear();
+  
+  const groupMsgEntries = Array.from(groupMsgBuffer.values());
+  groupMsgBuffer.clear();
+
+  for (const entry of xpEntries) {
     promises.push(
       db.execute({
         sql: `INSERT INTO xp (group_jid, user_jid, xp, messages, name) VALUES (?, ?, ?, 1, ?)
@@ -54,9 +64,8 @@ export async function flushBuffers() {
       }).catch(() => {})
     );
   }
-  xpBuffer.clear();
   
-  for (const entry of statBuffer.values()) {
+  for (const entry of statEntries) {
     const fieldMap = { messages: 'messages', commands: 'commands', ai_calls: 'ai_calls' };
     const col = fieldMap[entry.field] || 'messages';
     promises.push(
@@ -67,9 +76,8 @@ export async function flushBuffers() {
       }).catch(() => {})
     );
   }
-  statBuffer.clear();
   
-  for (const entry of groupMsgBuffer.values()) {
+  for (const entry of groupMsgEntries) {
     promises.push(
       db.execute({
         sql: `INSERT INTO group_daily (group_jid, day, messages) VALUES (?, ?, ?)
@@ -78,7 +86,6 @@ export async function flushBuffers() {
       }).catch(() => {})
     );
   }
-  groupMsgBuffer.clear();
   
   await Promise.all(promises);
 }

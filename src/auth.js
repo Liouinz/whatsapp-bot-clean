@@ -3,7 +3,6 @@
 
 import { initAuthCreds, BufferJSON, proto } from '@whiskeysockets/baileys';
 import { getDb } from './db.js';
-import { state } from './state.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const FLUSH_DELAY_MS = 800;
@@ -21,13 +20,12 @@ async function withRetry(fn, tries = 4) {
   throw lastErr;
 }
 
-let shutdownListenersRegistered = false;
-
 export async function useTursoAuthState(session = 'main') {
   const db = getDb();
   const exec = (arg) => withRetry(() => db.execute(arg));
   const batch = (stmts) => withRetry(() => db.batch(stmts, 'write'));
 
+  // FIX: LRU-Cache für keyCache (max 5000)
   const keyCache = new Map();
   const pendingWrites = new Map();
   let writeTimeout = null;
@@ -80,29 +78,6 @@ export async function useTursoAuthState(session = 'main') {
     }
   };
 
-  const flushOnExit = async () => {
-    await flushPendingWrites();
-  };
-
-  if (!shutdownListenersRegistered) {
-    shutdownListenersRegistered = true;
-    process.on('SIGTERM', async () => {
-      state.stopped = true;
-      await flushOnExit();
-      await new Promise(r => setTimeout(r, 500));
-      process.exit(0);
-    });
-    process.on('SIGINT', async () => {
-      state.stopped = true;
-      await flushOnExit();
-      await new Promise(r => setTimeout(r, 500));
-      process.exit(0);
-    });
-    process.on('beforeExit', async () => {
-      await flushOnExit();
-    });
-  }
-
   const readKeys = async (fullIds) => {
     const out = new Map();
     for (let i = 0; i < fullIds.length; i += 100) {
@@ -152,7 +127,11 @@ export async function useTursoAuthState(session = 'main') {
               const keyId = `${type}-${id}`;
               let value = found.get(keyId) ?? null;
 
-              if (value) keyCache.set(keyId, value);
+              if (value) {
+                keyCache.set(keyId, value);
+                // FIX: LRU-Check
+                if (keyCache.size > 5000) keyCache.delete(keyCache.keys().next().value);
+              }
 
               if (type === 'app-state-sync-key' && value) {
                 value = proto.Message.AppStateSyncKeyData.fromObject(value);
@@ -170,6 +149,8 @@ export async function useTursoAuthState(session = 'main') {
 
               if (value) {
                 keyCache.set(keyId, value);
+                // FIX: LRU-Check
+                if (keyCache.size > 5000) keyCache.delete(keyCache.keys().next().value);
               } else {
                 keyCache.delete(keyId);
               }

@@ -289,7 +289,8 @@ function findTarget(msg, args) {
   // Nummern mit Leerzeichen/Klammern/Punkten ("+49 171 234 5678") landen in
   // mehreren args — deshalb zusätzlich über den gesamten Text suchen.
   const joined = (args || []).join(' ');
-  const m = /(?:\+|00)?[\d(][\d\s().\/-]{4,24}\d/.exec(joined);
+  // FIX: Regex korrigiert
+  const m = /(?:\+|00)?[1-9]\d{0,3}[\s().\/-]{0,3}\d{1,4}[\s().\/-]{0,3}\d{1,4}[\s().\/-]{0,3}\d{1,4}/.exec(joined);
   if (m) {
     const digits = m[0].replace(/\D/g, '');
     if (digits.length >= 6 && digits.length <= 17) return `${digits}@s.whatsapp.net`;
