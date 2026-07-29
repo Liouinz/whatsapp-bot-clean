@@ -68,8 +68,6 @@ function sendAsset(req, res, key, cacheControl) {
 
 const sessions = new Map(); // token → Ablauf-Zeitstempel
 const loginFails = new Map(); // ip → { count, lockedUntil }
-let lastPanelRestartAt = 0;
-let serverInstance = null;
 
 const sha256 = (s) => crypto.createHash('sha256').update(String(s), 'utf8').digest();
 
@@ -603,11 +601,6 @@ export function createDashboard() {
     res.json({ ok: true, message: 'Neustart in 2 Sekunden …' });
     logInfo('🔄 Neustart über das Panel ausgelöst.');
 
-    if (serverInstance) {
-      serverInstance.close(() => {
-        process.exit(0);
-      });
-    }
     setTimeout(() => process.exit(0), 3000);
   });
 
@@ -713,11 +706,6 @@ export function createDashboard() {
   app.use((err, req, res, next) => {
     logError(err, 'panel');
     res.status(500).json({ error: 'Interner Fehler.' });
-  });
-
-  const port = process.env.PORT || 3000;
-  serverInstance = app.listen(port, () => {
-    logInfo(`Control Center Dashboard läuft auf Port ${port}`, 'Bootstrap');
   });
 
   return app;
