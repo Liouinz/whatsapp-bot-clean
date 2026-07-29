@@ -88,8 +88,8 @@ export const config = {
   },
 
   ai: {
-    model: 'gemini-1.5-flash',
-    modelLite: 'gemini-1.5-flash-8b',
+    model: 'gemini-1.5-flash-latest',
+    modelLite: 'gemini-1.5-flash-latest',
     userCooldownMs: 30000,
     dailyLimit: 1400,
     timeoutMs: 15000,
