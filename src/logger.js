@@ -81,6 +81,14 @@ export function logDebug(msg, context = '') {
   logger.debug(msg, context);
 }
 
+export function getLogs() {
+  return ring;
+}
+
+export function getRecentLogs(n = 50) {
+  return ring.slice(-n);
+}
+
 
 // AI Fehler-Zusammenfassung
 export function setErrorSummarizer(fn) {
