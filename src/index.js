@@ -11,7 +11,9 @@ import { loadMutes, handleJoin } from './moderation.js';
 import { initAiUsage } from './ai.js';
 import { state } from './state.js';
 import { preflight } from './preflight.js';
-import { startScheduler } from './scheduler.js'; // FIX: Scheduler importieren
+import { startScheduler } from './scheduler.js';
+// FIX: loadGlobalSettings importiert
+import { loadGlobalSettings } from './global.js';
 
 let watchdogTimer = null;
 let botSock = null;
@@ -33,7 +35,6 @@ function stopWatchdog() {
   }
 }
 
-// FIX: Hilfsfunktion zur Socket-Bereinigung (leerer catch)
 function cleanupSocket(sock) {
   if (!sock) return;
   try {
@@ -176,17 +177,19 @@ async function main() {
   
   try {
     await preflight();
-    startScheduler(); // FIX: Scheduler starten
+    startScheduler();
 
     logger.info('Initialisiere Datenbank-Tabellen...', 'Bootstrap');
     await initDb();
     logger.success('Datenbank erfolgreich initialisiert.', 'Bootstrap');
 
-    logger.info('Lade Status (Mutes, Toggles, AI-Quota)...', 'Bootstrap');
+    // FIX: loadGlobalSettings aufgerufen
+    logger.info('Lade Status (Mutes, Toggles, AI-Quota, Global-Settings)...', 'Bootstrap');
     await Promise.all([
       loadMutes(),
       loadToggles(),
       initAiUsage(),
+      loadGlobalSettings(),
     ]);
     logger.success('Runtime-Zustände erfolgreich geladen.', 'Bootstrap');
 

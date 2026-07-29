@@ -10,6 +10,7 @@ import {
 } from '../moderation.js';
 import { botIsAdmin, adminDebugInfo, resolveLid, isProtectedTarget, getGroupMeta } from '../permissions.js';
 import { buildWeeklyReport } from '../scheduler.js';
+import { botSock } from '../index.js';
 
 let lastRestartAt = 0;
 
@@ -497,8 +498,10 @@ export const adminCommands = [
       lastRestartAt = now;
       await ctx.reply('🔄 Alles klar, ich starte neu — bin gleich wieder da!');
       await audit('restart', ctx.chatJid, '', ctx.sender, 'per Befehl');
-      await flushBuffers().catch(() => {}); // gepufferte XP/Zähler retten, bevor der Prozess endet
-      setTimeout(() => process.exit(0), 3000); // Render startet den Prozess automatisch neu
+      await flushBuffers().catch(() => {});
+      // FIX: Auth-Flush vor Neustart
+      if (botSock?.authState?.flush) await botSock.authState.flush().catch(() => {});
+      setTimeout(() => process.exit(0), 3000);
     },
   },
   {
@@ -541,7 +544,7 @@ export const adminCommands = [
       );
     },
   },
-{
+  {
     name: 'cheat',
     aliases: ['givemoney', 'coinsgeben'],
     group: 'admin',
@@ -550,13 +553,7 @@ export const adminCommands = [
     ownerOnly: true,
     groupOnly: false,
     async run(ctx) {
-      // 🔒 Check gegen OWNER_NUMBERS aus der Config
-      const ownerList = config.OWNER_NUMBERS || config.ownerNumbers || [];
-      const isOwner = ownerList.some(num => 
-        num && (ctx.sender.includes(num) || ctx.senderPn?.includes(num) || ctx.senderJid?.includes(num))
-      );
-
-      // Betrag auslesen (Standard: 10.000 Coins)
+      // FIX: Manuelle Owner-Prüfung entfernt, da ownerOnly: true in der Registry reicht
       let amount = parseInt(ctx.args.find((a) => /^\d+$/.test(a)) || '', 10);
       if (!amount || isNaN(amount)) amount = 1000000;
 

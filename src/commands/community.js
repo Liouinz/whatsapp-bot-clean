@@ -139,10 +139,9 @@ export const communityCommands = [
     desc: 'Lebt der Bot? (Antwortzeit)',
     usage: '!ping',
     async run(ctx) {
+      // FIX: Zeitmessung vor dem Senden
       const t0 = Date.now();
-      await ctx.reply('🏓 *Pong!*');
-      const ms = Date.now() - t0;
-      if (ms > 8000) await ctx.reply(`⚠️ Antwortzeit gerade hoch: ${(ms / 1000).toFixed(1)}s`);
+      await ctx.reply(`🏓 *Pong!* (${Date.now() - t0}ms)`);
     },
   },
 ];

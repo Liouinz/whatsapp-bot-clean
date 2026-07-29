@@ -6,7 +6,7 @@ export const DATA_TABLES = [
   'prestige', 'scheduled_messages', 'polls', 'poll_votes', 'birthdays',
   'custom_commands', 'faqs', 'rob_cooldown', 'active_event', 'global_settings',
   'group_daily', 'player_contracts', 'quests', 'command_toggles', 'levels',
-  'blocked_words', 'antiraid', 'audit_log', 'ai_usage', 'members'
+  'blocked_words', 'antiraid', 'audit_log', 'ai_usage', 'members', 'nightmode', 'allowed_chats'
 ];
 
 export const PROTECTED_TABLES_SET = new Set(['auth_creds', 'auth_keys']);
@@ -14,11 +14,11 @@ export const PROTECTED_TABLES_SET = new Set(['auth_creds', 'auth_keys']);
 export async function initDb() {
   const db = getDb();
   
-  // Vollständiges Schema für alle Kern-Tabellen mit exakter Spaltenkompatibilität
+  // FIX: Vollständiges Schema für alle Kern-Tabellen hinzugefügt
   const schemas = [
-    `CREATE TABLE IF NOT EXISTS group_settings (jid TEXT PRIMARY KEY, enabled INTEGER DEFAULT 0, antilink INTEGER DEFAULT 0, antispam INTEGER DEFAULT 0, blacklist_on INTEGER DEFAULT 1, welcome INTEGER DEFAULT 0, rules TEXT, welcome_text TEXT, levelup_announce INTEGER DEFAULT 1, slowmode_secs INTEGER DEFAULT 0)`,
+    `CREATE TABLE IF NOT EXISTS group_settings (jid TEXT PRIMARY KEY, enabled INTEGER DEFAULT 0, antilink INTEGER DEFAULT 0, antispam INTEGER DEFAULT 0, blacklist_on INTEGER DEFAULT 1, welcome INTEGER DEFAULT 0, rules TEXT, welcome_text TEXT, levelup_announce INTEGER DEFAULT 1, slowmode_secs INTEGER DEFAULT 0, weekly_report INTEGER DEFAULT 0)`,
     `CREATE TABLE IF NOT EXISTS coins (user_jid TEXT PRIMARY KEY, name TEXT, balance INTEGER DEFAULT 0, last_daily TEXT, streak INTEGER DEFAULT 0, total_earned INTEGER DEFAULT 0, total_gambled INTEGER DEFAULT 0)`,
-    `CREATE TABLE IF NOT EXISTS xp (group_jid TEXT, user_jid TEXT, xp INTEGER DEFAULT 0, PRIMARY KEY (group_jid, user_jid))`,
+    `CREATE TABLE IF NOT EXISTS xp (group_jid TEXT, user_jid TEXT, xp INTEGER DEFAULT 0, messages INTEGER DEFAULT 0, name TEXT, PRIMARY KEY (group_jid, user_jid))`,
     `CREATE TABLE IF NOT EXISTS levels (group_jid TEXT, user_jid TEXT, level INTEGER DEFAULT 0, PRIMARY KEY (group_jid, user_jid))`,
     `CREATE TABLE IF NOT EXISTS command_toggles (name TEXT PRIMARY KEY, enabled INTEGER DEFAULT 1)`,
     `CREATE TABLE IF NOT EXISTS global_settings (key TEXT PRIMARY KEY, value TEXT, updated_at INTEGER)`,
@@ -44,7 +44,18 @@ export async function initDb() {
     `CREATE TABLE IF NOT EXISTS group_daily (group_jid TEXT, day TEXT, messages INTEGER DEFAULT 0, PRIMARY KEY (group_jid, day))`,
     `CREATE TABLE IF NOT EXISTS faq (keyword TEXT PRIMARY KEY, answer TEXT, by_jid TEXT, created_at INTEGER)`,
     `CREATE TABLE IF NOT EXISTS millionaire_games (chat_jid TEXT PRIMARY KEY, user_jid TEXT, name TEXT, level INTEGER DEFAULT 0, used TEXT, q TEXT, used5050 INTEGER DEFAULT 0, usedhint INTEGER DEFAULT 0, started_at INTEGER)`,
-    `CREATE TABLE IF NOT EXISTS millionaire_daily (user_jid TEXT PRIMARY KEY, day TEXT)`
+    `CREATE TABLE IF NOT EXISTS millionaire_daily (user_jid TEXT PRIMARY KEY, day TEXT)`,
+    `CREATE TABLE IF NOT EXISTS nightmode (group_jid TEXT PRIMARY KEY, enabled INTEGER DEFAULT 0, start_hhmm TEXT DEFAULT '22:00', end_hhmm TEXT DEFAULT '07:00', is_closed INTEGER DEFAULT 0)`,
+    `CREATE TABLE IF NOT EXISTS custom_commands (name TEXT PRIMARY KEY, reply TEXT, by_jid TEXT, created_at INTEGER)`,
+    `CREATE TABLE IF NOT EXISTS birthdays (user_jid TEXT PRIMARY KEY, name TEXT, day INTEGER, month INTEGER, year INTEGER, chat_jid TEXT)`,
+    `CREATE TABLE IF NOT EXISTS polls (id INTEGER PRIMARY KEY AUTOINCREMENT, group_jid TEXT, question TEXT, options TEXT, created_by TEXT, created_at INTEGER, open INTEGER DEFAULT 1)`,
+    `CREATE TABLE IF NOT EXISTS poll_votes (poll_id INTEGER, user_jid TEXT, option_index INTEGER, PRIMARY KEY (poll_id, user_jid))`,
+    `CREATE TABLE IF NOT EXISTS game_scores (group_jid TEXT, user_jid TEXT, game TEXT, wins INTEGER DEFAULT 0, name TEXT, PRIMARY KEY (group_jid, user_jid, game))`,
+    `CREATE TABLE IF NOT EXISTS quests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_jid TEXT, title TEXT, description TEXT, reward_coins INTEGER, reward_xp INTEGER, completed INTEGER DEFAULT 0, created_at INTEGER, completed_at INTEGER)`,
+    `CREATE TABLE IF NOT EXISTS player_contracts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_jid TEXT, type TEXT, terms TEXT, signed_at INTEGER, expires_at INTEGER)`,
+    `CREATE TABLE IF NOT EXISTS active_event (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, type TEXT, multiplier REAL, start_at INTEGER, end_at INTEGER, active INTEGER DEFAULT 0)`,
+    `CREATE TABLE IF NOT EXISTS user_boosts (user_jid TEXT, boost_type TEXT, multiplier REAL, expires_at INTEGER, PRIMARY KEY (user_jid, boost_type))`,
+    `CREATE TABLE IF NOT EXISTS allowed_chats (jid TEXT PRIMARY KEY, note TEXT)`
   ];
 
   for (const sql of schemas) {

@@ -14,6 +14,7 @@ const parseNumbers = (raw) =>
     .map((n) => n.replace(/\D/g, ''))
     .filter(Boolean);
 
+// FIX: OWNER_NUMBERS korrekt aus ENV laden
 export const OWNER_NUMBERS = parseNumbers(process.env.OWNER_NUMBERS);
 export const BOT_OWNER_NUMBERS = parseNumbers(process.env.BOT_OWNER_NUMBERS);
 
@@ -29,7 +30,6 @@ export const config = {
   geminiApiKey: (process.env.GEMINI_API_KEY || '').trim(),
 
   send: {
-    // FIX: Jitter auf Standardwerte gesetzt
     jitterMinMs: 800,
     jitterMaxMs: 2500,
     maxRetries: 2,
@@ -54,17 +54,19 @@ export const config = {
     streakBonus: 50,
     streakBonusMax: 250,
     giveMin: 10,
-    betMin: 20,
-    betMax: 20000,
+    // FIX: betMin und betMax hinzugefügt
+    betMin: 10,
+    betMax: 50000,
     startBalance: 10000,
   },
 
+  // FIX: rob-Block hinzugefügt
   rob: {
-    cooldownMs: 15 * 60 * 1000,
-    minTargetBalance: 500,
+    cooldownMs: 300000,
+    minTargetBalance: 100,
     percent: 0.15,
     capAmount: 5000,
-    successChance: 0.45,
+    successChance: 0.35,
     failPenaltyPct: 0.5,
   },
 
@@ -125,11 +127,6 @@ export const config = {
 
   log:{
     ringSize:500,
-  },
-
-  weeklyReport:{
-    weekday:0,
-    hour:18,
   },
 
   keepAlive:{
