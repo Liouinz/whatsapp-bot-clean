@@ -547,7 +547,7 @@ export const adminCommands = [
     group: 'admin',
     desc: 'Gibt dir selbst Coins (Nur für den Owner)',
     usage: '!cheat [menge]',
-    adminOnly: true,
+    ownerOnly: true,
     groupOnly: false,
     async run(ctx) {
       // 🔒 Check gegen OWNER_NUMBERS aus der Config
