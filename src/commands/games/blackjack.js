@@ -3,7 +3,7 @@
 
 import { config } from '../../config.js';
 import { resolveLid } from '../../permissions.js';
-import { earnCoins, getBalance, removeCoins } from '../economy.js';
+import { earnCoins, getWallet, takeCoins } from '../economy.js';
 import { chatGames, addWin } from './index.js';
 
 const DECK = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
@@ -66,10 +66,13 @@ export const blackjackCommand = {
     }
 
     const user = resolveLid(ctx.sender);
-    const balance = await getBalance(user);
+    // FIX: getWallet statt getBalance
+    const wallet = await getWallet(user);
+    const balance = Number(wallet.balance);
     if (balance < bet) return ctx.reply(`❌ Nicht genug Coins! Du hast ${balance} 🪙.`);
 
-    await removeCoins(user, bet);
+    // FIX: takeCoins statt removeCoins
+    if (!(await takeCoins(user, bet))) return ctx.reply(`❌ Fehler beim Abbuchen der Coins.`);
 
     const deck = createDeck();
     const playerHand = [deck.pop(), deck.pop()];
