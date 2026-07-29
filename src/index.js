@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, jidNormalizedUser } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
+import qrcode from 'qrcode-terminal';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { loadCommands } from './loader.js';
@@ -153,7 +154,6 @@ async function startWhatsApp() {
     version,
     auth: authState,
     logger: baileysLogger,
-    printQRInTerminal: true,
   });
 
   botSock = sock;
@@ -167,6 +167,15 @@ async function startWhatsApp() {
       if (qr) {
         state.currentQr = qr;
         state.qrUpdatedAt = Date.now();
+        console.log('--------------------------------------------------');
+        console.log('📲 QR-CODE EMPFANGEN — Bitte mit WhatsApp scannen:');
+        console.log('--------------------------------------------------');
+        try {
+          qrcode.generate(qr, { small: true });
+        } catch {
+          console.log(qr);
+        }
+        console.log('--------------------------------------------------');
       }
 
       state.connection = connection || state.connection;
@@ -272,8 +281,17 @@ async function main() {
 
     const app = createDashboard();
     const port = process.env.PORT || 3000;
-    app.listen(port, () => {
+    const server = app.listen(port, () => {
       logger.success(`Control Center Dashboard läuft auf Port ${port}`, 'Bootstrap');
+    });
+
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        logger.error(`Port ${port} ist bereits belegt! Bitte stoppe andere laufende Instanzen (z. B. mit 'killall node').`, 'Bootstrap');
+        process.exit(1);
+      } else {
+        logger.error(err, 'Server');
+      }
     });
 
     setForceRelinkHandler(async () => {

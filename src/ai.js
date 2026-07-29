@@ -31,11 +31,21 @@ export async function initAiUsage() {
 
   try {
     const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/${config.ai.modelLite}:generateContent`;
-    const res = await fetch(testUrl, {
+    let res = await fetch(testUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] }),
     });
+
+    if (res.status === 404) {
+      // Fallback auf gemini-1.5-flash wenn lite fehlschlägt
+      const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`;
+      res = await fetch(fallbackUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+        body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] }),
+      });
+    }
 
     if (res.status === 401 || res.status === 403) {
       logger.warn('KI deaktiviert: API-Key ungültig (401/403).', 'ai');
@@ -91,11 +101,11 @@ async function callGemini(prompt, model = config.ai.model) {
   const key = (process.env.GEMINI_API_KEY || '').trim();
   if (!key) return null;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  let url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.ai.timeoutMs);
   try {
-    const res = await fetch(url, {
+    let res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({
@@ -104,6 +114,21 @@ async function callGemini(prompt, model = config.ai.model) {
       }),
       signal: controller.signal,
     });
+
+    if (!res.ok && res.status === 404) {
+      // Fallback auf gemini-1.5-flash
+      url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`;
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 400, temperature: 0.6 },
+        }),
+        signal: controller.signal,
+      });
+    }
+
     if (!res.ok) {
       if (res.status === 404 && !modelCheckDone) {
         modelCheckDone = true;

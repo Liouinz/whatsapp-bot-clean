@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { logger } from './logger.js';
+import { getDb } from './core/database/client.js';
 
 export { PROTECTED_TABLES, assertNotAuthWrite, deleteTargetTable } from './core/database/guard.js';
 export { getDb, dbRun, dbRows } from './core/database/client.js';
