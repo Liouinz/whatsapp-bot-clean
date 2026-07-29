@@ -8,6 +8,7 @@ export const rankingCommands = [
     group: 'utility',
     desc: 'Zeigt Community-Ranglisten',
     usage: '!rangliste [nachrichten|xp|coins|level]',
+    groupOnly: true,
     async run(ctx) {
       const type = ctx.args[0]?.toLowerCase() || 'nachrichten';
       const chatJid = ctx.chatJid;
@@ -23,7 +24,7 @@ export const rankingCommands = [
             `SELECT user_jid, name, SUM(messages) as total FROM xp WHERE group_jid = ? GROUP BY user_jid ORDER BY total DESC LIMIT 10`,
             [chatJid]
           );
-          title = '📊 Nachrichten-Rangliste';
+          title = 'Nachrichten-Rangliste';
           icon = '💬';
           break;
           
@@ -32,28 +33,28 @@ export const rankingCommands = [
             `SELECT user_jid, name, SUM(xp) as total FROM xp WHERE group_jid = ? GROUP BY user_jid ORDER BY total DESC LIMIT 10`,
             [chatJid]
           );
-          title = '⭐ XP-Rangliste';
-          icon = '✨';
+          title = 'XP-Rangliste';
+          icon = '⭐';
           break;
           
         case 'coins':
           rows = await dbRows(
             `SELECT user_jid, name, balance as total FROM coins ORDER BY balance DESC LIMIT 10`
           );
-          title = '💰 Coins-Rangliste';
-          icon = '🪙';
+          title = 'Coins-Rangliste';
+          icon = '💰';
           break;
           
         case 'level':
           rows = await dbRows(
-            `SELECT l.user_jid, l.name, l.level, x.xp as total 
+            `SELECT l.user_jid, COALESCE(x.name, l.user_jid) as name, l.level, COALESCE(x.xp, 0) as total 
              FROM levels l 
-             JOIN xp x ON l.user_jid = x.user_jid AND l.group_jid = x.group_jid
+             LEFT JOIN xp x ON l.user_jid = x.user_jid AND l.group_jid = x.group_jid
              WHERE l.group_jid = ? 
-             ORDER BY l.level DESC, x.xp DESC LIMIT 10`,
+             ORDER BY l.level DESC, total DESC LIMIT 10`,
             [chatJid]
           );
-          title = '🏆 Level-Rangliste';
+          title = 'Level-Rangliste';
           icon = '👑';
           break;
           
