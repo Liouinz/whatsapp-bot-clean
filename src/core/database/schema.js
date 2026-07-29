@@ -33,6 +33,7 @@ export async function initDb() {
     `CREATE TABLE IF NOT EXISTS ai_usage (day TEXT PRIMARY KEY, calls INTEGER DEFAULT 0)`,
     `CREATE TABLE IF NOT EXISTS rob_cooldown (group_jid TEXT, user_jid TEXT, last_rob INTEGER, PRIMARY KEY (group_jid, user_jid))`,
     `CREATE TABLE IF NOT EXISTS user_titles (user_jid TEXT PRIMARY KEY, title TEXT)`,
+    `CREATE TABLE IF NOT EXISTS user_profiles (user_jid TEXT PRIMARY KEY, name TEXT, age INTEGER, location TEXT, hobbies TEXT, bio TEXT, birthday TEXT, updated_at INTEGER)`,
     `CREATE TABLE IF NOT EXISTS scheduled_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_jid TEXT, send_at INTEGER, text TEXT, created_by TEXT, done INTEGER DEFAULT 0, done_at INTEGER)`,
     `CREATE TABLE IF NOT EXISTS inventory (user_jid TEXT, item_id TEXT, qty INTEGER DEFAULT 0, PRIMARY KEY (user_jid, item_id))`,
     `CREATE TABLE IF NOT EXISTS prestige (user_jid TEXT PRIMARY KEY, level INTEGER DEFAULT 0)`,
