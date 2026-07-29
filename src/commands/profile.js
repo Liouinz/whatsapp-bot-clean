@@ -2,7 +2,7 @@
 // Spiele-Siege, aktive Verwarnungen und AFK-Status auf einen Blick.
 
 import { PREFIX, config } from '../config.js';
-import { dbRows, flushBuffers, levelProgress } from '../db.js';
+import { dbRows, dbRun, flushBuffers, levelProgress } from '../db.js';
 import { resolveLid } from '../permissions.js';
 import { activeWarnings } from '../moderation.js';
 import { getWallet, activeTitle } from './economy.js';
@@ -13,6 +13,11 @@ import { ACHIEVEMENTS } from '../data/achievements.js';
 function progressBar(have, need, width = 10) {
   const filled = Math.min(width, Math.round((have / Math.max(1, need)) * width));
   return '▰'.repeat(filled) + '▱'.repeat(width - filled);
+}
+
+async function getUserProfile(userJid) {
+  const rows = await dbRows('SELECT * FROM user_profiles WHERE user_jid = ?', [userJid]);
+  return rows[0] || null;
 }
 
 export const profileCommands = [
@@ -49,10 +54,17 @@ export const profileCommands = [
       const winsTotal = wins.reduce((sum, w) => sum + Number(w.wins), 0);
       const bestGame = wins.length ? ` (am besten: ${wins[0].game})` : '';
       const afk = getAfk([user]);
+      const profile = await getUserProfile(user);
 
       const achCount = Number(achRows[0]?.c || 0);
 
       let text = `👤 *Profil — ${name}*\n`;
+      if (profile?.age) text += `🎂 Alter: ${profile.age}\n`;
+      if (profile?.location) text += `📍 Wohnort: ${profile.location}\n`;
+      if (profile?.hobbies) text += `🎯 Hobbys: ${profile.hobbies}\n`;
+      if (profile?.bio) text += `📝 Bio: ${profile.bio}\n`;
+      if (profile?.birthday) text += `🎈 Geburtstag: ${profile.birthday}\n`;
+      if (profile) text += `\n`;
       if (title) text += `${title}\n`;
       if (prestige > 0) text += `⭐ Prestige-Rang *${prestige}* ${'✦'.repeat(Math.min(prestige, 10))}\n`;
       text += `\n⭐ Level *${level}* · Platz *#${rankPos}* in dieser Gruppe\n`;
@@ -69,6 +81,34 @@ export const profileCommands = [
 
       const mentions = isSelf ? undefined : [target];
       return ctx.reply(text.trimEnd(), mentions);
+    },
+  },
+  {
+    name: 'profil-setzen',
+    aliases: ['setprofil', 'meinprofil'],
+    group: 'community',
+    desc: 'Setzt dein Profil (Alter, Wohnort, Hobbys, Bio, Geburtstag)',
+    usage: '!profil-setzen [feld] [wert]',
+    async run(ctx) {
+      const field = ctx.args[0]?.toLowerCase();
+      const value = ctx.args.slice(1).join(' ');
+      const validFields = ['alter', 'wohnort', 'hobbys', 'bio', 'geburtstag'];
+      
+      if (!field || !validFields.includes(field)) {
+        return ctx.reply(`ℹ️ Gueltige Felder: ${validFields.join(', ')}\nBeispiel: !profil-setzen alter 25`);
+      }
+      
+      if (!value) return ctx.reply('❌ Bitte gib einen Wert an.');
+      
+      const dbField = { alter: 'age', wohnort: 'location', hobbys: 'hobbies', bio: 'bio', geburtstag: 'birthday' }[field];
+      
+      await dbRun(
+        `INSERT INTO user_profiles (user_jid, name, ${dbField}, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_jid) DO UPDATE SET ${dbField} = excluded.${dbField}, updated_at = excluded.updated_at`,
+        [ctx.sender, ctx.pushName || 'Unbekannt', value, Date.now()]
+      );
+      
+      return ctx.reply(`✅ ${field.charAt(0).toUpperCase() + field.slice(1)} gespeichert!`);
     },
   },
   {
