@@ -130,7 +130,7 @@ export const config = {
   },
 
   keepAlive:{
-    selfPingMs:60000,
+    selfPingMs:30000,
     wsKeepAliveMs:25000,
     watchdogMs:30000,
     stuckMs:220000,

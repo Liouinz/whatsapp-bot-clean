@@ -69,6 +69,29 @@ function stopSelfPing() {
   }
 }
 
+let dbHeartbeatTimer = null;
+
+function startDbHeartbeat() {
+  if (dbHeartbeatTimer) clearInterval(dbHeartbeatTimer);
+  dbHeartbeatTimer = setInterval(async () => {
+    try {
+      const { dbRows } = await import('./db.js');
+      await dbRows('SELECT 1');
+    } catch (err) {
+      logger.warn(`DB-Heartbeat Fehler: ${err.message}`, 'KeepAlive');
+    }
+  }, 60000);
+  if (dbHeartbeatTimer.unref) dbHeartbeatTimer.unref();
+  logger.info('DB-Heartbeat aktiv: jede 60000ms', 'KeepAlive');
+}
+
+function stopDbHeartbeat() {
+  if (dbHeartbeatTimer) {
+    clearInterval(dbHeartbeatTimer);
+    dbHeartbeatTimer = null;
+  }
+}
+
 function cleanupSocket(sock) {
   if (!sock) return;
   try {
@@ -90,6 +113,7 @@ process.on('unhandledRejection', (reason) => {
 process.on('SIGTERM', async () => {
   stopWatchdog();
   stopSelfPing();
+  stopDbHeartbeat();
   stopFlushLoop();
   await flushBuffers().catch(() => {});
   await new Promise(r => setTimeout(r, 500));
@@ -99,6 +123,7 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
   stopWatchdog();
   stopSelfPing();
+  stopDbHeartbeat();
   stopFlushLoop();
   await flushBuffers().catch(() => {});
   await new Promise(r => setTimeout(r, 500));
@@ -240,6 +265,7 @@ async function main() {
     });
 
     startSelfPing();
+    startDbHeartbeat();
     startFlushLoop();
     await startWhatsApp();
   } catch (err) {
