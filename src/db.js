@@ -61,7 +61,7 @@ export async function flushBuffers() {
         sql: `INSERT INTO xp (group_jid, user_jid, xp, messages, name) VALUES (?, ?, ?, 1, ?)
               ON CONFLICT(group_jid, user_jid) DO UPDATE SET xp = xp + excluded.xp, messages = messages + 1, name = excluded.name`,
         args: [entry.chatJid, entry.userJid, entry.amount, entry.name]
-      }).catch(() => {})
+      }).catch((err) => logger.warn(`Flush-Fehler: ${err.message}`, 'db.flush'))
     );
   }
   
@@ -73,7 +73,7 @@ export async function flushBuffers() {
         sql: `INSERT INTO daily_stats (day, messages, commands, ai_calls) VALUES (?, ?, ?, ?)
               ON CONFLICT(day) DO UPDATE SET ${col} = ${col} + excluded.${col}`,
         args: [entry.day, entry.field === 'messages' ? entry.count : 0, entry.field === 'commands' ? entry.count : 0, entry.field === 'ai_calls' ? entry.count : 0]
-      }).catch(() => {})
+      }).catch((err) => logger.warn(`Flush-Fehler: ${err.message}`, 'db.flush'))
     );
   }
   
@@ -83,7 +83,7 @@ export async function flushBuffers() {
         sql: `INSERT INTO group_daily (group_jid, day, messages) VALUES (?, ?, ?)
               ON CONFLICT(group_jid, day) DO UPDATE SET messages = messages + excluded.messages`,
         args: [entry.groupJid, entry.day, entry.count]
-      }).catch(() => {})
+      }).catch((err) => logger.warn(`Flush-Fehler: ${err.message}`, 'db.flush'))
     );
   }
   
@@ -92,7 +92,7 @@ export async function flushBuffers() {
 
 export function startFlushLoop() {
   if (flushTimer) return;
-  flushTimer = setInterval(() => flushBuffers().catch(() => {}), config.db.flushIntervalMs || 10000);
+  flushTimer = setInterval(() => flushBuffers().catch((err) => logger.warn(`Flush-Loop-Fehler: ${err.message}`, 'db.flush')), config.db.flushIntervalMs || 10000);
 }
 
 export function stopFlushLoop() {
