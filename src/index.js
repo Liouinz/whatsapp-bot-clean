@@ -10,7 +10,7 @@ import { useTursoAuthState, flushAuth } from './auth.js';
 import { handleUpsert, loadToggles, setRegistry } from './router.js';
 import { loadMutes, handleJoin } from './moderation.js';
 import { initAiUsage } from './ai.js';
-import { state } from './state.js';
+import { state, setForceRelinkHandler } from './state.js';
 import { preflight } from './preflight.js';
 import { startScheduler } from './scheduler.js';
 import { loadGlobalSettings } from './global.js';
@@ -264,6 +264,22 @@ async function main() {
     const port = process.env.PORT || 3000;
     app.listen(port, () => {
       logger.success(`Control Center Dashboard läuft auf Port ${port}`, 'Bootstrap');
+    });
+
+    setForceRelinkHandler(async () => {
+      logger.info('Force-Relink: Auth-Session wird zurückgesetzt...', 'Relink');
+      stopWatchdog();
+      cleanupSocket(botSock);
+      botSock = null;
+      state.sock = null;
+      state.currentQr = null;
+      state.qrUpdatedAt = 0;
+      
+      const auth = await useTursoAuthState('main');
+      await auth.clearSession();
+      
+      state.reconnectAttempts = 0;
+      setTimeout(() => startWhatsApp(), 1500);
     });
 
     startSelfPing();
