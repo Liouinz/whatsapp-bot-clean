@@ -10,14 +10,14 @@ import { getAfk, fmtSince } from './afk.js';
 import { getPrestigeLevel } from '../prestige.js';
 import { ACHIEVEMENTS } from '../data/achievements.js';
 
-function progressBar(have, need, width = 10) {
-  const filled = Math.min(width, Math.round((have / Math.max(1, need)) * width));
-  return '▰'.repeat(filled) + '▱'.repeat(width - filled);
-}
-
 async function getUserProfile(userJid) {
   const rows = await dbRows('SELECT * FROM user_profiles WHERE user_jid = ?', [userJid]);
   return rows[0] || null;
+}
+
+function progressBar(have, need, width = 10) {
+  const filled = Math.min(width, Math.round((have / Math.max(1, need)) * width));
+  return '▰'.repeat(filled) + '▱'.repeat(width - filled);
 }
 
 export const profileCommands = [
