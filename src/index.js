@@ -95,7 +95,12 @@ async function startWhatsApp() {
         const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
         logger.warn(`Verbindung geschlossen wegen ${lastDisconnect?.error}, Code: ${statusCode}`, 'Baileys');
         if (statusCode !== DisconnectReason.loggedOut) {
-          setTimeout(() => startWhatsApp(), 5000);
+          state.reconnectAttempts = (state.reconnectAttempts || 0) + 1;
+          if (state.reconnectAttempts < (config.reconnect?.maxAttempts || 10)) {
+            setTimeout(() => startWhatsApp(), 5000);
+          } else {
+            logger.error('Maximale Reconnect-Versuche erreicht. Bot wird nicht neu verbunden.', 'Baileys');
+          }
         } else {
           logger.error('Bot wurde ausgeloggt. Auth-Daten müssen neu gepaart werden.', 'Baileys');
         }
