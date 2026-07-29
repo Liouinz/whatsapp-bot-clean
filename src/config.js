@@ -100,6 +100,37 @@ export const config = {
     flushIntervalMs:10000,
   },
 
+  birthdays:{
+    hour:9,
+    coinsGift:500,
+  },
+
+  polls:{
+    maxOptions:10,
+    autoCloseHours:24,
+  },
+
+  scheduler:{
+    tickMs:30000,
+  },
+
+  slowmode:{
+    maxSeconds:300,
+  },
+
+  pairing:{
+    codeValidMs:120000,
+  },
+
+  log:{
+    ringSize:500,
+  },
+
+  weeklyReport:{
+    weekday:0,
+    hour:18,
+  },
+
   keepAlive:{
     selfPingMs:60000,
     wsKeepAliveMs:25000,
@@ -109,16 +140,25 @@ export const config = {
 
   games:{
     quizTimeoutMs:60000,
+    ratenMax:100,
+    ratenMaxTries:10,
     xpRewardQuiz:25,
     xpRewardRaten:20,
     xpRewardGalgen:30,
+    xpRewardTtt:30,
     coinsRewardQuiz:40,
+    coinsRewardRaten:30,
+    coinsRewardGalgen:40,
+    coinsRewardTtt:40,
+    tttTimeoutMs:300000,
+    galgenMaxFails:6,
   },
 
   web:{
     sessionTtlMs:7 * 24 * 60 * 60 * 1000,
     loginMaxFails:5,
     loginLockMinutes:15,
+    restartCooldownMs:120000,
   },
 };
 
