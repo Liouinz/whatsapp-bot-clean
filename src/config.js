@@ -129,11 +129,11 @@ export const config = {
     ringSize:500,
   },
 
-  keepAlive:{
-    selfPingMs:30000,
-    wsKeepAliveMs:25000,
-    watchdogMs:30000,
-    stuckMs:220000,
+  keepAlive: {
+    selfPingMs: 30000,
+    wsKeepAliveMs: 25000,
+    watchdogMs: 30000,
+    stuckMs: 220000,
   },
 
   games:{

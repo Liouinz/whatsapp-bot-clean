@@ -57,9 +57,9 @@ function startSelfPing() {
       req.destroy();
       logger.warn('Self-Ping Timeout.', 'KeepAlive');
     });
-  }, config.keepAlive.selfPingMs || 60000);
+  }, config.keepAlive.selfPingMs || 30000);
   if (selfPingTimer.unref) selfPingTimer.unref();
-  logger.info(`Self-Ping aktiv: alle ${config.keepAlive.selfPingMs || 60000}ms → ${url}`, 'KeepAlive');
+  logger.info(`Self-Ping aktiv: alle ${config.keepAlive.selfPingMs || 30000}ms → ${url}`, 'KeepAlive');
 }
 
 function stopSelfPing() {
