@@ -3,6 +3,7 @@
 
 import { initAuthCreds, BufferJSON, proto } from '@whiskeysockets/baileys';
 import { getDb } from './db.js';
+import { state } from './state.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const FLUSH_DELAY_MS = 800;
