@@ -6,7 +6,7 @@
 import { BOT_NAME, PREFIX, config } from './config.js';
 import { state, rolloverDay } from './state.js';
 import { dbRun, dbRows, bufferStat, todayKey } from './db.js';
-import { logError, setErrorSummarizer } from './logger.js';
+import { logError, logger, setErrorSummarizer } from './logger.js';
 import TTLCache from './core/cache/ttlCache.js';
 
 const userCooldown = new TTLCache({
@@ -18,14 +18,45 @@ const userCooldown = new TTLCache({
 let dailyCalls = 0;
 let dailyDay = todayKey();
 let summaryBudget = 10;
+let aiEnabled = false;
+let modelCheckDone = false;
 
 export async function initAiUsage() {
+  const key = (process.env.GEMINI_API_KEY || '').trim();
+  if (!key) {
+    logger.info('KI deaktiviert: Kein GEMINI_API_KEY gesetzt.', 'ai');
+    aiEnabled = false;
+    return;
+  }
+
+  try {
+    const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/${config.ai.modelLite}:generateContent`;
+    const res = await fetch(testUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] }),
+    });
+
+    if (res.status === 401 || res.status === 403) {
+      logger.warn('KI deaktiviert: API-Key ungültig (401/403).', 'ai');
+      aiEnabled = false;
+      return;
+    }
+
+    aiEnabled = true;
+    logger.info('KI aktiviert: Gemini API erreichbar.', 'ai');
+  } catch (err) {
+    logger.warn(`KI-Initialisierung fehlgeschlagen: ${err.message}`, 'ai');
+    aiEnabled = false;
+  }
+
   const rows = await dbRows('SELECT calls FROM ai_usage WHERE day = ?', [todayKey()]);
   dailyCalls = rows.length ? Number(rows[0].calls) : 0;
   state.aiCallsToday = dailyCalls;
 }
 
 function quotaOk() {
+  if (!aiEnabled) return false;
   const today = todayKey();
   if (today !== dailyDay) {
     dailyDay = today;
@@ -56,9 +87,10 @@ function pickModel(question) {
 }
 
 async function callGemini(prompt, model = config.ai.model) {
+  if (!aiEnabled) return null;
   const key = (process.env.GEMINI_API_KEY || '').trim();
-  // FIX: API Key Check
   if (!key) return null;
+
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.ai.timeoutMs);
@@ -73,7 +105,10 @@ async function callGemini(prompt, model = config.ai.model) {
       signal: controller.signal,
     });
     if (!res.ok) {
-      if (res.status !== 429) {
+      if (res.status === 404 && !modelCheckDone) {
+        modelCheckDone = true;
+        logger.warn(`Gemini Modell ${model} nicht gefunden (404). Bitte config.js prüfen.`, 'ai');
+      } else if (res.status !== 429 && res.status !== 404) {
         logError(new Error(`Gemini HTTP ${res.status}`), 'ai');
       }
       return null;
@@ -95,6 +130,7 @@ export function getAiQuota() {
 }
 
 export async function unknownCommandReply(userJid, commandText, knownCommands) {
+  if (!aiEnabled) return null;
   if (userCooldown.has(userJid)) return { blocked: 'cooldown' };
   if (!quotaOk()) return { blocked: 'quota' };
   userCooldown.set(userJid, true);
@@ -112,6 +148,7 @@ export async function unknownCommandReply(userJid, commandText, knownCommands) {
 }
 
 export async function askAi(userJid, question) {
+  if (!aiEnabled) return null;
   if (userCooldown.has(userJid)) return { blocked: 'cooldown' };
   if (!quotaOk()) return { blocked: 'quota' };
   userCooldown.set(userJid, true);
@@ -128,7 +165,7 @@ export async function askAi(userJid, question) {
 }
 
 async function summarizeError(errorText, ctx) {
-  if (!quotaOk() || summaryBudget <= 0) return null;
+  if (!aiEnabled || !quotaOk() || summaryBudget <= 0) return null;
   const prompt =
     `Fasse diesen Node.js/Baileys-Fehler eines WhatsApp-Bots in 1–2 deutschen Sätzen zusammen ` +
     `(was ist passiert, was sollte man prüfen). Keine Codeblöcke:\n\n${errorText.slice(0, 1200)}`;
