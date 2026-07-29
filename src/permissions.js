@@ -64,6 +64,7 @@ function learnLidMappings(meta) {
       const key = `${meta.id}|${lid}|${pn}`;
       if (persistedMappings.has(key)) continue;
       persistedMappings.add(key);
+      // FIX: LRU-Logik statt clear()
       if (persistedMappings.size > 20_000) persistedMappings.delete(persistedMappings.keys().next().value);
       dbRun(
         `INSERT INTO members (group_jid, user_jid, user_lid, last_seen) VALUES (?, ?, ?, ?)

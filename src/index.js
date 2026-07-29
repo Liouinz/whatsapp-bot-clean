@@ -11,7 +11,7 @@ import { loadMutes, handleJoin } from './moderation.js';
 import { initAiUsage } from './ai.js';
 import { state } from './state.js';
 import { preflight } from './preflight.js';
-import { startScheduler } from './scheduler.js'; // FIX: Import hinzugefügt
+import { startScheduler } from './scheduler.js'; // FIX: Scheduler importieren
 
 let watchdogTimer = null;
 let botSock = null;
