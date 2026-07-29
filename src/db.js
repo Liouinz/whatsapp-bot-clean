@@ -11,18 +11,88 @@ export function todayKey() {
 }
 
 /**
- * Puffer-Flush Logik (Stub für asynchrone Batch-Operationen)
+ * Puffer-Flush Logik fuer asynchrone Batch-Operationen
  */
+const xpBuffer = new Map();
+const statBuffer = new Map();
+const groupMsgBuffer = new Map();
+let flushTimer = null;
+
+export function bufferXp(chatJid, userJid, amount, name) {
+  const key = `${chatJid}:${userJid}`;
+  const entry = xpBuffer.get(key) || { chatJid, userJid, amount: 0, name };
+  entry.amount += amount;
+  xpBuffer.set(key, entry);
+}
+
+export function bufferStat(field) {
+  const day = todayKey();
+  const key = `${day}:${field}`;
+  const entry = statBuffer.get(key) || { day, field, count: 0 };
+  entry.count += 1;
+  statBuffer.set(key, entry);
+}
+
+export function bufferGroupMessage(groupJid) {
+  const day = todayKey();
+  const key = `${groupJid}:${day}`;
+  const entry = groupMsgBuffer.get(key) || { groupJid, day, count: 0 };
+  entry.count += 1;
+  groupMsgBuffer.set(key, entry);
+}
+
 export async function flushBuffers() {
-  // Keine aktiven Puffer im aktuellen Direkt-Schreib-Modus erforderlich
+  const db = getDb();
+  const promises = [];
+  
+  for (const entry of xpBuffer.values()) {
+    promises.push(
+      db.execute({
+        sql: `INSERT INTO xp (group_jid, user_jid, xp, messages, name) VALUES (?, ?, ?, 1, ?)
+              ON CONFLICT(group_jid, user_jid) DO UPDATE SET xp = xp + excluded.xp, messages = messages + 1, name = excluded.name`,
+        args: [entry.chatJid, entry.userJid, entry.amount, entry.name]
+      }).catch(() => {})
+    );
+  }
+  xpBuffer.clear();
+  
+  for (const entry of statBuffer.values()) {
+    const fieldMap = { messages: 'messages', commands: 'commands', ai_calls: 'ai_calls' };
+    const col = fieldMap[entry.field] || 'messages';
+    promises.push(
+      db.execute({
+        sql: `INSERT INTO daily_stats (day, messages, commands, ai_calls) VALUES (?, ?, ?, ?)
+              ON CONFLICT(day) DO UPDATE SET ${col} = ${col} + excluded.${col}`,
+        args: [entry.day, entry.field === 'messages' ? entry.count : 0, entry.field === 'commands' ? entry.count : 0, entry.field === 'ai_calls' ? entry.count : 0]
+      }).catch(() => {})
+    );
+  }
+  statBuffer.clear();
+  
+  for (const entry of groupMsgBuffer.values()) {
+    promises.push(
+      db.execute({
+        sql: `INSERT INTO group_daily (group_jid, day, messages) VALUES (?, ?, ?)
+              ON CONFLICT(group_jid, day) DO UPDATE SET messages = messages + excluded.messages`,
+        args: [entry.groupJid, entry.day, entry.count]
+      }).catch(() => {})
+    );
+  }
+  groupMsgBuffer.clear();
+  
+  await Promise.all(promises);
 }
 
 export function startFlushLoop() {
-  // Loop-Stub für Rückwärtskompatibilität
+  if (flushTimer) return;
+  flushTimer = setInterval(() => flushBuffers().catch(() => {}), config.db.flushIntervalMs || 10000);
 }
 
 export function stopFlushLoop() {
-  // Stop-Stub für Rückwärtskompatibilität
+  if (flushTimer) {
+    clearInterval(flushTimer);
+    flushTimer = null;
+  }
 }
 
 export function totalXpForLevel(level) {
@@ -42,7 +112,3 @@ export function levelProgress(xp) {
   const progress = xp - currentLevelXp;
   return { currentLevelXp, nextLevelXp, needed, progress };
 }
-
-export function bufferXp() {}
-export function bufferStat() {}
-export function bufferGroupMessage() {}
