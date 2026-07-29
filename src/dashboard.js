@@ -598,7 +598,8 @@ export function createDashboard() {
     }
     lastPanelRestartAt = Date.now();
     await audit('restart', '', '', 'panel', '');
-    await flushBuffers().catch(() => {}); // gepufferte XP/Zähler retten, bevor der Prozess endet
+    // FIX: Flush VOR Response
+    await flushBuffers().catch(() => {}); 
     res.json({ ok: true, message: 'Neustart in 0.5 Sekunden …' });
     logInfo('🔄 Neustart über das Panel ausgelöst.');
     // FIX: Kurze Pause nach flush
