@@ -12,7 +12,14 @@ import { releaseExpiredRaidLocks } from './moderation.js';
 import { congratulateBirthdays } from './commands/birthdays.js';
 import { renderPollResult, closePoll } from './commands/polls.js';
 import { sweepContracts } from './commands/quests.js';
-import { maybeAutoEvent } from './events.js';
+
+let maybeAutoEvent = async () => {};
+try {
+  const ev = await import('./events.js');
+  if (typeof ev.maybeAutoEvent === 'function') {
+    maybeAutoEvent = ev.maybeAutoEvent;
+  }
+} catch {}
 
 let tickTimer = null;
 
@@ -58,7 +65,7 @@ async function processNightmode() {
       const shouldBeClosed = inNightWindow(now, r.start_hhmm, r.end_hhmm);
       const isClosed = Number(r.is_closed) === 1;
       if (shouldBeClosed === isClosed) continue;
-      if (!(await botIsAdmin(r.group_jid))) continue;
+      if (state.connection !== 'open' || !(await botIsAdmin(r.group_jid))) continue;
 
       await state.sock.groupSettingUpdate(r.group_jid, shouldBeClosed ? 'announcement' : 'not_announcement');
       await dbRun('UPDATE nightmode SET is_closed = ? WHERE group_jid = ?', [shouldBeClosed ? 1 : 0, r.group_jid]);

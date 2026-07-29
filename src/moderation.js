@@ -33,8 +33,7 @@ export async function getGroupSettings(groupJid) {
   let row = rows[0];
   if (!row) {
     // Neue Gruppe → EINGESCHRÄNKTER Modus (enabled=0). Der Bot bleibt still, bis
-    // ein OWNER die Gruppe per Befehl (!setup/!enable/„Bot aktivieren") freischaltet.
-    // Verhindert, dass der Bot unbeabsichtigt in fremden Gruppen arbeitet.
+    // ein OWNER/Admin die Gruppe per Befehl freischaltet.
     await dbRun('INSERT OR IGNORE INTO group_settings (jid, enabled) VALUES (?, 0)', [groupJid]).catch(() => {});
     row = {
       jid: groupJid, enabled: 0, antilink: 0, antispam: 0,
@@ -50,10 +49,8 @@ export function invalidateSettings(groupJid) {
   else settingsCache.clear();
 }
 
-// ── Wort-Blacklist (RAM-Cache — lief vorher als DB-Query bei JEDER Nachricht) ──
+// ── Wort-Blacklist ─────────────────────────────────────────────────
 
-// Erkennungs-Normalisierung: Kleinbuchstaben, Leetspeak (Sch3i55e), Umlaute/
-// Akzente (SCHEIẞE, Schéiße) — damit die üblichen Umgehungs-Tricks nicht ziehen.
 const LEET = { 0: 'o', 1: 'i', 3: 'e', 4: 'a', 5: 's', 7: 't', 8: 'b', '@': 'a', $: 's', '€': 'e' };
 
 export function normalizeForFilter(s) {
@@ -62,10 +59,10 @@ export function normalizeForFilter(s) {
     .replace(/[0134578$@€]/g, (c) => LEET[c] ?? c)
     .replace(/ä/g, 'a').replace(/ö/g, 'o').replace(/ü/g, 'u').replace(/ß/g, 'ss')
     .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, ''); // kombinierende Akzente entfernen
+    .replace(/[\u0300-\u036f]/g, '');
 }
 
-const wordsCache = new Map(); // groupJid → { words: [{raw, norm, condensed}], at }
+const wordsCache = new Map();
 const WORDS_CACHE_MS = 5 * 60_000;
 
 async function getBlockedWords(groupJid) {
@@ -88,7 +85,6 @@ export function invalidateBlockedWords(groupJid) {
 
 // ── Warnungen + Eskalation ─────────────────────────────────────────
 
-/** Aktive (nicht abgelaufene) Warnungen eines Nutzers zählen. */
 export async function activeWarnings(groupJid, userJid) {
   const rows = await dbRows(
     'SELECT id, reason, created_at FROM warnings WHERE group_jid = ? AND user_jid = ? AND expires_at > ? ORDER BY created_at',
@@ -97,11 +93,6 @@ export async function activeWarnings(groupJid, userJid) {
   return rows;
 }
 
-/**
- * Warnung aussprechen + Eskalation ausführen.
- * Rückgabe: { count, action } — action is null | 'mute' | 'kick'.
- * WICHTIG (alter Bug): Beim Limit MUSS wirklich gemutet/gekickt werden.
- */
 export async function addWarning(groupJid, userJid, reason, byJid) {
   const user = resolveLid(userJid);
   const expiresAt = Date.now() + config.moderation.warnExpiryDays * 24 * 60 * 60_000;
@@ -129,9 +120,9 @@ export async function clearWarnings(groupJid, userJid) {
   await audit('clearwarns', groupJid, user, 'admin', '');
 }
 
-// ── Mute (Bot löscht Nachrichten des Gemuteten, solange aktiv) ────
+// ── Mute ───────────────────────────────────────────────────────────
 
-const muteCache = new TTLCache({ ttlMs: 86400_000, maxSize: 5000 }); // 24h max TTL als Puffer, wird über 'until' geprüft
+const muteCache = new TTLCache({ ttlMs: 86400_000, maxSize: 5000 });
 
 export async function loadMutes() {
   muteCache.clear();
@@ -145,6 +136,7 @@ export async function loadMutes() {
 }
 
 export async function muteUser(groupJid, userJid, minutes, byJid, reason = '') {
+  if (state.connection !== 'open') return false;
   const user = resolveLid(userJid);
   const until = Date.now() + minutes * 60_000;
   try {
@@ -189,6 +181,7 @@ export function isMuted(groupJid, userCandidates) {
 // ── Kick & Ban ─────────────────────────────────────────────────────
 
 export async function kickUser(groupJid, userJid, reason = '') {
+  if (state.connection !== 'open') return false;
   const user = resolveLid(userJid);
   try {
     if (!(await botIsAdmin(groupJid))) return false;
@@ -230,18 +223,13 @@ async function isBanned(groupJid, userJid) {
 
 // ── Auto-Moderation pro Nachricht ──────────────────────────────────
 
-const spamTracker = new Map(); // "group|user" → [Zeitstempel]
+const spamTracker = new Map();
 
-/**
- * Prüft eine Gruppen-Nachricht auf Regelverstöße.
- * Rückgabe: null (ok) oder { deleted, warned: {count, action}, kind, untilText }.
- */
 export async function checkAutoMod(msg, groupJid, senderIds, text) {
   try {
     const settings = await getGroupSettings(groupJid);
     if (!Number(settings.enabled)) return null;
 
-    // 1) Gemutete Nutzer: Nachricht löschen, keine weitere Verarbeitung
     const mutedUntil = isMuted(groupJid, senderIds);
     if (mutedUntil) {
       await deleteMessage(msg, groupJid);
@@ -250,14 +238,10 @@ export async function checkAutoMod(msg, groupJid, senderIds, text) {
 
     let violation = null;
 
-    // 2) Anti-Link
     if (Number(settings.antilink) && text && LINK_RE.test(text)) {
       violation = { kind: 'link', reason: 'Link gepostet (Anti-Link aktiv)' };
     }
 
-    // 3) Wort-Blacklist (RAM-Cache — kein DB-Roundtrip pro Nachricht mehr).
-    // Geprüft wird dreifach: roh (wie früher), normalisiert (Leetspeak/Umlaute/
-    // Akzente) und "condensed" ohne Trennzeichen (fängt "S c h e i s s e").
     if (!violation && Number(settings.blacklist_on) && text) {
       const words = await getBlockedWords(groupJid);
       if (words.length) {
@@ -274,9 +258,8 @@ export async function checkAutoMod(msg, groupJid, senderIds, text) {
       }
     }
 
-    // 4) Anti-Spam (viele Nachrichten in kurzer Zeit)
     if (!violation && Number(settings.antispam)) {
-      const key = `${groupJid}|${resolveLid(senderIds[0])}`; // stabile Form — LID & PN zählen zusammen
+      const key = `${groupJid}|${resolveLid(senderIds[0])}`;
       const now = Date.now();
       const arr = (spamTracker.get(key) || []).filter((t) => now - t < 10_000);
       arr.push(now);
@@ -289,9 +272,6 @@ export async function checkAutoMod(msg, groupJid, senderIds, text) {
     }
 
     if (!violation) return null;
-
-    // Admins & Owner sind von Auto-Mod ausgenommen — der (teure) Metadata-Check
-    // läuft bewusst erst NACH der Verstoß-Erkennung, also nur im seltenen Fall.
     if (await isUserAdmin(groupJid, senderIds)) return null;
 
     const deleted = await deleteMessage(msg, groupJid);
@@ -304,7 +284,7 @@ export async function checkAutoMod(msg, groupJid, senderIds, text) {
 }
 
 async function deleteMessage(msg, groupJid) {
-  // FIX: state.sock Check
+  if (state.connection !== 'open') return false;
   if (!state.sock) return false;
   try {
     if (!(await botIsAdmin(groupJid))) return false;
@@ -317,14 +297,12 @@ async function deleteMessage(msg, groupJid) {
 
 // ── Anti-Raid + Joins ──────────────────────────────────────────────
 
-const joinTracker = new Map(); // groupJid → [Zeitstempel]
+const joinTracker = new Map();
 
-/** Bei group-participants.update (add): Bans durchsetzen + Raid erkennen. */
 export async function handleJoin(groupJid, participants) {
   try {
     invalidateGroupMeta(groupJid);
 
-    // 1) Gebannte Nutzer sofort wieder entfernen
     for (const p of participants) {
       if (await isBanned(groupJid, p)) {
         await kickUser(groupJid, p, 'gebannt (Auto-Kick beim Rejoin)');
@@ -332,7 +310,6 @@ export async function handleJoin(groupJid, participants) {
       }
     }
 
-    // 2) Anti-Raid
     const ar = await dbRows('SELECT enabled, locked_until FROM antiraid WHERE group_jid = ?', [groupJid]);
     if (!ar.length || !Number(ar[0].enabled)) return;
 
@@ -346,7 +323,7 @@ export async function handleJoin(groupJid, participants) {
     const alreadyLocked = Number(ar[0].locked_until) > now;
     if (arr.length >= config.moderation.antiRaid.joinThreshold && !alreadyLocked) {
       const until = now + config.moderation.antiRaid.lockMinutes * 60_000;
-      if (await botIsAdmin(groupJid)) {
+      if (state.connection === 'open' && (await botIsAdmin(groupJid))) {
         await state.sock.groupSettingUpdate(groupJid, 'announcement');
         await dbRun('UPDATE antiraid SET locked_until = ? WHERE group_jid = ?', [until, groupJid]);
         await sendText(
@@ -363,7 +340,6 @@ Ungewöhnlich viele Beitritte — die Gruppe ist für *${config.moderation.antiR
   }
 }
 
-/** Vom Scheduler aufgerufen: abgelaufene Anti-Raid-Sperren wieder öffnen. */
 export async function releaseExpiredRaidLocks() {
   const rows = await dbRows('SELECT group_jid, locked_until FROM antiraid WHERE locked_until > 0', []);
   const now = Date.now();
@@ -371,7 +347,7 @@ export async function releaseExpiredRaidLocks() {
     if (Number(r.locked_until) <= now) {
       try {
         await dbRun('UPDATE antiraid SET locked_until = 0 WHERE group_jid = ?', [r.group_jid]);
-        if (await botIsAdmin(r.group_jid)) {
+        if (state.connection === 'open' && (await botIsAdmin(r.group_jid))) {
           await state.sock.groupSettingUpdate(r.group_jid, 'not_announcement');
           await sendText(r.group_jid, '🛡️ Anti-Raid-Sperre aufgehoben — alle können wieder schreiben.');
         }
@@ -381,8 +357,6 @@ export async function releaseExpiredRaidLocks() {
     }
   }
 }
-
-// ── Audit-Log ──────────────────────────────────────────────────────
 
 export async function audit(action, groupJid, target, byJid, detail) {
   await dbRun(
