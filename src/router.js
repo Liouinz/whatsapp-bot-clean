@@ -45,7 +45,19 @@ import { activeTitle } from './commands/economy.js';
 
 // ── Registry + Live-Toggles ────────────────────────────────────────
 
-export const registry = [
+export let registry = [];
+
+export function setRegistry(commands) {
+  registry = commands;
+  byName.clear();
+  for (const cmd of registry) {
+    byName.set(cmd.name, cmd);
+    for (const alias of cmd.aliases || []) byName.set(alias, cmd);
+  }
+}
+
+// Initial-Registry (wird von loader.js ueberschrieben)
+registry = [
   ...communityCommands,
   ...profileCommands,
   ...levelCommands,
