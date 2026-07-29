@@ -1,3 +1,4 @@
+import http from 'node:http';
 import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, jidNormalizedUser } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import { config } from './config.js';
@@ -35,6 +36,41 @@ function stopWatchdog() {
   }
 }
 
+let selfPingTimer = null;
+
+function startSelfPing() {
+  if (selfPingTimer) clearInterval(selfPingTimer);
+  const url = config.selfUrl?.trim();
+  if (!url) {
+    logger.warn('SELF_URL nicht gesetzt — Self-Ping deaktiviert.', 'KeepAlive');
+    return;
+  }
+  selfPingTimer = setInterval(() => {
+    const req = http.get(url, { timeout: 10000 }, (res) => {
+      // Nur loggen, wenn was schiefgeht, sonst stumm bleiben
+      if (res.statusCode !== 200) {
+        logger.warn(`Self-Ping Antwort: ${res.statusCode}`, 'KeepAlive');
+      }
+    });
+    req.on('error', (err) => {
+      logger.warn(`Self-Ping fehlgeschlagen: ${err.message}`, 'KeepAlive');
+    });
+    req.on('timeout', () => {
+      req.destroy();
+      logger.warn('Self-Ping Timeout.', 'KeepAlive');
+    });
+  }, config.keepAlive.selfPingMs || 60000);
+  if (selfPingTimer.unref) selfPingTimer.unref();
+  logger.info(`Self-Ping aktiv: alle ${config.keepAlive.selfPingMs || 60000}ms → ${url}`, 'KeepAlive');
+}
+
+function stopSelfPing() {
+  if (selfPingTimer) {
+    clearInterval(selfPingTimer);
+    selfPingTimer = null;
+  }
+}
+
 function cleanupSocket(sock) {
   if (!sock) return;
   try {
@@ -55,6 +91,7 @@ process.on('unhandledRejection', (reason) => {
 
 process.on('SIGTERM', async () => {
   stopWatchdog();
+  stopSelfPing();
   stopFlushLoop();
   await flushBuffers().catch(() => {});
   await new Promise(r => setTimeout(r, 500));
@@ -63,6 +100,7 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   stopWatchdog();
+  stopSelfPing();
   stopFlushLoop();
   await flushBuffers().catch(() => {});
   await new Promise(r => setTimeout(r, 500));
@@ -203,6 +241,7 @@ async function main() {
     app.listen(port, () => {
       logger.success(`Control Center Dashboard läuft auf Port ${port}`, 'Bootstrap');
     });
+    startSelfPing();
 
     startFlushLoop();
     await startWhatsApp();
