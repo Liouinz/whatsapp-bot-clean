@@ -1,13 +1,13 @@
-// Mini-Spiele: !wuerfel, !quiz, !raten, !galgen, !ttt — Spielstände sauber
+// Mini-Spiele: !wuerfel, !quiz, !raten, !galgen, !ttt, !blackjack — Spielstände sauber
 // pro Gruppe getrennt. Laufende Runden liegen im RAM, Siege in game_scores (DB).
 // Siege geben XP UND Coins (Economy-Anbindung).
 
 import { PREFIX, config } from '../config.js';
 import { dbRun, dbRows, bufferXp } from '../db.js';
 import { resolveLid } from '../permissions.js';
-import { earnCoins } from './economy.js';
+import { earnCoins, takeCoins, getWallet } from './economy.js';
 
-// Laufende Spiele pro Chat: Map chatJid → { quiz?, raten? }
+// Laufende Spiele pro Chat: Map chatJid → { quiz?, raten?, galgen?, ttt?, blackjack? }
 const active = new Map();
 
 function chatGames(chatJid) {
@@ -67,6 +67,34 @@ async function addWin(chatJid, userJid, game, name, { xp = 0, coins = 0 } = {}) 
   ).catch(() => {});
   if (xp > 0) bufferXp(chatJid, user, xp, name);
   if (coins > 0) await earnCoins(user, coins, name).catch(() => {});
+}
+
+// ── Blackjack ──────────────────────────────────────────────────────
+
+const SUITS = ['♠', '♥', '♦', '♣'];
+const VALUES = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+
+function createDeck() {
+  const deck = [];
+  for (const s of SUITS) for (const v of VALUES) deck.push({ s, v });
+  return deck.sort(() => Math.random() - 0.5);
+}
+
+function getCardValue(card) {
+  if (['J', 'Q', 'K'].includes(card.v)) return 10;
+  if (card.v === 'A') return 11;
+  return parseInt(card.v, 10);
+}
+
+function calculateHand(hand) {
+  let val = hand.reduce((sum, c) => sum + getCardValue(c), 0);
+  let aces = hand.filter((c) => c.v === 'A').length;
+  while (val > 21 && aces > 0) { val -= 10; aces--; }
+  return val;
+}
+
+function formatHand(hand) {
+  return hand.map((c) => `${c.v}${c.s}`).join(' ');
 }
 
 // ── Galgenmännchen ─────────────────────────────────────────────────
@@ -289,7 +317,7 @@ export const gameCommands = [
       return ctx.reply(
         `🎮 *Galgenmännchen!* Gesucht: ein Wort mit *${word.length} Buchstaben*.\n` +
           `${galgenBoard(games.galgen)}\n` +
-          `Raten: \`${PREFIX}rate <buchstabe>\` oder gleich \`${PREFIX}rate <wort>\``
+          `Raten: \`${PREFIX}rate <buchstabe>\` oder gleich \`${PREFIX}rate <ganzes wort>\``
       );
     },
   },
@@ -460,4 +488,112 @@ export const gameCommands = [
       return ctx.reply(`🏆 *Spiel-Bestenliste*\n${lines.join('\n')}`);
     },
   },
+  {
+    name: 'blackjack',
+    aliases: ['bj'],
+    group: 'games',
+    desc: 'Blackjack gegen den Dealer',
+    usage: '!blackjack <einsatz>',
+    groupOnly: true,
+    async run(ctx) {
+      const games = chatGames(ctx.chatJid);
+      if (games.blackjack) return ctx.reply('ℹ️ Es läuft bereits eine Blackjack-Runde.');
+      
+      const bet = parseInt(ctx.args[0], 10);
+      if (!bet || bet < 10) return ctx.reply('ℹ️ Bitte einen gültigen Einsatz angeben (mind. 10 🪙).');
+      
+      const wallet = await getWallet(ctx.sender);
+      if (wallet.balance < bet) return ctx.reply(`⛔ Du hast nicht genug Coins (dein Guthaben: ${wallet.balance} 🪙).`);
+      
+      await takeCoins(ctx.sender, bet);
+      
+      const deck = createDeck();
+      const playerHand = [deck.pop(), deck.pop()];
+      const dealerHand = [deck.pop(), deck.pop()];
+      
+      const game = {
+        deck, playerHand, dealerHand, bet,
+        status: 'playing'
+      };
+      
+      const pVal = calculateHand(playerHand);
+      const dVal = getCardValue(dealerHand[0]);
+      
+      let msg = `🃏 *Blackjack* (Einsatz: ${bet} 🪙)\n\n` +
+                `Dealer: ${dealerHand[0].v}${dealerHand[0].s} ?\n` +
+                `Du: ${formatHand(playerHand)} (${pVal})`;
+      
+      if (pVal === 21) {
+        game.status = 'finished';
+        const win = Math.round(bet * 2.5);
+        await earnCoins(ctx.sender, win, ctx.senderName);
+        msg += `\n\n🎉 *Blackjack!* Du gewinnst ${win} 🪙.`;
+      } else {
+        games.blackjack = game;
+        msg += `\n\nZug: \`${PREFIX}hit\` oder \`${PREFIX}stand\``;
+      }
+      
+      await ctx.reply(msg);
+    }
+  },
+  {
+    name: 'hit',
+    group: 'games',
+    desc: 'Zieht eine Karte beim Blackjack',
+    usage: '!hit',
+    groupOnly: true,
+    async run(ctx) {
+      const games = chatGames(ctx.chatJid);
+      const game = games.blackjack;
+      if (!game || game.status !== 'playing') return ctx.reply('ℹ️ Es läuft keine Blackjack-Runde.');
+      
+      game.playerHand.push(game.deck.pop());
+      const pVal = calculateHand(game.playerHand);
+      
+      if (pVal > 21) {
+        game.status = 'finished';
+        delete games.blackjack;
+        await ctx.reply(`💥 *Bust!* (${pVal})\nDealer gewinnt. Dein Einsatz ist weg.`);
+      } else {
+        await ctx.reply(`🃏 Du ziehst: ${formatHand(game.playerHand)} (${pVal})\nZug: \`${PREFIX}hit\` oder \`${PREFIX}stand\``);
+      }
+    }
+  },
+  {
+    name: 'stand',
+    group: 'games',
+    desc: 'Beendet deinen Zug beim Blackjack',
+    usage: '!stand',
+    groupOnly: true,
+    async run(ctx) {
+      const games = chatGames(ctx.chatJid);
+      const game = games.blackjack;
+      if (!game || game.status !== 'playing') return ctx.reply('ℹ️ Es läuft keine Blackjack-Runde.');
+      
+      game.status = 'finished';
+      delete games.blackjack;
+      
+      let dVal = calculateHand(game.dealerHand);
+      while (dVal < 17) {
+        game.dealerHand.push(game.deck.pop());
+        dVal = calculateHand(game.dealerHand);
+      }
+      
+      const pVal = calculateHand(game.playerHand);
+      let msg = `🃏 *Blackjack Ergebnis*\nDealer: ${formatHand(game.dealerHand)} (${dVal})\nDu: ${formatHand(game.playerHand)} (${pVal})\n\n`;
+      
+      if (dVal > 21 || pVal > dVal) {
+        const win = game.bet * 2;
+        await earnCoins(ctx.sender, win, ctx.senderName);
+        msg += `🎉 Du gewinnst ${win} 🪙!`;
+      } else if (pVal < dVal) {
+        msg += `❌ Dealer gewinnt. Dein Einsatz ist weg.`;
+      } else {
+        await earnCoins(ctx.sender, game.bet, ctx.senderName);
+        msg += `🤝 Unentschieden. Einsatz zurück.`;
+      }
+      
+      await ctx.reply(msg);
+    }
+  }
 ];
