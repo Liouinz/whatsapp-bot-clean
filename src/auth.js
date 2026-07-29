@@ -86,11 +86,15 @@ export async function useTursoAuthState(session = 'main') {
   if (!shutdownListenersRegistered) {
     shutdownListenersRegistered = true;
     process.on('SIGTERM', async () => {
+      state.stopped = true;
       await flushOnExit();
+      await new Promise(r => setTimeout(r, 500));
       process.exit(0);
     });
     process.on('SIGINT', async () => {
+      state.stopped = true;
       await flushOnExit();
+      await new Promise(r => setTimeout(r, 500));
       process.exit(0);
     });
     process.on('beforeExit', async () => {
