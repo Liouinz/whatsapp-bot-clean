@@ -6,6 +6,7 @@ import { state, rolloverDay } from './state.js';
 import { logError } from './logger.js';
 
 const queue = [];
+const MAX_QUEUE_SIZE = 1000;
 let running = false;
 
 const sentIds = new Set();
@@ -75,7 +76,11 @@ async function work() {
 }
 
 export function enqueue(jid, content, options = {}) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
+    if (queue.length >= MAX_QUEUE_SIZE) {
+      reject(new Error('Sende-Queue voll'));
+      return;
+    }
     queue.push({ jid, content, options, resolve });
     work().catch((err) => logError(err, 'sendQueue.work'));
   });
