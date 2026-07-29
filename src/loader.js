@@ -22,21 +22,22 @@ export async function loadCommands(dir = path.join(process.cwd(), 'src', 'comman
         
         let cmds = [];
         
-        // Kompatibilitätsschicht für bestehende Modul-Sammlungen
-        if (mod.economyCommands) cmds = cmds.concat(mod.economyCommands);
-        if (mod.scheduleCommands) cmds = cmds.concat(mod.scheduleCommands);
-        if (mod.questCommands) cmds = cmds.concat(mod.questCommands);
-        if (mod.itemCommands) cmds = cmds.concat(mod.itemCommands);
-        if (mod.progressionCommands) cmds = cmds.concat(mod.progressionCommands);
-        if (mod.millionaireCommands) cmds = cmds.concat(mod.millionaireCommands);
-        if (mod.eventCommands) cmds = cmds.concat(mod.eventCommands);
-        if (mod.managementCommands) cmds = cmds.concat(mod.managementCommands);
+        // Suche nach allen Arrays, die Command-Objekte enthalten (z. B. economyCommands, managementCommands)
+        const commandArrays = Object.values(mod).filter(
+          (v) => Array.isArray(v) && v.length > 0 && v[0]?.name
+        );
+
+        for (const arr of commandArrays) {
+          cmds = cmds.concat(arr);
+        }
         
-        // Zukünftige Standardstruktur: Einzel-Command oder Array im default-Export
+        // Default-Export (Einzel-Command oder Array)
         if (mod.default) {
           if (Array.isArray(mod.default)) {
-            cmds = cmds.concat(mod.default);
-          } else {
+            if (!commandArrays.includes(mod.default)) {
+              cmds = cmds.concat(mod.default);
+            }
+          } else if (mod.default.name) {
             cmds.push(mod.default);
           }
         }
