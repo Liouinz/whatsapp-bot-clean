@@ -77,9 +77,12 @@ async function work() {
 
 export function enqueue(jid, content, options = {}) {
   return new Promise((resolve, reject) => {
-    // FIX: Connection-Check vor Enqueue
     if (state.stopped) {
       reject(new Error('Bot gestoppt'));
+      return;
+    }
+    if (state.connection !== 'open') {
+      reject(new Error('Bot ist nicht mit WhatsApp verbunden'));
       return;
     }
     if (queue.length >= MAX_QUEUE_SIZE) {

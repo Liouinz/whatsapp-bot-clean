@@ -127,15 +127,17 @@ export async function askAi(userJid, question) {
   return { text: text.slice(0, config.ai.maxReplyChars) };
 }
 
-// FIX: Parameter-Mismatch behoben
 async function summarizeError(errorText, ctx) {
   if (!quotaOk() || summaryBudget <= 0) return null;
-  summaryBudget--;
-  countCall();
   const prompt =
     `Fasse diesen Node.js/Baileys-Fehler eines WhatsApp-Bots in 1–2 deutschen Sätzen zusammen ` +
     `(was ist passiert, was sollte man prüfen). Keine Codeblöcke:\n\n${errorText.slice(0, 1200)}`;
-  return callGemini(prompt);
+  const result = await callGemini(prompt);
+  if (result) {
+    summaryBudget--;
+    countCall();
+  }
+  return result;
 }
 
 setErrorSummarizer(summarizeError);

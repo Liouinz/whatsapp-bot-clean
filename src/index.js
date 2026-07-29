@@ -6,7 +6,7 @@ import { logger } from './logger.js';
 import { loadCommands } from './loader.js';
 import { createDashboard } from './dashboard.js';
 import { initDb, getDb, startFlushLoop, stopFlushLoop, flushBuffers } from './db.js';
-import { useTursoAuthState } from './auth.js';
+import { useTursoAuthState, flushAuth } from './auth.js';
 import { handleUpsert, loadToggles, setRegistry } from './router.js';
 import { loadMutes, handleJoin } from './moderation.js';
 import { initAiUsage } from './ai.js';
@@ -115,6 +115,7 @@ process.on('SIGTERM', async () => {
   stopSelfPing();
   stopDbHeartbeat();
   stopFlushLoop();
+  await flushAuth().catch(() => {});
   await flushBuffers().catch(() => {});
   await new Promise(r => setTimeout(r, 500));
   process.exit(0);
@@ -125,6 +126,7 @@ process.on('SIGINT', async () => {
   stopSelfPing();
   stopDbHeartbeat();
   stopFlushLoop();
+  await flushAuth().catch(() => {});
   await flushBuffers().catch(() => {});
   await new Promise(r => setTimeout(r, 500));
   process.exit(0);

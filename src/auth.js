@@ -20,6 +20,14 @@ async function withRetry(fn, tries = 4) {
   throw lastErr;
 }
 
+let globalFlush = null;
+
+export async function flushAuth() {
+  if (globalFlush) {
+    await globalFlush();
+  }
+}
+
 export async function useTursoAuthState(session = 'main') {
   const db = getDb();
   const exec = (arg) => withRetry(() => db.execute(arg));
@@ -68,6 +76,8 @@ export async function useTursoAuthState(session = 'main') {
       flushing = false;
     }
   };
+
+  globalFlush = flushPendingWrites;
 
   const scheduleFlush = () => {
     if (!writeTimeout) {
