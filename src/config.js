@@ -54,13 +54,11 @@ export const config = {
     streakBonus: 50,
     streakBonusMax: 250,
     giveMin: 10,
-    // FIX: betMin und betMax hinzugefügt
     betMin: 10,
-    betMax: 50000,
+    betMax: 500000,
     startBalance: 10000,
   },
 
-  // FIX: rob-Block hinzugefügt
   rob: {
     cooldownMs: 300000,
     minTargetBalance: 100,

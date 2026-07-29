@@ -62,7 +62,10 @@ export const blackjackCommand = {
 
     const bet = parseInt(ctx.args[0] || '', 10);
     if (!bet || bet < config.economy.betMin || bet > config.economy.betMax) {
-      return ctx.reply(`ℹ️ Nutzung: \`!blackjack <einsatz>\` (min ${config.economy.betMin}, max ${config.economy.betMax} 🪙)`);
+      return ctx.reply(
+        `ℹ️ Nutzung: \`!blackjack <einsatz>\` (min ${config.economy.betMin}, max ${config.economy.betMax} 🪙)\n` +
+        `📊 *Erträge:* Blackjack = ×2.5 | Sieg = ×2.0 | Push = ×1.0 | RTP ~99.5%`
+      );
     }
 
     const user = resolveLid(ctx.sender);
@@ -85,7 +88,7 @@ export const blackjackCommand = {
     if (playerValue === 21) {
       if (dealerValue === 21) {
         await earnCoins(user, bet); // Push — Einsatz zurück
-        return ctx.reply(`🃏 *Blackjack!* Beide haben 21!\nDu: ${formatHand(playerHand)} (${playerValue})\nDealer: ${formatHand(dealerHand)} (${dealerValue})\nEinsatz zurück: ${bet} 🪙`);
+        return ctx.reply(`🃏 *Blackjack!* Beide haben 21!\nDu: ${formatHand(playerHand)} (${playerValue})\nDealer: ${formatHand(dealerHand)} (${dealerValue})\nEinsatz zurück: ${bet} 🪙 (Ertrag: ±0)`);
       }
       const winAmount = Math.floor(bet * 2.5);
       await earnCoins(user, winAmount);
@@ -93,7 +96,7 @@ export const blackjackCommand = {
         xp: config.games.xpRewardQuiz,
         coins: winAmount - bet,
       });
-      return ctx.reply(`🃏 *BLACKJACK!* ${formatHand(playerHand)}\nDu gewinnst *${winAmount} 🪙* (3:2 Auszahlung)!`);
+      return ctx.reply(`🃏 *BLACKJACK!* ${formatHand(playerHand)}\nDu gewinnst *${winAmount} 🪙* (3:2 Auszahlung / Ertrag: +${winAmount - bet} 🪙)!`);
     }
 
     games.blackjack = {
@@ -171,14 +174,14 @@ export const standCommand = {
 
     if (dealerValue > 21) {
       winAmount = game.bet * 2;
-      result = `Dealer bustet mit ${dealerValue}! Du gewinnst *${winAmount} 🪙*!`;
+      result = `Dealer bustet mit ${dealerValue}! Du gewinnst *${winAmount} 🪙* (Reingewinn: +${game.bet} 🪙)!`;
     } else if (playerValue > dealerValue) {
       winAmount = game.bet * 2;
-      result = `Du gewinnst! *${winAmount} 🪙*!`;
+      result = `Du gewinnst! *${winAmount} 🪙* (Reingewinn: +${game.bet} 🪙)!`;
     } else if (playerValue === dealerValue) {
       winAmount = game.bet;
       await earnCoins(game.user, winAmount);
-      result = `Push! Einsatz zurück: *${winAmount} 🪙*`;
+      result = `Push! Einsatz zurück: *${winAmount} 🪙* (Ertrag: ±0)`;
       return ctx.reply(`🃏 *Ergebnis*\nDu: ${formatHand(game.playerHand)} (${playerValue})\nDealer: ${formatHand(game.dealerHand)} (${dealerValue})\n${result}`);
     } else {
       result = `Dealer gewinnt — ${game.bet} 🪙 verloren.`;

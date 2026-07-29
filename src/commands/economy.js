@@ -77,7 +77,7 @@ export function fmtCoins(n) {
 }
 
 function parseAmount(arg, balance) {
-  if (/^(alles|all)$/i.test(arg || '')) return Math.min(balance, config.economy.betMax);
+  if (/^(alles|all|allin)$/i.test(arg || '')) return Math.min(balance, config.economy.betMax);
   const n = parseInt(arg || '', 10);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
@@ -246,7 +246,7 @@ export const economyCommands = [
     aliases: ['bet', 'coinflip'],
     group: 'economy',
     desc: 'Setze Coins auf Kopf oder Zahl',
-    usage: '!wette <betrag> kopf|zahl',
+    usage: '!wette <betrag|allin> kopf|zahl',
     async run(ctx) {
       const wallet = await getWallet(ctx.sender, ctx.senderName);
       const amount = parseAmount(ctx.args[0], Number(wallet.balance));
@@ -254,7 +254,11 @@ export const economyCommands = [
       const pick = /^(kopf|k|heads?)$/.test(rawPick) ? 'kopf' : /^(zahl|z|tails?)$/.test(rawPick) ? 'zahl' : null;
 
       if (!amount || !pick) {
-        return ctx.reply('ℹ️ Nutzung: `!wette <betrag> kopf` oder `!wette <betrag> zahl`');
+        return ctx.reply(
+          'ℹ️ Nutzung: `!wette <betrag|allin> kopf` oder `!wette <betrag|allin> zahl`\n' +
+          '📈 *Ertrag / Quote:* ×2.0 (100% Gewinn auf den Einsatz)\n' +
+          '📊 *RTP:* ~98.0% (dynamischer Hausvorteil bei hohem Einsatz)'
+        );
       }
 
       if (amount < config.economy.betMin) return ctx.reply(`⚠️ Mindesteinsatz: ${fmtCoins(config.economy.betMin)}`);
@@ -274,7 +278,7 @@ export const economyCommands = [
 
       if (result === pick) {
         await addCoins(ctx.sender, amount * 2, ctx.senderName);
-        return ctx.reply(`${icon} Es ist … *${result.toUpperCase()}*!\n🎉 Gewonnen! Du bekommst *${fmtCoins(amount * 2)}*.`);
+        return ctx.reply(`${icon} Es ist … *${result.toUpperCase()}*!\n🎉 Gewonnen! Du bekommst *${fmtCoins(amount * 2)}* (Ertrag: +${fmtCoins(amount)}).`);
       }
 
       return ctx.reply(`${icon} Es ist … *${result.toUpperCase()}*!\n😬 Verloren — ${fmtCoins(amount)} sind weg.`);
@@ -286,18 +290,21 @@ export const economyCommands = [
     aliases: ['slot'],
     group: 'economy',
     desc: '5 Walzen Slotmaschine (Mit einsatzabhängigem Casino-Hausvorteil)',
-    usage: '!slots <betrag>',
+    usage: '!slots <betrag|allin>',
     async run(ctx) {
       const wallet = await getWallet(ctx.sender, ctx.senderName);
       const amount = parseAmount(ctx.args[0], Number(wallet.balance));
 
       if (!amount) {
         return ctx.reply(
-          'ℹ️ Nutzung: `!slots <betrag>`\n' +
-          '🎰 2 Gleiche = ×2\n' +
+          'ℹ️ Nutzung: `!slots <betrag|allin>`\n' +
+          '📊 *Erträge & Auszahlungsquote (RTP ~94.5%):*\n' +
+          '🥈 2 Gleiche = ×2\n' +
           '🔥 3 Gleiche = ×5\n' +
           '👑 4 Gleiche = ×10\n' +
-          '💎 5 Gleiche = Jackpot'
+          '💰 5x 💰 = ×30\n' +
+          '👑 5x 👑 = ×50 Jackpot\n' +
+          '💎 5x 💎 = ×100 Mega-Jackpot'
         );
       }
 
@@ -353,9 +360,9 @@ export const economyCommands = [
         await addCoins(ctx.sender, win, ctx.senderName);
 
         if (jackpot) {
-          text += `🔥🔥🔥 *MEGA JACKPOT!* 🔥🔥🔥\n×${factor} Multiplikator!\n💰 Gewinn: *${fmtCoins(win)}*`;
+          text += `🔥🔥🔥 *MEGA JACKPOT!* 🔥🔥🔥\n×${factor} Multiplikator!\n💰 Gewinn: *${fmtCoins(win)}* (Reingewinn: +${fmtCoins(win - amount)})`;
         } else {
-          text += `🎉 *Gewonnen!*\n×${factor} Multiplikator\n💰 Gewinn: *${fmtCoins(win)}*`;
+          text += `🎉 *Gewonnen!*\n×${factor} Multiplikator\n💰 Gewinn: *${fmtCoins(win)}* (Reingewinn: +${fmtCoins(win - amount)})`;
         }
       } else {
         text += `😬 Fast! Die Walzen standen extrem knapp. (Verloren: ${fmtCoins(amount)})`;
@@ -369,7 +376,7 @@ export const economyCommands = [
     name: 'roulette',
     group: 'economy',
     desc: 'Verbessertes Roulette: rot/schwarz (×2) oder Zahl 0–36 (×35)',
-    usage: '!roulette <betrag> rot|schwarz|<zahl>',
+    usage: '!roulette <betrag|allin> rot|schwarz|<zahl>',
     async run(ctx) {
       const wallet = await getWallet(ctx.sender, ctx.senderName);
       const amount = parseAmount(ctx.args[0], Number(wallet.balance));
@@ -382,8 +389,8 @@ export const economyCommands = [
       if (!amount || (!isColor && (numPick === null || numPick > 36))) {
         return ctx.reply(
           'ℹ️ *Roulette-Hilfe*\n' +
-          'Nutzung: `!roulette <betrag> rot` / `schwarz` (Gewinn: ×2)\n' +
-          'Oder: `!roulette <betrag> <0-36>` (Gewinn: ×35)'
+          'Nutzung: `!roulette <betrag|allin> rot` / `schwarz` (Ertrag: ×2 | RTP ~97.3%)\n' +
+          'Oder: `!roulette <betrag|allin> <0-36>` (Ertrag: ×35 | RTP ~94.6%)'
         );
       }
 
@@ -419,7 +426,7 @@ export const economyCommands = [
 
       if (win > 0) {
         await addCoins(ctx.sender, win, ctx.senderName);
-        text += `🎉 *Richtig getippt!* Du gewinnst *${fmtCoins(win)}*.`;
+        text += `🎉 *Richtig getippt!* Du gewinnst *${fmtCoins(win)}* (Reingewinn: +${fmtCoins(win - amount)}).`;
       } else {
         text += `💸 Verloren! Das Casino gewinnt immer. (${fmtCoins(amount)} weg)`;
       }
@@ -442,7 +449,7 @@ export const economyCommands = [
       const robberLid = resolveLid(ctx.sender);
       const targetLid = resolveLid(target);
       if (targetLid === robberLid) {
-        return ctx.reply('😄 Dich selbst ausrauben bringt nichts.');
+        return ctx.reply('😄 Dich selbst ausrauben brings nichts.');
       }
 
       // Cooldown pro Gruppe prüfen
