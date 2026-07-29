@@ -81,6 +81,10 @@ export function logDebug(msg, context = '') {
   logger.debug(msg, context);
 }
 
+export function trace(msg, context = '') {
+  logger.debug(msg, context);
+}
+
 export function getLogs() {
   return ring;
 }
