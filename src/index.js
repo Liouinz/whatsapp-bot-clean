@@ -1,7 +1,6 @@
 import http from 'node:http';
 import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, jidNormalizedUser } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
-import qrcode from 'qrcode-terminal';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { loadCommands } from './loader.js';
@@ -171,7 +170,8 @@ async function startWhatsApp() {
         console.log('📲 QR-CODE EMPFANGEN — Bitte mit WhatsApp scannen:');
         console.log('--------------------------------------------------');
         try {
-          qrcode.generate(qr, { small: true });
+          const qrcode = await import('qrcode-terminal');
+          qrcode.default.generate(qr, { small: true });
         } catch {
           console.log(qr);
         }
