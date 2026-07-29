@@ -329,7 +329,7 @@ export async function handleJoin(groupJid, participants) {
         await sendText(
           groupJid,
           `🛡️ *Anti-Raid ausgelöst!*
-Ungewöhnlich viele Beitritte — die Gruppe ist für *${config.moderation.antiRaid.lockMinutes} Minuten* auf „nur Admins" gestellt.`
+Ungewöhnlich viele Beitritte — die Gruppe is für *${config.moderation.antiRaid.lockMinutes} Minuten* auf „nur Admins" gestellt.`
         );
         await audit('antiraid-lock', groupJid, '', 'bot', `${arr.length} Joins`);
         logInfo(`🛡️ Anti-Raid: ${groupJid} für ${config.moderation.antiRaid.lockMinutes} Min gesperrt`);
