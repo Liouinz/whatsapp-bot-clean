@@ -57,6 +57,8 @@ function pickModel(question) {
 
 async function callGemini(prompt, model = config.ai.model) {
   const key = (process.env.GEMINI_API_KEY || '').trim();
+  // FIX: API Key Check
+  if (!key) return null;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.ai.timeoutMs);
@@ -125,7 +127,8 @@ export async function askAi(userJid, question) {
   return { text: text.slice(0, config.ai.maxReplyChars) };
 }
 
-async function summarizeError(errorText) {
+// FIX: Parameter-Mismatch behoben
+async function summarizeError(errorText, ctx) {
   if (!quotaOk() || summaryBudget <= 0) return null;
   summaryBudget--;
   countCall();

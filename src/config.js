@@ -29,8 +29,9 @@ export const config = {
   geminiApiKey: (process.env.GEMINI_API_KEY || '').trim(),
 
   send: {
-    jitterMinMs: 0,
-    jitterMaxMs: 150,
+    // FIX: Jitter auf Standardwerte gesetzt
+    jitterMinMs: 800,
+    jitterMaxMs: 2500,
     maxRetries: 2,
     retryBackoffMs: 1500,
   },

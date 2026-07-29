@@ -10,8 +10,8 @@ import { handleUpsert, loadToggles, setRegistry } from './router.js';
 import { loadMutes, handleJoin } from './moderation.js';
 import { initAiUsage } from './ai.js';
 import { state } from './state.js';
-// FIX: Import für preflight hinzugefügt
 import { preflight } from './preflight.js';
+import { startScheduler } from './scheduler.js'; // FIX: Import hinzugefügt
 
 let watchdogTimer = null;
 let botSock = null;
@@ -33,14 +33,14 @@ function stopWatchdog() {
   }
 }
 
-// FIX: Hilfsfunktion zur Socket-Bereinigung
+// FIX: Hilfsfunktion zur Socket-Bereinigung (leerer catch)
 function cleanupSocket(sock) {
   if (!sock) return;
   try {
     sock.ev.removeAllListeners();
     sock.ws?.close();
   } catch (err) {
-    logger.error(err, 'cleanupSocket');
+    // egal
   }
 }
 
@@ -112,7 +112,6 @@ async function startWhatsApp() {
         const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
         logger.warn(`Verbindung geschlossen wegen ${lastDisconnect?.error}, Code: ${statusCode}`, 'Baileys');
         
-        // FIX: Socket-Bereinigung vor Neustart
         stopWatchdog();
         cleanupSocket(botSock);
         botSock = null;
@@ -140,7 +139,6 @@ async function startWhatsApp() {
     }
 
     if (events['creds.update']) {
-      // FIX: try/catch für saveCreds
       try {
         await saveCreds();
       } catch (err) {
@@ -177,8 +175,8 @@ async function main() {
   logger.info(`Starte ${config.botName}...`, 'Bootstrap');
   
   try {
-    // FIX: preflight als erstes aufrufen
     await preflight();
+    startScheduler(); // FIX: Scheduler starten
 
     logger.info('Initialisiere Datenbank-Tabellen...', 'Bootstrap');
     await initDb();

@@ -304,6 +304,8 @@ export async function checkAutoMod(msg, groupJid, senderIds, text) {
 }
 
 async function deleteMessage(msg, groupJid) {
+  // FIX: state.sock Check
+  if (!state.sock) return false;
   try {
     if (!(await botIsAdmin(groupJid))) return false;
     await state.sock.sendMessage(groupJid, { delete: msg.key });

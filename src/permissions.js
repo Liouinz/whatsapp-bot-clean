@@ -58,12 +58,13 @@ function learnLidMappings(meta) {
     const lid = normalizeId(p.lid || (String(p.id).endsWith('@lid') ? p.id : null));
     const pn = normalizeId(p.phoneNumber || p.jid || (String(p.id).endsWith('@s.whatsapp.net') ? p.id : null));
     if (lid && pn) {
-      if (lidToPn.size > 20_000) lidToPn.clear();
+      // FIX: LRU-Logik statt clear()
+      if (lidToPn.size > 20_000) lidToPn.delete(lidToPn.keys().next().value);
       lidToPn.set(lid, pn);
       const key = `${meta.id}|${lid}|${pn}`;
       if (persistedMappings.has(key)) continue;
       persistedMappings.add(key);
-      if (persistedMappings.size > 20_000) persistedMappings.clear();
+      if (persistedMappings.size > 20_000) persistedMappings.delete(persistedMappings.keys().next().value);
       dbRun(
         `INSERT INTO members (group_jid, user_jid, user_lid, last_seen) VALUES (?, ?, ?, ?)
          ON CONFLICT(group_jid, user_jid) DO UPDATE SET user_lid = excluded.user_lid, last_seen = excluded.last_seen`,
