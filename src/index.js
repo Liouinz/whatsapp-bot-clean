@@ -6,7 +6,7 @@ import { loadCommands } from './loader.js';
 import { createDashboard } from './dashboard.js';
 import { initDb, getDb } from './db.js';
 import { useTursoAuthState } from './auth.js';
-import { handleUpsert, loadToggles } from './router.js';
+import { handleUpsert, loadToggles, setRegistry } from './router.js';
 import { loadMutes, handleJoin } from './moderation.js';
 import { initAiUsage } from './ai.js';
 import { state } from './state.js';
@@ -150,6 +150,8 @@ async function main() {
     logger.success('Runtime-Zustände erfolgreich geladen.', 'Bootstrap');
 
     const commands = await loadCommands();
+    const uniqueCommands = Array.from(commands.values()).filter((v, i, a) => a.findIndex(c => c.name === v.name) === i);
+    setRegistry(uniqueCommands);
     logger.success(`${commands.size} Befehle erfolgreich geladen.`, 'Bootstrap');
 
     const app = createDashboard();
