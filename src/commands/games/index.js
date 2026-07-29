@@ -43,7 +43,9 @@ export function quizAnswerMatches(answers, rawGuess) {
     const na = normalizeGuess(ans);
     if (!na) return false;
     if (guess === na) return true;
-    return na.includes(' ') ? guess.includes(na) : guess.split(' ').includes(na);
+    return na.includes(' ') 
+      ? guess.includes(na) || na.split(' ').some(part => guess.includes(part))
+      : guess.split(' ').includes(na);
   });
 }
 

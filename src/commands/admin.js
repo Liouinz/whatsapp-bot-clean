@@ -10,7 +10,7 @@ import {
 } from '../moderation.js';
 import { botIsAdmin, adminDebugInfo, resolveLid, isProtectedTarget, getGroupMeta } from '../permissions.js';
 import { buildWeeklyReport } from '../scheduler.js';
-import { botSock } from '../index.js';
+import { flushAuth } from '../auth.js';
 
 let lastRestartAt = 0;
 
@@ -395,7 +395,7 @@ export const adminCommands = [
     groupOnly: true,
     async run(ctx) {
       const rows = await dbRows('SELECT word FROM blocked_words WHERE group_jid = ? ORDER BY word', [ctx.chatJid]);
-      if (!rows.length) return ctx.reply('ℹ️ Die Blacklist dieser Gruppe ist leer. (`!addword <wort>`)');
+      if (!rows.length) return ctx.reply('ℹ️ Die Blacklist dieser Gruppe is leer. (`!addword <wort>`)');
       return ctx.reply(`🛡️ *Blacklist* (${rows.length}):\n${rows.map((r) => `• ${r.word}`).join('\n')}`);
     },
   },
@@ -499,8 +499,7 @@ export const adminCommands = [
       await ctx.reply('🔄 Alles klar, ich starte neu — bin gleich wieder da!');
       await audit('restart', ctx.chatJid, '', ctx.sender, 'per Befehl');
       await flushBuffers().catch(() => {});
-      // FIX: Auth-Flush vor Neustart
-      if (botSock?.authState?.flush) await botSock.authState.flush().catch(() => {});
+      await flushAuth().catch(() => {});
       setTimeout(() => process.exit(0), 3000);
     },
   },
@@ -553,7 +552,6 @@ export const adminCommands = [
     ownerOnly: true,
     groupOnly: false,
     async run(ctx) {
-      // FIX: Manuelle Owner-Prüfung entfernt, da ownerOnly: true in der Registry reicht
       let amount = parseInt(ctx.args.find((a) => /^\d+$/.test(a)) || '', 10);
       if (!amount || isNaN(amount)) amount = 1000000;
 

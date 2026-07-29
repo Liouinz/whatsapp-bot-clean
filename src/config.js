@@ -73,6 +73,7 @@ export const config = {
     warnLimitMute: 3,
     warnLimitKick: 5,
     muteMinutesDefault: 30,
+    muteMinutesMax: 1440,
     antiRaid: {
       joinWindowMs: 10000,
       joinThreshold: 5,
@@ -113,6 +114,11 @@ export const config = {
 
   scheduler:{
     tickMs:30000,
+  },
+
+  weeklyReport: {
+    weekday: 0,
+    hour: 18,
   },
 
   slowmode:{

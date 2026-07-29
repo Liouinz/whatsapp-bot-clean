@@ -244,6 +244,7 @@ async function checkSlowmode(msg, chatJid, senderIds, settings, senderName) {
     return false;
   }
   // Zu schnell → Nachricht löschen (wenn möglich), sparsam hinweisen
+  if (state.connection !== 'open') return false;
   try {
     await state.sock.sendMessage(chatJid, { delete: msg.key });
   } catch { /* ohne Admin-Rechte bleibt sie eben stehen */ }
