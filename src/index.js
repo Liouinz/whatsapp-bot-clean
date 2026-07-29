@@ -4,7 +4,7 @@ import { config } from './config.js';
 import { logger } from './logger.js';
 import { loadCommands } from './loader.js';
 import { createDashboard } from './dashboard.js';
-import { initDb, getDb } from './db.js';
+import { initDb, getDb, startFlushLoop, stopFlushLoop, flushBuffers } from './db.js';
 import { useTursoAuthState } from './auth.js';
 import { handleUpsert, loadToggles, setRegistry } from './router.js';
 import { loadMutes, handleJoin } from './moderation.js';
@@ -39,13 +39,19 @@ process.on('unhandledRejection', (reason) => {
   logger.error(reason, 'unhandledRejection');
 });
 
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   stopWatchdog();
+  stopFlushLoop();
+  await flushBuffers().catch(() => {});
+  await new Promise(r => setTimeout(r, 500));
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   stopWatchdog();
+  stopFlushLoop();
+  await flushBuffers().catch(() => {});
+  await new Promise(r => setTimeout(r, 500));
   process.exit(0);
 });
 
@@ -160,6 +166,7 @@ async function main() {
       logger.success(`Control Center Dashboard läuft auf Port ${port}`, 'Bootstrap');
     });
 
+    startFlushLoop();
     await startWhatsApp();
   } catch (err) {
     logger.error(err, 'Bootstrap');
