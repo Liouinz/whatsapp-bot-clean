@@ -13,7 +13,6 @@ import { initAiUsage } from './ai.js';
 import { state } from './state.js';
 import { preflight } from './preflight.js';
 import { startScheduler } from './scheduler.js';
-// FIX: loadGlobalSettings importiert
 import { loadGlobalSettings } from './global.js';
 
 let watchdogTimer = null;
@@ -47,7 +46,6 @@ function startSelfPing() {
   }
   selfPingTimer = setInterval(() => {
     const req = http.get(url, { timeout: 10000 }, (res) => {
-      // Nur loggen, wenn was schiefgeht, sonst stumm bleiben
       if (res.statusCode !== 200) {
         logger.warn(`Self-Ping Antwort: ${res.statusCode}`, 'KeepAlive');
       }
@@ -138,7 +136,7 @@ async function startWhatsApp() {
     if (events['connection.update']) {
       const update = events['connection.update'];
       const { connection, lastDisconnect, qr } = update;
-      
+
       if (qr) {
         state.currentQr = qr;
         state.qrUpdatedAt = Date.now();
@@ -150,7 +148,7 @@ async function startWhatsApp() {
         state.lastConnectedAt = null;
         const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
         logger.warn(`Verbindung geschlossen wegen ${lastDisconnect?.error}, Code: ${statusCode}`, 'Baileys');
-        
+
         stopWatchdog();
         cleanupSocket(botSock);
         botSock = null;
@@ -212,7 +210,7 @@ async function startWhatsApp() {
 
 async function main() {
   logger.info(`Starte ${config.botName}...`, 'Bootstrap');
-  
+
   try {
     await preflight();
     startScheduler();
@@ -221,7 +219,6 @@ async function main() {
     await initDb();
     logger.success('Datenbank erfolgreich initialisiert.', 'Bootstrap');
 
-    // FIX: loadGlobalSettings aufgerufen
     logger.info('Lade Status (Mutes, Toggles, AI-Quota, Global-Settings)...', 'Bootstrap');
     await Promise.all([
       loadMutes(),
@@ -241,8 +238,8 @@ async function main() {
     app.listen(port, () => {
       logger.success(`Control Center Dashboard läuft auf Port ${port}`, 'Bootstrap');
     });
-    startSelfPing();
 
+    startSelfPing();
     startFlushLoop();
     await startWhatsApp();
   } catch (err) {
