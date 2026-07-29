@@ -173,6 +173,9 @@ async function startWhatsApp() {
 
       if (connection === 'close') {
         state.lastConnectedAt = null;
+        state.currentQr = null;
+        state.qrUpdatedAt = 0;
+
         const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
         logger.warn(`Verbindung geschlossen wegen ${lastDisconnect?.error}, Code: ${statusCode}`, 'Baileys');
 
@@ -181,19 +184,26 @@ async function startWhatsApp() {
         botSock = null;
         state.sock = null;
 
-        if (statusCode !== DisconnectReason.loggedOut) {
-          state.reconnectAttempts = (state.reconnectAttempts || 0) + 1;
-          if (state.reconnectAttempts < (config.reconnect?.maxAttempts || 10)) {
-            setTimeout(() => startWhatsApp(), 5000);
-          } else {
-            logger.error('Maximale Reconnect-Versuche erreicht. Bot wird nicht neu verbunden.', 'Baileys');
+        state.reconnectAttempts = (state.reconnectAttempts || 0) + 1;
+        if (state.reconnectAttempts < (config.reconnect?.maxAttempts || 10)) {
+          if (statusCode === DisconnectReason.loggedOut) {
+            logger.info('Auth-Daten werden zurückgesetzt für neuen QR-Code...', 'Baileys');
+            try {
+              const auth = await useTursoAuthState('main');
+              await auth.clearSession();
+            } catch (err) {
+              logger.error(err, 'Baileys.clearSession');
+            }
           }
+          setTimeout(() => startWhatsApp(), 5000);
         } else {
-          logger.error('Bot wurde ausgeloggt. Auth-Daten müssen neu gepaart werden.', 'Baileys');
+          logger.error('Maximale Reconnect-Versuche erreicht. Bot wird nicht neu verbunden.', 'Baileys');
         }
       } else if (connection === 'open') {
         state.lastConnectedAt = Date.now();
         state.reconnectAttempts = 0;
+        state.currentQr = null;
+        state.qrUpdatedAt = 0;
         if (sock.user?.id) {
           state.botJidPn = jidNormalizedUser(sock.user.id);
           state.botJidLid = sock.user.lid ? jidNormalizedUser(sock.user.lid) : null;
