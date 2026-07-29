@@ -10,7 +10,7 @@ import rateLimit from 'express-rate-limit';
 import { BOT_NAME, config } from './config.js';
 import { state, rolloverDay, requestPairingCode, forceRelink } from './state.js';
 import { getDb, dbRun, dbRows, flushBuffers, wipeAllData } from './db.js';
-import { getRing, logError, logInfo, logWarn } from './logger.js';
+import { getRecentLogs, logError, logInfo, logWarn } from './logger.js';
 import { getAiQuota, initAiUsage } from './ai.js';
 import { registry, isCommandEnabled, setCommandEnabled, loadToggles, resetXpCache } from './router.js';
 import { listCustom, loadCustomCommands } from './commands/custom.js';
@@ -491,7 +491,9 @@ export function createDashboard() {
   });
 
   api.get('/logs', (req, res) => {
-    res.json({ logs: getRing().slice(-config.log.ringSize) });
+    const logs = getRecentLogs();
+    const size = config.log?.ringSize || 500;
+    res.json({ logs: logs.slice(-size) });
   });
 
   // Statistik-Daten für den Statistik-Tab (Charts + Top-Listen).
