@@ -130,9 +130,9 @@ async function startWhatsApp() {
 
     if (events['group-participants.update']) {
       const { id, participants, action } = events['group-participants.update'];
-      if (action === 'add') {
+      if (['add', 'remove', 'promote', 'demote'].includes(action)) {
         try {
-          await handleJoin(id, participants);
+          if (action === 'add') await handleJoin(id, participants);
         } catch (err) {
           logger.error(err, 'GroupParticipantsUpdate');
         }
