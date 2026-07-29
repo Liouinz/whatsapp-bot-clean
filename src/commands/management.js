@@ -121,8 +121,8 @@ export const managementCommands = [
         await setGlobalFlag(GLOBAL_SYSTEMS[sys], v);
       } else {
         const col = GROUP_SYSTEMS[sys];
-        await dbRun(`UPDATE group_settings SET ${col} = ?`, [v ? 1 : 0]).catch(() => {});
-        invalidateSettings();
+        await dbRun(`UPDATE group_settings SET ${col} = ? WHERE jid = ?`, [v ? 1 : 0, ctx.chatJid]).catch(() => {});
+        invalidateSettings(ctx.chatJid);
       }
       await announceToGroups(`📣 *Globale Änderung:* System *${sys}* wurde bot-weit auf *${onoff(v)}* gesetzt.`);
       return ctx.reply(`✅ Global gesetzt: *${sys}* → ${onoff(v)} (in allen Gruppen angekündigt).`);
