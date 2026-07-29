@@ -61,18 +61,22 @@ async function startWhatsApp() {
   const { version, isLatest } = await fetchLatestBaileysVersion();
   logger.info(`Baileys Version v${version.join('.')}, isLatest: ${isLatest}`, 'Baileys');
 
+  const baileysLogger = {
+    trace: () => {},
+    debug: () => {},
+    info: () => {},
+    warn: (m) => logger.warn(m, 'Baileys'),
+    error: (m) => logger.error(m, 'Baileys'),
+    fatal: (m) => logger.error(m, 'Baileys'),
+    child: () => baileysLogger,
+    level: 'silent',
+  };
+
   const sock = makeWASocket({
     version,
     auth: authState,
+    logger: baileysLogger,
     printQRInTerminal: true,
-    logger: {
-      trace: () => {},
-      debug: () => {},
-      info: () => {},
-      warn: (m) => logger.warn(m, 'Baileys'),
-      error: (m) => logger.error(m, 'Baileys'),
-      child: () => logger
-    }
   });
 
   botSock = sock;
