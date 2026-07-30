@@ -898,7 +898,7 @@ function loadQr(){
       console.log('QR API:', res);
 
       var qrStr = (typeof res.qr === 'string' && res.qr.startsWith('data:image/png;base64,') && res.qr.length > 100) ? res.qr : null;
-      var sig = res.connection + '|' + (res.updatedAt || 0) + '|' + (qrStr ? 'hasQr' : 'noQr') + '|' + (res.pairingCode || '');
+      var sig = res.connection + '|' + (res.updatedAt || 0) + '|' + (res.qrHash || 'noHash') + '|' + (res.pairingCode || '');
 
       if (box._sig === sig) return;
       box._sig = sig;
@@ -915,7 +915,16 @@ function loadQr(){
       }
 
       if (qrStr) {
-        var img = h('img', { alt:'WhatsApp QR-Code', src: qrStr });
+        var img = h('img', { alt:'WhatsApp QR-Code' });
+        img.onerror = function(){
+          console.error('QR-Bild konnte nicht gerendert werden.');
+          box.innerHTML = '';
+          box.appendChild(h('div', {}, [
+            h('div', { class:'status-dot connecting', style:'margin:0 auto 12px;width:24px;height:24px' }),
+            h('p', { class:'muted' }, ['QR-Code wird erneuert …'])
+          ]));
+        };
+        img.src = qrStr;
         box.appendChild(img);
         box.appendChild(h('p', { class:'muted sm', style:'margin-top:12px' }, ['Mit WhatsApp scannen: Einstellungen → Verknüpfte Geräte. Aktualisiert sich automatisch.']));
       } else {
@@ -1277,4 +1286,3 @@ function renderSettings(){
 renderNav();
 render();
 })();
-`;

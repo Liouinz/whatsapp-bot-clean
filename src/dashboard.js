@@ -121,8 +121,8 @@ export function createDashboard() {
         directives: {
           defaultSrc: ["'self'"],
           scriptSrc: ["'self'"],
-          styleSrc: ["'self'"],
-          imgSrc: ["'self'", 'data:'],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:', 'blob:'],
           connectSrc: ["'self'"],
           objectSrc: ["'none'"],
           frameAncestors: ["'none'"],
@@ -246,12 +246,14 @@ export function createDashboard() {
     const pairingValid = state.pairingCode && Date.now() - state.pairingCodeUpdatedAt < config.pairing.codeValidMs;
     const isDataUrl = typeof state.currentQr === 'string' && state.currentQr.startsWith('data:image/png;base64,');
     
-    logInfo(`QR requested — Connection: ${state.connection}, QR available: ${isDataUrl}, Length: ${isDataUrl ? state.currentQr.length : 0}`, 'Dashboard.API');
+    const qrHash = isDataUrl ? crypto.createHash('md5').update(state.currentQr).digest('hex').slice(0, 8) : null;
+    logInfo(`QR requested — Connection: ${state.connection}, Valid QR: ${isDataUrl}, Hash: ${qrHash}`, 'Dashboard.API');
 
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.json({
       connection: state.connection,
       qr: isDataUrl ? state.currentQr : null,
+      qrHash,
       updatedAt: state.qrUpdatedAt,
       pairingCode: pairingValid ? state.pairingCode : null,
     });
