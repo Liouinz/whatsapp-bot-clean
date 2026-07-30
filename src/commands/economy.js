@@ -42,22 +42,25 @@ export async function getWallet(userJid, name = '') {
 /** Coins gutschreiben (earned zählt für die Statistik). */
 export async function addCoins(userJid, amount, name = '') {
   const user = resolveLid(userJid);
+  const safeAmount = Math.max(0, Math.floor(Number(amount) || 0));
   await getWallet(user, name);
   await dbRun(
     'UPDATE coins SET balance = balance + ?, total_earned = total_earned + ? WHERE user_jid = ?',
-    [amount, Math.max(0, amount), user]
+    [safeAmount, safeAmount, user]
   );
 }
 
 /** Coins abbuchen — false, wenn das Guthaben nicht reicht (atomar via WHERE). */
 export async function takeCoins(userJid, amount) {
   const user = resolveLid(userJid);
+  const safeAmount = Math.floor(Number(amount) || 0);
+  if (safeAmount <= 0) return true;
   await getWallet(user);
   const res = await dbRun(
     'UPDATE coins SET balance = balance - ? WHERE user_jid = ? AND balance >= ?',
-    [amount, user, amount]
+    [safeAmount, user, safeAmount]
   );
-  return Number(res.rowsAffected) > 0;
+  return Number(res.rowsAffected || 0) > 0 || (res.changes !== undefined && res.changes > 0);
 }
 
 /** VERDIENTE Coins gutschreiben — wendet den aktiven Coin-Boost an. */
@@ -67,13 +70,13 @@ export async function earnCoins(userJid, amount, name = '') {
     getBoostMult(u, 'coins').catch(() => 1),
     getPrestigeMult(u).catch(() => 1),
   ]);
-  const total = Math.round(amount * boost * prestige * getEventCoinMult());
+  const total = Math.max(0, Math.round(Number(amount) * boost * prestige * getEventCoinMult()));
   await addCoins(userJid, total, name);
   return total;
 }
 
 export function fmtCoins(n) {
-  return `${Number(n).toLocaleString('de-DE')} 🪙`;
+  return `${Number(n || 0).toLocaleString('de-DE')} 🪙`;
 }
 
 function parseAmount(arg, balance) {
@@ -82,7 +85,7 @@ function parseAmount(arg, balance) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-/** Aktiver Titel (oder null). */
+/** Aktiver Titel (or null). */
 export async function activeTitle(userJid) {
   const rows = await dbRows('SELECT title FROM user_titles WHERE user_jid = ?', [resolveLid(userJid)]);
   return rows.length ? rows[0].title : null;
@@ -103,12 +106,6 @@ function spinSingleReel() {
   return 0;
 }
 
-/**
- * Casino-Algorithmus für Slots mit dynamischer Einsatz-Skalierung:
- * Je höher der Einsatz (Betrag) des Spielers ist, desto höher ist die Wahrscheinlichkeit,
- * dass das Casino das Ergebnis manipuliert ("abfängt"), damit das Haus langfristig gewinnt.
- * Bei kleinen Beträgen fühlt es sich fair und oft knapp an.
- */
 function getRiggedSlotSymbols(betAmount, maxPossibleBet) {
   const reels = [spinSingleReel(), spinSingleReel(), spinSingleReel(), spinSingleReel(), spinSingleReel()];
   
@@ -119,16 +116,11 @@ function getRiggedSlotSymbols(betAmount, maxPossibleBet) {
   });
   const maxMatch = Math.max(...Object.values(tempCounts));
 
-  // Dynamische Skalierung basierend auf der Höhe des Einsatzes im Verhältnis zum Maximum
-  // Je höher der Einsatz, desto aggressiver greift das Haus ein!
   const betRatio = Math.min(betAmount / Math.max(maxPossibleBet, 1000), 1);
-  // Basis-Eingriffswahrscheinlichkeit skaliert mit dem Einsatz (zwischen 50% und 96%)
   const interventionChance = 0.50 + (betRatio * 0.46);
 
   if (maxMatch >= 3 || betAmount > 2000) {
     if (Math.random() < interventionChance) {
-      // Manipulation greift: Wir zerstören den potenziell hohen Gewinn unauffällig,
-      // sodass es oft eine Niete oder ein knapper "Fast-Treffer" wird.
       const forcedFailIndex = Math.floor(Math.random() * SLOT_SYMBOLS.length);
       reels[1] = forcedFailIndex;
       reels[3] = (forcedFailIndex + 2) % SLOT_SYMBOLS.length;
@@ -145,7 +137,7 @@ export const economyCommands = [
   {
     name: 'daily',
     aliases: ['taeglich'],
-    group: 'economy',
+    category: 'economy',
     desc: 'Tägliche Coins abholen (Streak-Bonus!)',
     usage: '!daily',
     async run(ctx) {
@@ -189,7 +181,7 @@ export const economyCommands = [
   {
     name: 'coins',
     aliases: ['konto', 'geld'],
-    group: 'economy',
+    category: 'economy',
     desc: 'Zeigt deinen Kontostand',
     usage: '!coins',
     async run(ctx) {
@@ -209,7 +201,7 @@ export const economyCommands = [
   {
     name: 'geben',
     aliases: ['pay', 'zahlen'],
-    group: 'economy',
+    category: 'economy',
     desc: 'Überweist jemandem Coins',
     usage: '!geben @person <betrag>',
     groupOnly: true,
@@ -244,7 +236,7 @@ export const economyCommands = [
   {
     name: 'wette',
     aliases: ['bet', 'coinflip'],
-    group: 'economy',
+    category: 'economy',
     desc: 'Setze Coins auf Kopf oder Zahl',
     usage: '!wette <betrag|allin> kopf|zahl',
     async run(ctx) {
@@ -256,8 +248,7 @@ export const economyCommands = [
       if (!amount || !pick) {
         return ctx.reply(
           'ℹ️ Nutzung: `!wette <betrag|allin> kopf` oder `!wette <betrag|allin> zahl`\n' +
-          '📈 *Ertrag / Quote:* ×2.0 (100% Gewinn auf den Einsatz)\n' +
-          '📊 *RTP:* ~98.0% (dynamischer Hausvorteil bei hohem Einsatz)'
+          '📈 *Ertrag / Quote:* ×2.0 (100% Gewinn auf den Einsatz)'
         );
       }
 
@@ -270,9 +261,8 @@ export const economyCommands = [
 
       await dbRun('UPDATE coins SET total_gambled = total_gambled + ? WHERE user_jid = ?', [amount, resolveLid(ctx.sender)]);
       
-      // Je höher der Einsatz bei der Wette, desto höher die Wahrscheinlichkeit, dass das Haus gewinnt
       const betRatio = amount / config.economy.betMax;
-      const houseWinChance = 0.49 + (betRatio * 0.15); // Bis zu 64% Chance für das Casino bei Max-Einsatz
+      const houseWinChance = 0.49 + (betRatio * 0.15);
       const result = Math.random() < houseWinChance ? (pick === 'kopf' ? 'zahl' : 'kopf') : pick;
       const icon = result === 'kopf' ? '🪙' : '🔢';
 
@@ -288,8 +278,8 @@ export const economyCommands = [
   {
     name: 'slots',
     aliases: ['slot'],
-    group: 'economy',
-    desc: '5 Walzen Slotmaschine (Mit einsatzabhängigem Casino-Hausvorteil)',
+    category: 'economy',
+    desc: '5 Walzen Slotmaschine',
     usage: '!slots <betrag|allin>',
     async run(ctx) {
       const wallet = await getWallet(ctx.sender, ctx.senderName);
@@ -302,8 +292,6 @@ export const economyCommands = [
           '🥈 2 Gleiche = ×2\n' +
           '🔥 3 Gleiche = ×5\n' +
           '👑 4 Gleiche = ×10\n' +
-          '💰 5x 💰 = ×30\n' +
-          '👑 5x 👑 = ×50 Jackpot\n' +
           '💎 5x 💎 = ×100 Mega-Jackpot'
         );
       }
@@ -317,7 +305,6 @@ export const economyCommands = [
 
       await dbRun('UPDATE coins SET total_gambled = total_gambled + ? WHERE user_jid = ?', [amount, resolveLid(ctx.sender)]);
 
-      // Nutzt die skalierte Manipulations-Logik (höherer Einsatz = stärkere Hauskontrolle)
       const reels = getRiggedSlotSymbols(amount, config.economy.betMax);
       const symbols = reels.map((i) => SLOT_SYMBOLS[i]);
       const row = symbols.join(' │ ');
@@ -374,8 +361,8 @@ export const economyCommands = [
 
   {
     name: 'roulette',
-    group: 'economy',
-    desc: 'Verbessertes Roulette: rot/schwarz (×2) oder Zahl 0–36 (×35)',
+    category: 'economy',
+    desc: 'Roulette: rot/schwarz (×2) oder Zahl 0–36 (×35)',
     usage: '!roulette <betrag|allin> rot|schwarz|<zahl>',
     async run(ctx) {
       const wallet = await getWallet(ctx.sender, ctx.senderName);
@@ -389,8 +376,8 @@ export const economyCommands = [
       if (!amount || (!isColor && (numPick === null || numPick > 36))) {
         return ctx.reply(
           'ℹ️ *Roulette-Hilfe*\n' +
-          'Nutzung: `!roulette <betrag|allin> rot` / `schwarz` (Ertrag: ×2 | RTP ~97.3%)\n' +
-          'Oder: `!roulette <betrag|allin> <0-36>` (Ertrag: ×35 | RTP ~94.6%)'
+          'Nutzung: `!roulette <betrag|allin> rot` / `schwarz` (Ertrag: ×2)\n' +
+          'Oder: `!roulette <betrag|allin> <0-36>` (Ertrag: ×35)'
         );
       }
 
@@ -405,11 +392,10 @@ export const economyCommands = [
 
       const RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
       
-      // Auch beim Roulette greift bei sehr hohem Einsatz leicht die Haus-Logik ein (höhere Wahrscheinlichkeit für die Null)
       const betRatio = amount / config.economy.betMax;
       let spin = Math.floor(Math.random() * 37);
       if (Math.random() < (0.027 + (betRatio * 0.12))) {
-        spin = 0; // Das Casino zieht bei hohem Einsatz bevorzugt die Null
+        spin = 0;
       }
 
       const color = spin === 0 ? '🟢' : RED.has(spin) ? '🔴' : '⚫';
@@ -438,8 +424,8 @@ export const economyCommands = [
   {
     name: 'rauben',
     aliases: ['rob', 'ausrauben'],
-    group: 'economy',
-    desc: 'Klaut Coins von jemandem — Betrag ist ein Prozentsatz des Zielguthabens, riskant',
+    category: 'economy',
+    desc: 'Klaut Coins von jemandem (risikoreich)',
     usage: '!rauben @person',
     groupOnly: true,
     async run(ctx) {
@@ -449,10 +435,9 @@ export const economyCommands = [
       const robberLid = resolveLid(ctx.sender);
       const targetLid = resolveLid(target);
       if (targetLid === robberLid) {
-        return ctx.reply('😄 Dich selbst ausrauben brings nichts.');
+        return ctx.reply('😄 Dich selbst ausrauben bringt nichts.');
       }
 
-      // Cooldown pro Gruppe prüfen
       const cdRows = await dbRows(
         'SELECT last_rob FROM rob_cooldown WHERE group_jid = ? AND user_jid = ?',
         [ctx.chatJid, robberLid]
@@ -469,13 +454,11 @@ export const economyCommands = [
         return ctx.reply(`😅 ${ctx.mentionTag(target)} hat zu wenig Coins, um sich das zu lohnen (min. ${fmtCoins(config.rob.minTargetBalance)}).`, [target]);
       }
 
-      // Betrag = Prozentsatz vom Zielguthaben, gedeckelt durch capAmount
       const amount = Math.min(
         Math.round(Number(targetWallet.balance) * config.rob.percent),
         config.rob.capAmount
       );
 
-      // Cooldown IMMER setzen, egal ob Erfolg oder nicht (kein Spam-Retry)
       await dbRun(
         'INSERT INTO rob_cooldown (group_jid, user_jid, last_rob) VALUES (?, ?, ?) ' +
         'ON CONFLICT (group_jid, user_jid) DO UPDATE SET last_rob = excluded.last_rob',
@@ -485,13 +468,12 @@ export const economyCommands = [
       if (Math.random() < config.rob.successChance) {
         const ok = await takeCoins(target, amount);
         if (!ok) {
-          return ctx.reply(`😅 ${ctx.mentionTag(target)} war schneller und hatte auf einmal nichts mehr da. Raub gescheitert.`, [target]);
+          return ctx.reply(`😅 ${ctx.mentionTag(target)} hatte plötzlich nichts mehr da. Raub gescheitert.`, [target]);
         }
         await addCoins(ctx.sender, amount, ctx.senderName);
         await audit('coins-rob-success', ctx.chatJid, target, ctx.sender, `${amount}`);
         return ctx.reply(
-          `🥷 *Raub erfolgreich!* Du hast ${ctx.mentionTag(target)} *${fmtCoins(amount)}* (${Math.round(config.rob.percent * 100)}% ihres Guthabens) geklaut.\n` +
-          `🎲 Erfolgschance war nur ${Math.round(config.rob.successChance * 100)}%.`,
+          `🥷 *Raub erfolgreich!* Du hast ${ctx.mentionTag(target)} *${fmtCoins(amount)}* geklaut.`,
           [target]
         );
       }
@@ -504,8 +486,7 @@ export const economyCommands = [
       }
       return ctx.reply(
         `🚔 *Erwischt!* Der Raub bei ${ctx.mentionTag(target)} ist schiefgegangen.\n` +
-        (paid ? `💸 Du zahlst *${fmtCoins(penalty)}* Strafe an ${ctx.mentionTag(target)}.` : '') +
-        `\n🎲 Erfolgschance war nur ${Math.round(config.rob.successChance * 100)}%.`,
+        (paid ? `💸 Du zahlst *${fmtCoins(penalty)}* Strafe.` : ''),
         [target]
       );
     },
@@ -514,7 +495,7 @@ export const economyCommands = [
   {
     name: 'reichste',
     aliases: ['rich', 'coinstop'],
-    group: 'economy',
+    category: 'economy',
     desc: 'Die 10 reichsten Nutzer',
     usage: '!reichste',
     async run(ctx) {

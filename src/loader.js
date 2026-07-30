@@ -22,7 +22,6 @@ export async function loadCommands(dir = path.join(process.cwd(), 'src', 'comman
         
         let cmds = [];
         
-        // Suche nach allen Arrays, die Command-Objekte enthalten (z. B. economyCommands, managementCommands)
         const commandArrays = Object.values(mod).filter(
           (v) => Array.isArray(v) && v.length > 0 && v[0]?.name
         );
@@ -31,7 +30,6 @@ export async function loadCommands(dir = path.join(process.cwd(), 'src', 'comman
           cmds = cmds.concat(arr);
         }
         
-        // Default-Export (Einzel-Command oder Array)
         if (mod.default) {
           if (Array.isArray(mod.default)) {
             if (!commandArrays.includes(mod.default)) {
@@ -44,6 +42,11 @@ export async function loadCommands(dir = path.join(process.cwd(), 'src', 'comman
 
         for (const c of cmds) {
           if (c && c.name) {
+            // Standardisierte Metadaten für die automatische Registry / Hilfe
+            c.category = c.category || c.group || path.basename(dir);
+            c.desc = c.desc || c.description || 'Keine Beschreibung';
+            c.usage = c.usage || `!${c.name}`;
+
             if (commands.has(c.name)) {
               logger.warn(`Doppelter Command-Name erkannt: ${c.name}`, 'Loader');
             }
