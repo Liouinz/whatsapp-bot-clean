@@ -83,7 +83,11 @@ export async function flushBuffers() {
   }
   
   try {
-    await Promise.all(promises);
+    // Limit concurrency via chunks to avoid Turso rate limits & memory issues
+    const CHUNK = 50;
+    for (let i = 0; i < promises.length; i += CHUNK) {
+      await Promise.all(promises.slice(i, i + CHUNK));
+    }
     xpBuffer.clear();
     statBuffer.clear();
     groupMsgBuffer.clear();

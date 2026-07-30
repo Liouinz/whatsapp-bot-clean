@@ -4,19 +4,19 @@
 import { config } from './config.js';
 import { state, rolloverDay } from './state.js';
 import { logError } from './logger.js';
+import TTLCache from './core/cache/ttlCache.js';
 
 const queue = [];
 const MAX_QUEUE_SIZE = 1000;
 let running = false;
 
-const sentIds = new Set();
+const sentIds = new TTLCache({ ttlMs: 24 * 60 * 60 * 1000, maxSize: 5000 });
 export function wasSentByBot(id) {
   return id ? sentIds.has(id) : false;
 }
 function recordSent(id) {
   if (!id) return;
-  sentIds.add(id);
-  if (sentIds.size > 2000) sentIds.delete(sentIds.values().next().value);
+  sentIds.set(id, true);
 }
 
 const WAIT_FOR_CONNECTION_MS = 45_000;

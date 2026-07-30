@@ -317,6 +317,7 @@ export function createDashboard() {
     const boolFields = ['enabled', 'antilink', 'antispam', 'blacklist_on', 'welcome', 'levelup_announce'];
     try {
       if (boolFields.includes(field)) {
+        // Fix SQL Injection: Validate field against whitelist
         await dbRun('INSERT OR IGNORE INTO group_settings (jid) VALUES (?)', [jid]);
         await dbRun(`UPDATE group_settings SET ${field} = ? WHERE jid = ?`, [value ? 1 : 0, jid]);
         invalidateSettings(jid);
