@@ -27,9 +27,6 @@ import { queueLength, sendText } from './queue.js';
 import { LOGIN_HTML, APP_HTML, APP_CSS, APP_JS, THEME_INIT_JS } from './dashboard-ui.js';
 
 // ── Statische Assets: Versionierung + Vorab-Kompression ───────────
-// CSS/JS ändern sich nur mit einem Deploy → Content-Hash in die URL,
-// dann darf der Browser sie ein Jahr lang cachen (immutable). Gzip wird
-// einmal beim Start berechnet, nicht pro Request.
 
 const ASSET_VER = crypto.createHash('sha256').update(APP_CSS + APP_JS + THEME_INIT_JS).digest('hex').slice(0, 10);
 const versioned = (html) =>
@@ -116,7 +113,7 @@ function requireAuth(req, res, next) {
 export function createDashboard() {
   const app = express();
   app.disable('x-powered-by');
-  app.set('trust proxy', 1); // Render sitzt hinter einem Proxy
+  app.set('trust proxy', 1);
 
   app.use(
     helmet({
@@ -130,14 +127,13 @@ export function createDashboard() {
           objectSrc: ["'none'"],
           frameAncestors: ["'none'"],
           baseUri: ["'none'"],
-          upgradeInsecureRequests: null, // Render liefert ohnehin nur HTTPS aus
+          upgradeInsecureRequests: null,
         },
       },
     })
   );
   app.use(express.json({ limit: '256kb' }));
 
-  // Geschützte Seiten nie cachen
   app.use((req, res, next) => {
     if (req.path !== '/health') res.setHeader('Cache-Control', 'no-store');
     next();
@@ -147,7 +143,6 @@ export function createDashboard() {
   app.get('/health', (req, res) => res.status(200).send('ok'));
   app.get('/robots.txt', (req, res) => res.type('text/plain').send('User-agent: *\nDisallow: /\n'));
 
-  // PWA: Manifest + Icon (macht das Panel auf dem Handy installierbar)
   app.get('/manifest.webmanifest', (req, res) => {
     res.type('application/manifest+json').json({
       name: `${BOT_NAME} Control Center`,
@@ -210,12 +205,9 @@ export function createDashboard() {
 
   // ── Panel-Assets (hinter Login) ──
   app.get('/', requireAuth, (req, res) => sendAsset(req, res, 'app', 'no-store'));
-  app.get('/qr', requireAuth, (req, res) => sendAsset(req, res, 'app', 'no-store')); // gleiche App, QR-Tab
-  // CSS/JS sind reine UI ohne Geheimnisse — braucht auch die Login-Seite.
-  // Content-Hash in der URL → darf aggressiv gecacht werden (Instant-Reload).
+  app.get('/qr', requireAuth, (req, res) => sendAsset(req, res, 'app', 'no-store'));
   app.get('/app.css', (req, res) => sendAsset(req, res, '/app.css', 'public, max-age=31536000, immutable'));
   app.get('/app.js', (req, res) => sendAsset(req, res, '/app.js', 'public, max-age=31536000, immutable'));
-  // Winziges Theme-Init (setzt data-theme/data-accent vor dem ersten Paint)
   app.get('/theme-init.js', (req, res) => sendAsset(req, res, '/theme-init.js', 'public, max-age=31536000, immutable'));
 
   // ── API ──
@@ -227,7 +219,6 @@ export function createDashboard() {
     res.json(await statusPayload());
   });
 
-  // Server-Sent Events für das Live-Gefühl (Status alle 3 s)
   api.get('/events', (req, res) => {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -253,15 +244,15 @@ export function createDashboard() {
 
   api.get('/qr', (req, res) => {
     const pairingValid = state.pairingCode && Date.now() - state.pairingCodeUpdatedAt < config.pairing.codeValidMs;
+    const isDataUrl = typeof state.currentQr === 'string' && state.currentQr.startsWith('data:image/');
     res.json({
       connection: state.connection,
-      qr: state.currentQr,
+      qr: isDataUrl ? state.currentQr : null,
       updatedAt: state.qrUpdatedAt,
       pairingCode: pairingValid ? state.pairingCode : null,
     });
   });
 
-  // Pairing-Code anfordern (Alternative zum QR-Scan) — Nummer mit Ländervorwahl, nur Ziffern
   api.post('/pairing-code', async (req, res) => {
     const phone = String(req.body?.phoneNumber || '').replace(/\D/g, '');
     if (!/^\d{6,15}$/.test(phone)) {
@@ -276,8 +267,6 @@ export function createDashboard() {
     }
   });
 
-  // Notfall-Knopf: Sitzung hart zurücksetzen, wenn die Verbindung feststeckt
-  // (Session kaputt, aber kein neuer QR/Pairing-Code erscheint mehr von selbst)
   api.post('/relink', async (req, res) => {
     try {
       await forceRelink();
@@ -354,7 +343,6 @@ export function createDashboard() {
     }
   });
 
-  // Nachricht aus dem Panel in eine Gruppe senden (läuft über die Sende-Queue)
   api.post('/groups/:jid/send', async (req, res) => {
     const jid = req.params.jid;
     const text = String(req.body?.text || '').trim();
@@ -410,8 +398,6 @@ export function createDashboard() {
     res.json({ ok: true, enabled: isCommandEnabled(name) });
   });
 
-  // Globale System-Schalter (XP/Spiele/Economy/Wartung) — dieselben Flags wie
-  // der !global-/!wartung-Befehl. Panel-Bedienung ohne Chat-Ankündigung.
   const GLOBAL_KEYS = { xp: 'system_xp', spiele: 'system_spiele', economy: 'system_economy', maintenance: 'maintenance' };
   const globalPayload = () => ({
     xp: getGlobalFlag('system_xp'),
@@ -495,8 +481,6 @@ export function createDashboard() {
     res.json({ logs: logs.slice(-size) });
   });
 
-  // Statistik-Daten für den Statistik-Tab (Charts + Top-Listen).
-  // Kurzer Cache: der Tab feuert sonst bei jedem Öffnen ~8 Turso-Queries.
   let statsCache = { at: 0, data: null };
   api.get('/stats', async (req, res) => {
     try {
@@ -546,7 +530,6 @@ export function createDashboard() {
     }
   });
 
-  // Planung: offene geplante Nachrichten, nächste Geburtstage, laufende Umfragen
   api.get('/agenda', async (req, res) => {
     try {
       const [schedules, birthdays, polls] = await Promise.all([
@@ -565,7 +548,6 @@ export function createDashboard() {
           []
         ),
       ]);
-      // Geburtstage nach "Tagen bis" sortieren
       const now = new Date();
       const withDays = birthdays.map((b) => {
         const t = new Date(now.getFullYear(), Number(b.month) - 1, Number(b.day));
@@ -590,6 +572,7 @@ export function createDashboard() {
     res.json({ ok: true });
   });
 
+  let lastPanelRestartAt = 0;
   api.post('/restart', async (req, res) => {
     const wait = config.web.restartCooldownMs - (Date.now() - lastPanelRestartAt);
     if (wait > 0) {
@@ -604,10 +587,6 @@ export function createDashboard() {
     setTimeout(() => process.exit(0), 3000);
   });
 
-  // ── Danger-Zone: komplette Datenbank leeren ──
-  // Löscht ALLE Bot-Daten (XP, Coins, Einstellungen, Verwarnungen, Logs, …).
-  // Die WhatsApp-Session bleibt standardmäßig erhalten; mit includeSession
-  // wird zusätzlich die Verknüpfung zurückgesetzt (neuer QR nötig).
   let lastWipeAt = 0;
   api.post('/db/wipe', async (req, res) => {
     if (String(req.body?.confirm || '') !== 'LÖSCHEN') {
@@ -619,7 +598,6 @@ export function createDashboard() {
     lastWipeAt = Date.now();
     try {
       const tables = await wipeAllData();
-      // Alle RAM-Caches auf den frischen (leeren) Stand bringen
       invalidateSettings();
       invalidateBlockedWords();
       resetXpCache();
@@ -628,7 +606,6 @@ export function createDashboard() {
       resetPrestigeCache();
       resetEventCache();
       resetGlobalCache();
-      // FIX: groupCache als const, daher Mutation statt Reassignment
       groupCache.at = 0;
       groupCache.list = [];
       statsCache = { at: 0, data: null };
@@ -637,7 +614,6 @@ export function createDashboard() {
       logWarn(`🗑️ Datenbank über das Panel komplett geleert (${tables} Tabellen).`);
 
       if (req.body?.includeSession) {
-        // Verknüpfung gleich mit zurücksetzen — startet den Socket frisch (neuer QR)
         forceRelink().catch((err) => logError(err, 'panel.wipeRelink'));
         return res.json({ ok: true, message: 'Alle Daten gelöscht. Die Verknüpfung wird zurückgesetzt — neuer QR-Code folgt gleich im Tab „QR".' });
       }
@@ -702,7 +678,6 @@ export function createDashboard() {
   // Fallbacks
   app.use('/api', (req, res) => res.status(404).json({ error: 'Unbekannter Endpunkt.' }));
   app.use((req, res) => res.redirect('/'));
-  // Express-Fehler sauber abfangen (nie Stacktrace nach außen)
   app.use((err, req, res, next) => {
     logError(err, 'panel');
     res.status(500).json({ error: 'Interner Fehler.' });
@@ -713,10 +688,8 @@ export function createDashboard() {
 
 // ── Hilfen ─────────────────────────────────────────────────────────
 
-// FIX: groupCache als const
 const groupCache = { at: 0, list: [] };
 
-/** Gruppen-Cache aktiv neu laden (z. B. direkt nach connection: 'open'). */
 export async function refreshGroupCache() {
   groupCache.at = 0;
   return listGroups();
@@ -739,8 +712,6 @@ async function listGroups() {
   const list = [];
   const upserts = [];
   for (const meta of metas) {
-    // Admin-Status direkt aus der vorhandenen Metadata ableiten —
-    // spart einen groupMetadata-Aufruf pro Gruppe und lernt LID-Mappings.
     const admin = botIsAdminInMeta(meta);
     const s = sMap.get(meta.id) || {};
     const n = nMap.get(meta.id) || {};
@@ -765,10 +736,8 @@ async function listGroups() {
       args: [meta.id, meta.subject || '', meta.participants?.length || 0, admin ? 1 : 0, Date.now()],
     });
   }
-  // Ein Batch-Roundtrip statt einem Write pro Gruppe (fire-and-forget)
   if (upserts.length) getDb().batch(upserts, 'write').catch(() => {});
   list.sort((a, b) => a.name.localeCompare(b.name));
-  // FIX: Mutation statt Reassignment
   groupCache.at = Date.now();
   groupCache.list = list;
   return list;
@@ -776,12 +745,13 @@ async function listGroups() {
 
 async function statusPayload() {
   const quota = getAiQuota();
+  const isDataUrl = typeof state.currentQr === 'string' && state.currentQr.startsWith('data:image/');
   return {
     botName: BOT_NAME,
     connection: state.connection,
     stopped: state.stopped,
     stopReason: state.stopReason,
-    qrAvailable: !!state.currentQr,
+    qrAvailable: isDataUrl,
     startedAt: state.startedAt,
     lastConnectedAt: state.lastConnectedAt,
     uptimeMs: Date.now() - state.startedAt,

@@ -1,16 +1,17 @@
 import http from 'node:http';
-import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, jidNormalizedUser } from '@whiskeysockets/baileys';
+import QRCode from 'qrcode';
+import { makeWASocket, DisconnectReason, fetchLatestBaileysVersion, jidNormalizedUser } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { loadCommands } from './loader.js';
 import { createDashboard } from './dashboard.js';
-import { initDb, getDb, startFlushLoop, stopFlushLoop, flushBuffers } from './db.js';
+import { initDb, startFlushLoop, stopFlushLoop, flushBuffers } from './db.js';
 import { useTursoAuthState, flushAuth } from './auth.js';
 import { handleUpsert, loadToggles, setRegistry } from './router.js';
 import { loadMutes, handleJoin } from './moderation.js';
 import { initAiUsage } from './ai.js';
-import { state, setForceRelinkHandler } from './state.js';
+import { state, setForceRelinkHandler, setPairingCodeRequester } from './state.js';
 import { preflight } from './preflight.js';
 import { startScheduler } from './scheduler.js';
 import { loadGlobalSettings } from './global.js';
@@ -98,7 +99,7 @@ function cleanupSocket(sock) {
     sock.ev.removeAllListeners();
     sock.ws?.close();
   } catch (err) {
-    // egal
+    // ignorieren
   }
 }
 
@@ -158,24 +159,39 @@ async function startWhatsApp() {
   botSock = sock;
   state.sock = sock;
 
+  setPairingCodeRequester(async (phoneNumber) => {
+    if (!sock || state.connection === 'open') {
+      throw new Error('Socket nicht im Verbindungsmodus.');
+    }
+    const code = await sock.requestPairingCode(phoneNumber);
+    state.pairingCode = code;
+    state.pairingCodeUpdatedAt = Date.now();
+    return code;
+  });
+
   sock.ev.process(async (events) => {
     if (events['connection.update']) {
       const update = events['connection.update'];
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
-        state.currentQr = qr;
-        state.qrUpdatedAt = Date.now();
-        console.log('--------------------------------------------------');
-        console.log('📲 QR-CODE EMPFANGEN — Bitte mit WhatsApp scannen:');
-        console.log('--------------------------------------------------');
         try {
-          const qrcode = await import('qrcode-terminal');
-          qrcode.default.generate(qr, { small: true });
-        } catch {
-          console.log(qr);
+          // Erzeuge ein valides PNG als Base64 DataURL für das Frontend
+          state.currentQr = await QRCode.toDataURL(qr, { margin: 2, scale: 8 });
+          state.qrUpdatedAt = Date.now();
+          console.log('--------------------------------------------------');
+          console.log('📲 QR-CODE EMPFANGEN — Bitte im Dashboard oder mit WhatsApp scannen:');
+          console.log('--------------------------------------------------');
+          try {
+            const qrcodeTerminal = await import('qrcode-terminal');
+            qrcodeTerminal.default.generate(qr, { small: true });
+          } catch {
+            console.log(qr);
+          }
+          console.log('--------------------------------------------------');
+        } catch (err) {
+          logger.error(`Fehler bei QR-Code-Generierung: ${err.message}`, 'Baileys');
         }
-        console.log('--------------------------------------------------');
       }
 
       state.connection = connection || state.connection;
@@ -184,6 +200,8 @@ async function startWhatsApp() {
         state.lastConnectedAt = null;
         state.currentQr = null;
         state.qrUpdatedAt = 0;
+        state.pairingCode = null;
+        state.pairingCodeUpdatedAt = 0;
 
         const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
         logger.warn(`Verbindung geschlossen wegen ${lastDisconnect?.error}, Code: ${statusCode}`, 'Baileys');
@@ -213,6 +231,8 @@ async function startWhatsApp() {
         state.reconnectAttempts = 0;
         state.currentQr = null;
         state.qrUpdatedAt = 0;
+        state.pairingCode = null;
+        state.pairingCodeUpdatedAt = 0;
         if (sock.user?.id) {
           state.botJidPn = jidNormalizedUser(sock.user.id);
           state.botJidLid = sock.user.lid ? jidNormalizedUser(sock.user.lid) : null;
@@ -302,6 +322,7 @@ async function main() {
       state.sock = null;
       state.currentQr = null;
       state.qrUpdatedAt = 0;
+      state.pairingCode = null;
       
       const auth = await useTursoAuthState('main');
       await auth.clearSession();

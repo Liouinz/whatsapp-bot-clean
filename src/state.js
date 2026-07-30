@@ -55,7 +55,7 @@ export function setPairingCodeRequester(fn) {
   pairingCodeRequester = fn;
 }
 export async function requestPairingCode(phoneNumber) {
-  if (!pairingCodeRequester) throw new Error('Der Bot ist noch nicht bereit — bitte kurz warten.');
+  if (!pairingCodeRequester) throw new Error('Der Bot ist noch nicht bereit oder bereits verbunden — bitte kurz warten.');
   return pairingCodeRequester(phoneNumber);
 }
 

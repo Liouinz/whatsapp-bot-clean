@@ -1,10 +1,4 @@
 // UI des Control Centers — Vanilla HTML/CSS/JS, kein Build-Step, keine Frameworks.
-// Design v3: Aurora-Glow + Dark Glassmorphism mit räumlicher Tiefe — 3D-Tilt auf
-// Kacheln (nur Maus), Gyroskop-Ring im Login, Glow-als-Status. Performance:
-// backdrop-filter nur auf Shell-Flächen, Sternen-Canvas nur Desktop + 30 fps,
-// Assets werden von dashboard.js gzip-komprimiert + immutable gecacht.
-// Respektiert prefers-reduced-motion durchgehend.
-// Hinweis: Im Client-JS bewusst KEINE Template-Literals (Datei ist selbst ein Template).
 
 import { BOT_NAME } from './config.js';
 
@@ -78,15 +72,10 @@ export const APP_HTML = `<!doctype html>
 </body>
 </html>`;
 
-// Winziges Sync-Skript im <head>: setzt Theme + Akzent aus localStorage VOR
-// dem ersten Paint, damit das gewählte Design nicht kurz schwarz aufblitzt
-// (FOUC). Eigenes Asset statt Inline-Script — die strenge CSP verbietet inline.
 export const THEME_INIT_JS =
   "(function(){try{var d=document.documentElement;" +
   "var t=localStorage.getItem('theme');if(t&&t!=='dark')d.setAttribute('data-theme',t);" +
   "var a=localStorage.getItem('accent');if(a&&a!=='cyan')d.setAttribute('data-accent',a);" +
-  // Schnell-Modus: auf schwachen Geräten (wenige Kerne / wenig RAM) Effekte
-  // automatisch reduzieren — manuell übersteuerbar unter "Extras".
   "var f=localStorage.getItem('fx');" +
   "var low=(navigator.hardwareConcurrency||8)<=4||(navigator.deviceMemory||8)<=4;" +
   "if(f==='lite'||(f!=='full'&&low))d.setAttribute('data-fx','lite');" +
@@ -115,7 +104,6 @@ body{
   background:var(--bg); color:var(--text); min-height:100dvh; line-height:1.5;
   overflow-x:hidden;
 }
-/* Vignette: gibt dem Void räumliche Tiefe, ein statischer Layer, kein Repaint */
 body:before{
   content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
   background:
@@ -125,10 +113,8 @@ body:before{
 #fx{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.45}
 .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
-/* Programmatischer Fokus (content.focus() beim Tab-Wechsel) braucht keinen Ring */
 [tabindex="-1"]:focus-visible{outline:none}
 
-/* ── Aurora-Hintergrund (reines CSS, GPU-günstig) ── */
 .aurora{position:fixed;inset:-20%;z-index:0;pointer-events:none;filter:blur(90px);opacity:.5}
 .aurora i{position:absolute;border-radius:50%;mix-blend-mode:screen;will-change:transform}
 .aurora i:nth-child(1){width:46vw;height:46vw;left:-8vw;top:-10vh;background:radial-gradient(circle,var(--accent) 0%,transparent 65%);animation:drift1 26s ease-in-out infinite alternate}
@@ -137,7 +123,6 @@ body:before{
 @keyframes drift1{to{transform:translate(9vw,7vh) scale(1.15)}}
 @keyframes drift2{to{transform:translate(-7vw,9vh) scale(.9)}}
 @keyframes drift3{to{transform:translate(6vw,-8vh) scale(1.1)}}
-/* Mobil: weniger Blur-Fläche = flüssigeres Scrollen auf schwächeren GPUs */
 @media(max-width:899px){
   .aurora{filter:blur(64px);opacity:.42}
   .aurora i:nth-child(3){display:none}
@@ -150,8 +135,6 @@ body:before{
   backdrop-filter:blur(14px) saturate(1.2); -webkit-backdrop-filter:blur(14px) saturate(1.2);
   box-shadow:0 10px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.05);
 }
-/* Listenzeilen: solide Fläche statt Echtglas — dutzende backdrop-filter
-   pro Seite sind der teuerste Posten auf Mobilgeräten */
 .list-item.glass,.member-row.glass{
   backdrop-filter:none;-webkit-backdrop-filter:none;
   background:var(--surface);
@@ -160,9 +143,6 @@ body:before{
 }
 .list-item.glass:hover,.member-row.glass:hover{border-color:var(--line2)}
 
-/* ── Schnell-Modus (data-fx="lite"): für schwache Geräte — Effekte aus,
-   das Layout bleibt identisch. Größte Gewinne: kein backdrop-filter,
-   keine Aurora-Animation, kein Sternen-Canvas (JS überspringt ihn). ── */
 [data-fx="lite"] .glass{
   backdrop-filter:none;-webkit-backdrop-filter:none;
   background:var(--surface);
@@ -173,7 +153,6 @@ body:before{
 [data-fx="lite"] .logo-dot{animation:none;box-shadow:0 0 10px var(--accent)}
 [data-fx="lite"] .login-ring .ring{animation:none}
 
-/* ── Login ── */
 .login-wrap{min-height:100dvh;display:grid;place-items:center;padding:24px;position:relative;z-index:1;perspective:900px}
 .login-card{width:min(390px,100%);padding:44px 32px 34px;text-align:center;animation:rise3d .4s var(--ease) both}
 .login-ring{
@@ -181,7 +160,6 @@ body:before{
   position:relative;transform-style:preserve-3d;
   background:radial-gradient(circle at 50% 30%,var(--accent-dim),transparent 70%);
 }
-/* Gyroskop: zwei Ringe kreisen räumlich um den Signal-Punkt */
 .login-ring .ring{position:absolute;inset:6px;border-radius:50%;border:1px solid var(--accent-glow);opacity:.55}
 .login-ring .r1{animation:orbitX 7s linear infinite}
 .login-ring .r2{inset:14px;border-color:var(--accent2);opacity:.35;animation:orbitY 10s linear infinite}
@@ -207,7 +185,6 @@ button:hover .btn-arrow{transform:translateX(4px)}
   animation:pulse 2.6s ease-in-out infinite;
 }
 
-/* ── Layout ── */
 .layout{position:relative;z-index:1;display:flex;min-height:100dvh}
 .sidebar{
   display:none;flex-direction:column;gap:8px;width:236px;margin:16px;padding:20px 14px 16px;
@@ -237,7 +214,6 @@ button:hover .btn-arrow{transform:translateX(4px)}
   .content{padding:28px 32px 48px}
 }
 
-/* Tab-Leiste (mobil) — größere Touch-Ziele, horizontal scrollbar */
 .tabbar{
   position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:5;
   display:flex;padding:6px;overflow-x:auto;scrollbar-width:none;gap:2px;
@@ -249,19 +225,14 @@ button:hover .btn-arrow{transform:translateX(4px)}
 }
 .tabbar a svg{display:block;width:22px;height:22px;margin:0 auto 3px}
 .tabbar a.active{color:var(--accent);background:var(--accent-dim)}
-/* Nach der .tabbar-Basisregel, sonst verliert display:none die Kaskade (v2-Bug) */
 @media(min-width:900px){.tabbar{display:none}}
 
-/* ── Bausteine ── */
 h2.page-title{font-size:1.7rem;font-weight:700;margin:8px 0 18px;letter-spacing:-.01em}
 .grid{display:grid;gap:12px;perspective:1100px}
 @media(min-width:700px){.grid.cols4{grid-template-columns:repeat(4,1fr)}.grid.cols2{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:699px){.grid.cols4{grid-template-columns:repeat(2,1fr)}.grid.cols2{grid-template-columns:1fr}}
 
-/* Kein fill-mode: "both" würde transform:none aus dem Endkeyframe festhalten
-   und damit Hover-Lift + 3D-Tilt dauerhaft überschreiben */
 .card{padding:18px;animation:rise .35s var(--ease)}
-/* 3D-Tilt: --rx/--ry/--mx/--my setzt das Client-JS per Pointer (nur Maus) */
 .grid .card.hover{
   position:relative;transform-style:preserve-3d;
   transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translateY(var(--ty,0px));
@@ -334,10 +305,9 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .muted{color:var(--muted)} .sm{font-size:.85rem}
 .search{width:100%;margin-bottom:12px}
 
-.qr-box{display:grid;place-items:center;padding:32px;text-align:center}
+.qr-box{display:grid;place-items:center;padding:32px;text-align:center;min-height:300px}
 .qr-box img{width:min(320px,80vw);border-radius:16px;background:#fff;padding:12px;box-shadow:0 0 44px var(--accent-dim),0 0 0 1px var(--line2)}
 
-/* Pairing-Code: der Moment, in dem man die Zahl abtippt — groß und ruhig */
 .pair-code{margin-top:14px;text-align:center;animation:rise .3s var(--ease) both}
 .pair-code b{
   display:inline-block;font-size:1.9rem;font-weight:700;letter-spacing:.12em;
@@ -361,7 +331,6 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .hbar{height:9px;border-radius:6px;background:linear-gradient(90deg,var(--accent),var(--accent2));box-shadow:0 0 8px var(--accent-dim)}
 .hbar-track{background:rgba(130,165,255,.09);border-radius:6px;overflow:hidden;flex:1}
 
-/* Skeleton-Loader */
 .skel{border-radius:12px;background:linear-gradient(100deg,rgba(130,165,255,.06) 40%,rgba(130,165,255,.13) 50%,rgba(130,165,255,.06) 60%);background-size:200% 100%;animation:shimmer 1.4s infinite}
 @keyframes shimmer{to{background-position:-200% 0}}
 
@@ -382,11 +351,6 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 @keyframes rise3d{from{opacity:0;transform:translateY(16px) rotateX(5deg)}to{opacity:1;transform:none}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 
-/* ═══════════════════════════════════════════════════════════════════
-   Theme „Natur" — hell, lebendig, grün-organisch. Umschaltbar in Extras
-   (data-theme="nature" auf <html>). Ohne Attribut bleibt alles wie oben
-   (dunkel/„Schwarz"). Muss NACH den Basisregeln stehen (Kaskade).
-   ═══════════════════════════════════════════════════════════════════ */
 .flora{display:none;position:fixed;inset:0;z-index:0;pointer-events:none;
   background:
     radial-gradient(closest-side at 100% 2%, rgba(38,120,58,.14), transparent 70%),
@@ -406,7 +370,6 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 [data-theme="nature"][data-accent="violet"]{ --accent:#7c3aed; --accent2:#9d5cf5; --accent-dim:rgba(124,58,237,.13); --accent-glow:rgba(124,58,237,.32); }
 [data-theme="nature"][data-accent="mint"]{ --accent:#0f9d76; --accent2:#2bb389; --accent-dim:rgba(15,157,118,.14); --accent-glow:rgba(15,157,118,.32); }
 
-/* Sonnenlicht-durch-Blätter statt kühler Void-Vignette */
 [data-theme="nature"] body:before{
   background:
     radial-gradient(1100px 720px at 78% -12%, rgba(120,205,120,.3), transparent 60%),
@@ -415,14 +378,12 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 }
 [data-theme="nature"] .flora{display:block}
 [data-theme="nature"] #fx{display:none}
-/* Aurora → weiche Blattgrün-Wolken (normal-blend, damit sie auf Hell tragen) */
 [data-theme="nature"] .aurora{opacity:.42;mix-blend-mode:normal}
 [data-theme="nature"] .aurora i{mix-blend-mode:normal}
 [data-theme="nature"] .aurora i:nth-child(1){background:radial-gradient(circle,#4cc768 0%,transparent 66%)}
 [data-theme="nature"] .aurora i:nth-child(2){background:radial-gradient(circle,#2bb389 0%,transparent 66%);opacity:.5}
 [data-theme="nature"] .aurora i:nth-child(3){background:radial-gradient(circle,#a7d94a 0%,transparent 66%);opacity:.4}
 
-/* Helle Flächen: Formularfelder, Schalter, Log-Zeilen, Badges neu tönen */
 [data-theme="nature"] input[type=text],[data-theme="nature"] input[type=password],
 [data-theme="nature"] input[type=time],[data-theme="nature"] textarea,
 [data-theme="nature"] select,[data-theme="nature"] .login-card input{
@@ -436,7 +397,6 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 [data-theme="nature"] .badge.ok{color:#1f7a43;background:rgba(31,138,76,.15)}
 [data-theme="nature"] .badge.bad{color:#c62a48;background:rgba(198,42,72,.12)}
 [data-theme="nature"] .badge.warn{color:#8a5806;background:rgba(154,98,6,.15)}
-/* Karten-Glanzlicht auf Hell abdunkeln, sonst unsichtbar */
 [data-theme="nature"] .grid .card.hover:after{background:radial-gradient(240px circle at var(--mx,50%) var(--my,50%),rgba(31,122,67,.12),transparent 60%)}
 [data-theme="nature"] .card.hover:hover,[data-theme="nature"] .grid .card.hover:hover{box-shadow:0 16px 44px rgba(24,60,36,.16),0 0 0 1px var(--accent-dim)}
 [data-theme="nature"] .glass{box-shadow:0 10px 34px rgba(24,60,36,.12), inset 0 1px 0 rgba(255,255,255,.5)}
@@ -453,7 +413,6 @@ export const APP_JS = `
 (function(){
 'use strict';
 
-/* ── Akzentfarbe (persistiert) ── */
 var ACCENTS = [
   { id:'cyan', color:'#00e5d0' },
   { id:'violet', color:'#8b6bff' },
@@ -468,12 +427,10 @@ var savedAccent = 'cyan';
 try { savedAccent = localStorage.getItem('accent') || 'cyan'; } catch(e){}
 applyAccent(savedAccent);
 
-/* ── Design/Theme: „dark" (Schwarz) oder „nature" (Natur, hell) ── */
 function applyTheme(id){
   if (id === 'nature') document.documentElement.setAttribute('data-theme', 'nature');
   else document.documentElement.removeAttribute('data-theme');
   try { localStorage.setItem('theme', id); } catch(e){}
-  // Handy-Browserleiste passend einfärben
   var mc = document.querySelector('meta[name=theme-color]');
   if (mc) mc.setAttribute('content', id === 'nature' ? '#e4f0e2' : '#05070d');
 }
@@ -482,21 +439,18 @@ function currentTheme(){
 }
 applyTheme(currentTheme());
 
-/* ── Hintergrund: Sternen-Grid (nur Desktop, 30 fps, pausiert bei hidden tab) ── */
 var fx = document.getElementById('fx');
 var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 var finePointer = window.matchMedia('(pointer: fine)').matches;
-// Schnell-Modus (theme-init.js setzt das Attribut vor dem ersten Paint)
 var liteFx = document.documentElement.getAttribute('data-fx') === 'lite';
-// Sternen-Canvas nur im dunklen Theme sinnvoll (auf Hell unsichtbar → CSS blendet es aus,
-// also gar nicht erst rechnen lassen)
+
 if (fx && !reduced && !liteFx && currentTheme() !== 'nature' && window.matchMedia('(min-width: 900px)').matches) {
   var g = fx.getContext('2d'); var raf = 0; var t = 0; var lastFrame = 0;
   function size(){ fx.width = innerWidth; fx.height = Math.min(innerHeight, 950); }
   function draw(now){
     raf = requestAnimationFrame(draw);
     now = now || 0;
-    if (now - lastFrame < 33) return; // 30 fps reichen für Sterne — halbiert die GPU-Last
+    if (now - lastFrame < 33) return;
     lastFrame = now;
     t += 0.009;
     g.clearRect(0,0,fx.width,fx.height);
@@ -515,10 +469,9 @@ if (fx && !reduced && !liteFx && currentTheme() !== 'nature' && window.matchMedi
     if (document.hidden) cancelAnimationFrame(raf); else draw(0);
   });
 } else if (fx) {
-  fx.remove(); // Mobil/reduced-motion: Canvas ganz raus, Aurora reicht als Tiefe
+  fx.remove();
 }
 
-/* ── 3D-Tilt für Kacheln (nur Maus, respektiert reduced-motion) ── */
 if (finePointer && !reduced && !liteFx) {
   var tiltEl = null;
   function resetTilt(el){
@@ -548,7 +501,6 @@ if (finePointer && !reduced && !liteFx) {
   }, { passive: true });
 }
 
-/* ── Login-Seite? ── */
 var loginForm = document.getElementById('loginForm');
 if (loginForm) {
   loginForm.addEventListener('submit', function(e){
@@ -569,11 +521,9 @@ if (loginForm) {
   return;
 }
 
-/* ── Panel-App ── */
 var content = document.getElementById('content');
 if (!content) return;
 
-/* SVG-Icons (Feather-artig, inline & leichtgewichtig) */
 var IC = {
   home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
   stats:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-6"/><path d="M22 20H2"/></svg>',
@@ -605,7 +555,7 @@ function h(tag, attrs, children){
   if (attrs) Object.keys(attrs).forEach(function(k){
     if (k === 'class') el.className = attrs[k];
     else if (k === 'style') el.style.cssText = attrs[k];
-    else if (k === 'html') el.innerHTML = attrs[k]; // nur für eigene SVG-Icons!
+    else if (k === 'html') el.innerHTML = attrs[k];
     else if (k.slice(0,2) === 'on') el.addEventListener(k.slice(2), attrs[k]);
     else el.setAttribute(k, attrs[k]);
   });
@@ -644,7 +594,6 @@ function connLabel(st){
   return ['connecting','Verbinde …'];
 }
 
-/* Animierter Zähler */
 function tween(el, target){
   var startText = (el.textContent || '0').replace(/[^0-9]/g, '');
   var from = parseInt(startText || '0', 10);
@@ -659,7 +608,6 @@ function tween(el, target){
   requestAnimationFrame(step);
 }
 
-/* ── Navigation ── */
 function renderNav(){
   ['nav','tabbar'].forEach(function(id){
     var box = document.getElementById(id);
@@ -696,11 +644,10 @@ if (logoutBtn) logoutBtn.addEventListener('click', function(){
   fetch('/logout', { method:'POST' }).then(function(){ location.href = '/login'; });
 });
 
-/* ── Live-Status via SSE ── */
 var lastStatusJson = '';
 function applyStatus(st){
   status = st;
-  if (document.hidden) return; // Tab im Hintergrund: kein DOM-Update nötig
+  if (document.hidden) return;
   var sig = JSON.stringify([st.connection, st.stopped, st.qrAvailable, st.sentToday,
     st.commandsToday, st.ai, st.groups, st.queue, st.activity]);
   var changed = sig !== lastStatusJson;
@@ -719,7 +666,6 @@ try {
 }
 api('/status').then(applyStatus).catch(function(){});
 
-/* ── Seiten-Router ── */
 function render(){
   renderNav();
   content.innerHTML = '';
@@ -732,7 +678,6 @@ function render(){
   (pages[current] || renderHome)();
 }
 
-/* ═══ Übersicht ═══ */
 function renderHome(){
   content.appendChild(h('h2', { class:'page-title' }, ['Übersicht']));
   content.appendChild(h('div', { class:'glass hero' }, [
@@ -792,7 +737,6 @@ function drawSpark(data){
     '<polyline points="' + pts + '"/></svg>';
 }
 
-/* ═══ Statistik ═══ */
 function renderStats(){
   content.appendChild(h('h2', { class:'page-title' }, ['Statistik']));
   var box = h('div', {}, [skel(150), skel(90), skel(90)]);
@@ -859,7 +803,6 @@ function barChart(daily){
   var el = h('div'); el.innerHTML = svg; return el;
 }
 
-/* ═══ QR ═══ */
 function renderQr(){
   content.appendChild(h('h2', { class:'page-title' }, ['Verbindung / QR']));
   content.appendChild(h('div', { class:'glass qr-box', id:'qrBox' }, [skel(200, 'width:200px')]));
@@ -922,7 +865,8 @@ function loadQr(){
   var pairBox = document.getElementById('pairBox');
   if (!box) return;
   api('/qr').then(function(res){
-    var sig = res.connection + '|' + (res.updatedAt || 0) + '|' + (res.qr ? 1 : 0) + '|' + (res.pairingCode || '');
+    var qrStr = typeof res.qr === 'string' ? res.qr : '';
+    var sig = res.connection + '|' + (res.updatedAt || 0) + '|' + qrStr + '|' + (res.pairingCode || '');
     if (box._sig === sig) return;
     box._sig = sig;
     box.innerHTML = '';
@@ -935,17 +879,20 @@ function loadQr(){
       if (pairBox) pairBox.style.display = 'none';
       return;
     }
-    if (res.qr) {
-      box.appendChild(h('img', { alt:'WhatsApp QR-Code', src:res.qr }));
+    if (qrStr && qrStr.startsWith('data:image/')) {
+      var img = h('img', { alt:'WhatsApp QR-Code', src: qrStr });
+      box.appendChild(img);
       box.appendChild(h('p', { class:'muted sm', style:'margin-top:12px' }, ['Mit WhatsApp scannen: Einstellungen → Verknüpfte Geräte. Aktualisiert sich automatisch.']));
     } else {
-      box.appendChild(h('p', { class:'muted' }, ['Noch kein QR-Code — der Bot verbindet sich gerade …']));
+      box.appendChild(h('div', {}, [
+        h('div', { class:'status-dot connecting', style:'margin:0 auto 12px;width:24px;height:24px' }),
+        h('p', { class:'muted' }, ['Warte auf neuen QR-Code vom WhatsApp-Server …'])
+      ]));
     }
     if (pairBox) { pairBox.style.display = ''; setPairingCodeDisplay(res.pairingCode); }
   }).catch(function(){ box.textContent = 'QR-Status konnte nicht geladen werden.'; });
 }
 
-/* ═══ Gruppen ═══ */
 function renderGroups(){
   content.appendChild(h('h2', { class:'page-title' }, ['Gruppen']));
   var search = h('input', { type:'text', class:'search', placeholder:'Gruppe suchen …', oninput: function(e){ drawGroupList(e.target.value); } });
@@ -1035,7 +982,6 @@ function memberAction(jid, member, action){
     .catch(function(e){ toast('⚠️ ' + e.message); });
 }
 
-/* ═══ Befehle ═══ */
 function renderCommands(){
   content.appendChild(h('h2', { class:'page-title' }, ['Befehle']));
   var box = h('div', { id:'cmdBox' }, [skel(52), skel(52), skel(52), skel(52)]);
@@ -1085,7 +1031,6 @@ function renderCommands(){
   }).catch(function(e){ box.textContent = e.message; });
 }
 
-/* ═══ Moderation ═══ */
 function renderMod(){
   content.appendChild(h('h2', { class:'page-title' }, ['Moderation']));
   var box = h('div', {}, [skel(52), skel(52), skel(52)]);
@@ -1120,7 +1065,6 @@ function renderMod(){
   }).catch(function(e){ box.textContent = e.message; });
 }
 
-/* ═══ Planung ═══ */
 function renderAgenda(){
   content.appendChild(h('h2', { class:'page-title' }, ['Planung']));
   var box = h('div', {}, [skel(52), skel(52), skel(52)]);
@@ -1161,7 +1105,6 @@ function renderAgenda(){
   }).catch(function(e){ box.innerHTML = ''; box.appendChild(h('p', { class:'muted' }, [e.message])); });
 }
 
-/* ═══ Logs ═══ */
 function renderLogs(){
   content.appendChild(h('h2', { class:'page-title' }, ['Logs']));
   var search = h('input', { type:'text', class:'search', placeholder:'Filtern …', oninput:function(e){ draw(e.target.value); } });
@@ -1180,7 +1123,6 @@ function renderLogs(){
   api('/logs').then(function(res){ logs = res.logs; draw(search.value); }).catch(function(e){ box.textContent = e.message; });
 }
 
-/* ═══ Extras ═══ */
 function renderSettings(){
   content.appendChild(h('h2', { class:'page-title' }, ['Extras']));
   var SYS = [
