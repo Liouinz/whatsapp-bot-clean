@@ -1,5 +1,5 @@
 // Economy-System: Coins (global pro Nutzer), Daily mit Streak, Überweisungen,
-// Glücksspiel (!wette, faires !slots mit gewichteten Walzen, verbessertes !roulette) und Bestenliste (!reichste).
+// Glücksspiel (!wette, dynamisches !slots mit Einsatz-Skalierung, verbessertes !roulette) und Bestenliste (!reichste).
 
 import { PREFIX, config } from '../config.js';
 import { dbRun, dbRows, todayKey } from '../db.js';
@@ -91,33 +91,49 @@ export async function activeTitle(userJid) {
   return rows.length ? rows[0].title : null;
 }
 
-// ── Fairer 5-Walzen-Slot (gewichtet, keine Manipulation) ───────────
+// ── Dynamische Slot-Walzen (Einsatz bestimmt die Gewichtung) ───────
 
-const REEL = [
-  { sym: '🍒', w: 30 },
-  { sym: '🍋', w: 25 },
-  { sym: '🍇', w: 20 },
-  { sym: '🍉', w: 18 },
-  { sym: '🍀', w: 15 },
-  { sym: '🔔', w: 10 },
-  { sym: '⭐', w: 8 },
-  { sym: '💰', w: 5 },
-  { sym: '👑', w: 3 },
-  { sym: '💎', w: 1 },
+const BASE_REEL = [
+  { sym: '🍒', w: 30, tier: 'low' },
+  { sym: '🍋', w: 25, tier: 'low' },
+  { sym: '🍇', w: 20, tier: 'low' },
+  { sym: '🍉', w: 18, tier: 'mid' },
+  { sym: '🍀', w: 15, tier: 'mid' },
+  { sym: '🔔', w: 10, tier: 'mid' },
+  { sym: '⭐', w: 8, tier: 'high' },
+  { sym: '💰', w: 5, tier: 'high' },
+  { sym: '👑', w: 3, tier: 'jackpot' },
+  { sym: '💎', w: 1, tier: 'jackpot' },
 ];
 
-const REEL_TOTAL = REEL.reduce((a, b) => a + b.w, 0);
+function getDynamicReel(bet) {
+  const risk = Math.min(1.5, bet / 500_000);
 
-function spinOne() {
-  let roll = Math.random() * REEL_TOTAL;
-  for (const s of REEL) {
-    roll -= s.w;
-    if (roll <= 0) return s.sym;
-  }
-  return REEL[0].sym;
+  const adjusted = BASE_REEL.map((s) => {
+    let weight = s.w;
+    if (s.tier === 'jackpot') weight *= Math.max(0.05, 1 - risk * 1.8);
+    if (s.tier === 'high')    weight *= Math.max(0.15, 1 - risk * 1.4);
+    if (s.tier === 'mid')     weight *= Math.max(0.6,  1 - risk * 0.4);
+    if (s.tier === 'low')     weight *= (1 + risk * 1.2);
+    return { sym: s.sym, w: Math.max(1, Math.round(weight)) };
+  });
+
+  return adjusted;
 }
 
-function spinFair() {
+function spinDynamic(bet) {
+  const reel = getDynamicReel(bet);
+  const total = reel.reduce((a, b) => a + b.w, 0);
+
+  function spinOne() {
+    let roll = Math.random() * total;
+    for (const s of reel) {
+      roll -= s.w;
+      if (roll <= 0) return s.sym;
+    }
+    return reel[0].sym;
+  }
+
   return Array.from({ length: 5 }, spinOne);
 }
 
@@ -267,7 +283,7 @@ export const economyCommands = [
     name: 'slots',
     aliases: ['slot'],
     category: 'economy',
-    desc: '5 Walzen Slotmaschine — !slots all setzt dein komplettes Geld',
+    desc: '5 Walzen Slotmaschine — hohe Einsätze = niedrigere Gewinnchance',
     usage: '!slots <betrag> oder !slots all',
     async run(ctx) {
       const wallet = await getWallet(ctx.sender, ctx.senderName);
@@ -277,9 +293,7 @@ export const economyCommands = [
       let amount;
       if (isAllIn) {
         amount = Math.floor(Number(wallet.balance) || 0);
-        if (amount <= 0) {
-          return ctx.reply('💸 Du hast nichts, was du setzen könntest.');
-        }
+        if (amount <= 0) return ctx.reply('💸 Du hast nichts, was du setzen könntest.');
       } else {
         amount = parseInt(rawArg, 10);
       }
@@ -292,20 +306,21 @@ export const economyCommands = [
           '🔥 3 Gleiche = ×5\n' +
           '👑 4 Gleiche = ×10\n' +
           '💎 5x 💎 = ×100 Mega-Jackpot\n\n' +
-          '⚠️ `!slots all` setzt deinen *kompletten Kontostand* — egal wie viel! 🎰🔥'
+          '⚠️ `!slots all` = komplettes Vermögen, kein Limit!\n' +
+          '💡 Je höher der Einsatz, desto geringer die Chance auf gute Symbole.'
         );
       }
 
       if (!isAllIn) {
-        if (amount < config.economy.betMin) {
-          return ctx.reply(`⚠️ Mindesteinsatz: ${fmtCoins(config.economy.betMin)}`);
-        }
+        if (amount < config.economy.betMin) return ctx.reply(`⚠️ Mindesteinsatz: ${fmtCoins(config.economy.betMin)}`);
         if (amount > config.economy.betMax) {
           return ctx.reply(
             `⚠️ Maximaleinsatz: ${fmtCoins(config.economy.betMax)}\n` +
-            `🎰 Willst du mehr riskieren? Versuch \`!slots all\`!`
+            `🎰 Mehr riskieren? Versuch \`!slots all\`!`
           );
         }
+      } else if (amount < config.economy.betMin) {
+        return ctx.reply(`⚠️ Du brauchst mindestens ${fmtCoins(config.economy.betMin)} für All-In.`);
       }
 
       if (!(await takeCoins(ctx.sender, amount))) {
@@ -317,7 +332,7 @@ export const economyCommands = [
         [amount, resolveLid(ctx.sender)]
       );
 
-      const symbols = spinFair();
+      const symbols = spinDynamic(amount);
       const row = symbols.join(' │ ');
 
       const counts = {};
@@ -349,8 +364,7 @@ export const economyCommands = [
 
       let text = '🎰 *CASINO SLOTS*\n';
       if (isAllIn) {
-        text += `🚨🚨🚨 *ALL-IN!* 🚨🚨🚨\n`;
-        text += `💣 Einsatz: *${fmtCoins(amount)}* (dein komplettes Vermögen!)\n`;
+        text += `🚨 *ALL-IN!* Einsatz: *${fmtCoins(amount)}*\n`;
       } else {
         text += `💰 Einsatz: ${fmtCoins(amount)}\n`;
       }
@@ -374,9 +388,7 @@ export const economyCommands = [
       } else {
         text += `😬 Nichts gewonnen.\n`;
         text += `💸 Verloren: ${fmtCoins(amount)}`;
-        if (isAllIn) {
-          text += `\n🏚️ Du bist pleite … hol dir mit \`!daily\` neues Startkapital.`;
-        }
+        if (isAllIn) text += `\n🏚️ Du bist pleite … hol dir mit \`!daily\` neues Startkapital.`;
       }
 
       return ctx.reply(text);
