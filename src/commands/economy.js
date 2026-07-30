@@ -1,5 +1,5 @@
 // Economy-System: Coins (global pro Nutzer), Daily mit Streak, Überweisungen,
-// Glücksspiel (!wette, dynamisches !slots mit Einsatz-Skalierung, verbessertes !roulette) und Bestenliste (!reichste).
+// Glücksspiel (!wette, dynamisches !slots mit logarithmischer Einsatz-Skalierung, verbessertes !roulette) und Bestenliste (!reichste).
 
 import { PREFIX, config } from '../config.js';
 import { dbRun, dbRows, todayKey } from '../db.js';
@@ -15,7 +15,7 @@ import { getEventCoinMult } from '../events.js';
 export async function getWallet(userJid, name = '') {
   const user = resolveLid(userJid);
   const rows = await dbRows('SELECT * FROM coins WHERE user_jid = ?', [user]);
-  
+
   if (rows.length) {
     if (name && rows[0].name !== name) {
       dbRun('UPDATE coins SET name = ? WHERE user_jid = ?', [name, user]).catch(() => {});
@@ -80,7 +80,8 @@ export function fmtCoins(n) {
 }
 
 function parseAmount(arg, balance) {
-  if (/^(alles|all|allin)$/i.test(arg || '')) return Math.min(balance, config.economy.betMax);
+  // ALL-IN ignoriert betMax komplett — setzt den kompletten Kontostand
+  if (/^(alles|all|allin)$/i.test(arg || '')) return Math.floor(Number(balance) || 0);
   const n = parseInt(arg || '', 10);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
@@ -91,7 +92,9 @@ export async function activeTitle(userJid) {
   return rows.length ? rows[0].title : null;
 }
 
-// ── Dynamische Slot-Walzen (Einsatz bestimmt die Gewichtung) ───────
+// ── Dynamische Slot-Walzen (LOGARITHMISCHE Einsatz-Skalierung) ─────
+// Je höher der Einsatz, desto brutaler die Verschiebung zu schlechten Symbolen.
+// KEIN CAP — funktioniert von 10 Coins bis zu Billionen.
 
 const BASE_REEL = [
   { sym: '🍒', w: 30, tier: 'low' },
@@ -106,16 +109,41 @@ const BASE_REEL = [
   { sym: '💎', w: 1, tier: 'jackpot' },
 ];
 
+/**
+ * Logarithmische Risk-Skala — KEIN CAP!
+ * 10 Coins      → risk ≈ 0.1   (fast normal)
+ * 1.000 Coins   → risk ≈ 1.0   (spürbar schwieriger)
+ * 1 Mio Coins   → risk ≈ 4.0   (brutal)
+ * 1 Mrd Coins   → risk ≈ 9.0   (nahezu unmöglich)
+ * 1 Bio Coins   → risk ≈ 16.0  (praktisch nur noch 🍒🍋🍇)
+ * 22 Bio Coins  → risk ≈ 19.8  (Jackpot-Chance: ~0.0000001%)
+ */
 function getDynamicReel(bet) {
-  const risk = Math.min(1.5, bet / 500_000);
+  const logBet = Math.log10(Math.max(1, Number(bet)));
+  const risk = Math.pow(logBet / 3, 2);
 
   const adjusted = BASE_REEL.map((s) => {
     let weight = s.w;
-    if (s.tier === 'jackpot') weight *= Math.max(0.05, 1 - risk * 1.8);
-    if (s.tier === 'high')    weight *= Math.max(0.15, 1 - risk * 1.4);
-    if (s.tier === 'mid')     weight *= Math.max(0.6,  1 - risk * 0.4);
-    if (s.tier === 'low')     weight *= (1 + risk * 1.2);
-    return { sym: s.sym, w: Math.max(1, Math.round(weight)) };
+    switch (s.tier) {
+      case 'jackpot':
+        // 💎👑 — bei Billionen praktisch unmöglich
+        weight *= Math.max(0.000001, Math.exp(-risk * 1.2));
+        break;
+      case 'high':
+        // ⭐💰 — bei Millionen schon sehr selten
+        weight *= Math.max(0.0001, Math.exp(-risk * 0.7));
+        break;
+      case 'mid':
+        // 🍉🍀🔔 — bei hohen Einsätzen seltener
+        weight *= Math.max(0.01, Math.exp(-risk * 0.35));
+        break;
+      case 'low':
+      default:
+        // 🍒🍋🍇 — bei hohen Einsätzen DOMINIEREN die Walzen
+        weight *= (1 + risk * 0.6);
+        break;
+    }
+    return { sym: s.sym, w: Math.max(0.000001, weight) };
   });
 
   return adjusted;
@@ -156,7 +184,7 @@ export const economyCommands = [
 
       const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
       const streak = wallet.last_daily === yesterday ? Number(wallet.streak) + 1 : 1;
-      
+
       const base = config.economy.dailyMin + Math.floor(Math.random() * (config.economy.dailyMax - config.economy.dailyMin + 1));
       const bonus = Math.min((streak - 1) * config.economy.streakBonus, config.economy.streakBonusMax);
       const base_total = base + bonus;
@@ -244,7 +272,7 @@ export const economyCommands = [
     aliases: ['bet', 'coinflip'],
     category: 'economy',
     desc: 'Setze Coins auf Kopf oder Zahl',
-    usage: '!wette <betrag|allin> kopf|zahl',
+    usage: '!wette <betrag> kopf|zahl',
     async run(ctx) {
       const wallet = await getWallet(ctx.sender, ctx.senderName);
       const amount = parseAmount(ctx.args[0], Number(wallet.balance));
@@ -253,20 +281,22 @@ export const economyCommands = [
 
       if (!amount || !pick) {
         return ctx.reply(
-          'ℹ️ Nutzung: `!wette <betrag|allin> kopf` oder `!wette <betrag|allin> zahl` (oder `allin`)\n' +
+          'ℹ️ Nutzung: `!wette <betrag> kopf` oder `!wette <betrag> zahl` (oder `allin`)\n' +
           '📈 *Ertrag / Quote:* ×2.0 (100% Gewinn auf den Einsatz)'
         );
       }
 
       if (amount < config.economy.betMin) return ctx.reply(`⚠️ Mindesteinsatz: ${fmtCoins(config.economy.betMin)}`);
-      if (amount > config.economy.betMax) return ctx.reply(`⚠️ Maximaleinsatz: ${fmtCoins(config.economy.betMax)}`);
+      if (amount > config.economy.betMax && !/^(alles|all|allin)$/i.test(ctx.args[0] || '')) {
+        return ctx.reply(`⚠️ Maximaleinsatz: ${fmtCoins(config.economy.betMax)}`);
+      }
 
       if (!(await takeCoins(ctx.sender, amount))) {
         return ctx.reply(`⚠️ So viel hast du nicht (Kontostand: ${fmtCoins(wallet.balance)}).`);
       }
 
       await dbRun('UPDATE coins SET total_gambled = total_gambled + ? WHERE user_jid = ?', [amount, resolveLid(ctx.sender)]);
-      
+
       const result = Math.random() < 0.5 ? 'kopf' : 'zahl';
       const icon = result === 'kopf' ? '🪙' : '🔢';
 
@@ -311,6 +341,7 @@ export const economyCommands = [
         );
       }
 
+      // Limit-Prüfung nur für feste Beträge
       if (!isAllIn) {
         if (amount < config.economy.betMin) return ctx.reply(`⚠️ Mindesteinsatz: ${fmtCoins(config.economy.betMin)}`);
         if (amount > config.economy.betMax) {
@@ -332,6 +363,7 @@ export const economyCommands = [
         [amount, resolveLid(ctx.sender)]
       );
 
+      // LOGARITHMISCHER SPIN — skaliert mit dem Einsatz
       const symbols = spinDynamic(amount);
       const row = symbols.join(' │ ');
 
@@ -399,12 +431,12 @@ export const economyCommands = [
     name: 'roulette',
     category: 'economy',
     desc: 'Roulette: rot/schwarz (×2) oder Zahl 0–36 (×35)',
-    usage: '!roulette <betrag|allin> rot|schwarz|<zahl>',
+    usage: '!roulette <betrag> rot|schwarz|<zahl>',
     async run(ctx) {
       const wallet = await getWallet(ctx.sender, ctx.senderName);
       const amount = parseAmount(ctx.args[0], Number(wallet.balance));
       const rawPick = (ctx.args[1] || '').toLowerCase();
-      
+
       const isColor = rawPick === 'rot' || rawPick === 'schwarz' || rawPick === 'black' || rawPick === 'red';
       const normalizedColor = rawPick === 'red' ? 'rot' : rawPick === 'black' ? 'schwarz' : rawPick;
       const numPick = /^\d{1,2}$/.test(rawPick) ? parseInt(rawPick, 10) : null;
@@ -412,13 +444,15 @@ export const economyCommands = [
       if (!amount || (!isColor && (numPick === null || numPick > 36))) {
         return ctx.reply(
           'ℹ️ *Roulette-Hilfe*\n' +
-          'Nutzung: `!roulette <betrag|allin> rot` / `schwarz` (Ertrag: ×2)\n' +
-          'Oder: `!roulette <betrag|allin> <0-36>` (Ertrag: ×35)'
+          'Nutzung: `!roulette <betrag> rot` / `schwarz` (Ertrag: ×2)\n' +
+          'Oder: `!roulette <betrag> <0-36>` (Ertrag: ×35)'
         );
       }
 
       if (amount < config.economy.betMin) return ctx.reply(`⚠️ Mindesteinsatz: ${fmtCoins(config.economy.betMin)}`);
-      if (amount > config.economy.betMax) return ctx.reply(`⚠️ Maximaleinsatz: ${fmtCoins(config.economy.betMax)}`);
+      if (amount > config.economy.betMax && !/^(alles|all|allin)$/i.test(ctx.args[0] || '')) {
+        return ctx.reply(`⚠️ Maximaleinsatz: ${fmtCoins(config.economy.betMax)}`);
+      }
 
       if (!(await takeCoins(ctx.sender, amount))) {
         return ctx.reply(`⚠️ So viel hast du nicht (Kontostand: ${fmtCoins(wallet.balance)}).`);
