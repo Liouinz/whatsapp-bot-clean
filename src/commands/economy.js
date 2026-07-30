@@ -79,9 +79,11 @@ export function fmtCoins(n) {
   return `${Number(n || 0).toLocaleString('de-DE')} 🪙`;
 }
 
-function parseAmount(arg, balance) {
+function parseAmount(arg, balance, allowAllIn = false) {
   // ALL-IN ignoriert betMax komplett — setzt den kompletten Kontostand
-  if (/^(alles|all|allin)$/i.test(arg || '')) return Math.floor(Number(balance) || 0);
+  if (/^(alles|all|allin)$/i.test(arg || '')) {
+    return allowAllIn ? Math.floor(Number(balance) || 0) : Math.min(balance, config.economy.betMax);
+  }
   const n = parseInt(arg || '', 10);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
@@ -246,7 +248,7 @@ export const economyCommands = [
         return ctx.reply('😄 An dich selbst überweisen bringt leider nichts.');
       }
 
-      const amount = parseInt(ctx.args.find((a) => /^\d{1,7}$/.test(a)) || '', 10);
+      const amount = parseInt(ctx.args.find((a) => /^\d{1,15}$/.test(a)) || '', 10);
       if (!amount || amount < config.economy.giveMin) {
         return ctx.reply(`ℹ️ Nutzung: \`!geben @person <betrag>\` (mindestens ${config.economy.giveMin})`);
       }
@@ -275,7 +277,7 @@ export const economyCommands = [
     usage: '!wette <betrag> kopf|zahl',
     async run(ctx) {
       const wallet = await getWallet(ctx.sender, ctx.senderName);
-      const amount = parseAmount(ctx.args[0], Number(wallet.balance));
+      const amount = parseAmount(ctx.args[0], Number(wallet.balance), true);
       const rawPick = (ctx.args[1] || '').toLowerCase();
       const pick = /^(kopf|k|heads?)$/.test(rawPick) ? 'kopf' : /^(zahl|z|tails?)$/.test(rawPick) ? 'zahl' : null;
 
@@ -434,7 +436,7 @@ export const economyCommands = [
     usage: '!roulette <betrag> rot|schwarz|<zahl>',
     async run(ctx) {
       const wallet = await getWallet(ctx.sender, ctx.senderName);
-      const amount = parseAmount(ctx.args[0], Number(wallet.balance));
+      const amount = parseAmount(ctx.args[0], Number(wallet.balance), true);
       const rawPick = (ctx.args[1] || '').toLowerCase();
 
       const isColor = rawPick === 'rot' || rawPick === 'schwarz' || rawPick === 'black' || rawPick === 'red';

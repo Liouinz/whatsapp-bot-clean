@@ -44,17 +44,11 @@ export function bufferGroupMessage(groupJid) {
 
 export async function flushBuffers() {
   const db = getDb();
-  const promises = [];
-  
-  // FIX: Buffer-Inhalte kopieren und Maps sofort leeren, um Race Conditions zu vermeiden
   const xpEntries = Array.from(xpBuffer.values());
-  xpBuffer.clear();
-  
   const statEntries = Array.from(statBuffer.values());
-  statBuffer.clear();
-  
   const groupMsgEntries = Array.from(groupMsgBuffer.values());
-  groupMsgBuffer.clear();
+
+  const promises = [];
 
   for (const entry of xpEntries) {
     promises.push(
@@ -62,7 +56,7 @@ export async function flushBuffers() {
         sql: `INSERT INTO xp (group_jid, user_jid, xp, messages, name) VALUES (?, ?, ?, 1, ?)
               ON CONFLICT(group_jid, user_jid) DO UPDATE SET xp = xp + excluded.xp, messages = messages + 1, name = excluded.name`,
         args: [entry.chatJid, entry.userJid, entry.amount, entry.name]
-      }).catch((err) => logger.warn(`Flush-Fehler: ${err.message}`, 'db.flush'))
+      })
     );
   }
   
@@ -74,7 +68,7 @@ export async function flushBuffers() {
         sql: `INSERT INTO daily_stats (day, messages, commands, ai_calls) VALUES (?, ?, ?, ?)
               ON CONFLICT(day) DO UPDATE SET ${col} = ${col} + excluded.${col}`,
         args: [entry.day, entry.field === 'messages' ? entry.count : 0, entry.field === 'commands' ? entry.count : 0, entry.field === 'ai_calls' ? entry.count : 0]
-      }).catch((err) => logger.warn(`Flush-Fehler: ${err.message}`, 'db.flush'))
+      })
     );
   }
   
@@ -84,11 +78,18 @@ export async function flushBuffers() {
         sql: `INSERT INTO group_daily (group_jid, day, messages) VALUES (?, ?, ?)
               ON CONFLICT(group_jid, day) DO UPDATE SET messages = messages + excluded.messages`,
         args: [entry.groupJid, entry.day, entry.count]
-      }).catch((err) => logger.warn(`Flush-Fehler: ${err.message}`, 'db.flush'))
+      })
     );
   }
   
-  await Promise.all(promises);
+  try {
+    await Promise.all(promises);
+    xpBuffer.clear();
+    statBuffer.clear();
+    groupMsgBuffer.clear();
+  } catch (err) {
+    logger.warn(`Flush-Fehler: ${err.message}`, 'db.flush');
+  }
 }
 
 export function startFlushLoop() {

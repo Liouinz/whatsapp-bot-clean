@@ -4,7 +4,7 @@ export const DATA_TABLES = [
   'warnings', 'mutes', 'bans', 'group_settings', 'coins', 'inventory',
   'user_boosts', 'user_titles', 'game_scores', 'xp', 'user_achievements',
   'prestige', 'scheduled_messages', 'polls', 'poll_votes', 'birthdays',
-  'custom_commands', 'faqs', 'rob_cooldown', 'active_event', 'global_settings',
+  'custom_commands', 'faq', 'rob_cooldown', 'active_event', 'global_settings',
   'group_daily', 'player_contracts', 'quests', 'command_toggles', 'levels',
   'blocked_words', 'antiraid', 'audit_log', 'ai_usage', 'members', 'nightmode', 'allowed_chats'
 ];

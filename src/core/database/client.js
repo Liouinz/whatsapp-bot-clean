@@ -20,8 +20,12 @@ export async function dbRun(sql, args = []) {
   try {
     return await db.execute({ sql, args });
   } catch (err) {
-    await new Promise((r) => setTimeout(r, 500));
-    return db.execute({ sql, args });
+    const retryable = /locked|busy|timeout|network|ECONNRESET/i.test(String(err));
+    if (retryable) {
+      await new Promise((r) => setTimeout(r, 500));
+      return db.execute({ sql, args });
+    }
+    throw err;
   }
 }
 
