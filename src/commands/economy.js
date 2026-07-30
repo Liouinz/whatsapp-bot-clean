@@ -267,16 +267,16 @@ export const economyCommands = [
     name: 'slots',
     aliases: ['slot'],
     category: 'economy',
-    desc: '5 Walzen Slotmaschine (nutze auch allin)',
-    usage: '!slots <betrag|allin>',
+    desc: '5 Walzen Slotmaschine — !slots all setzt dein komplettes Geld',
+    usage: '!slots <betrag> oder !slots all',
     async run(ctx) {
       const wallet = await getWallet(ctx.sender, ctx.senderName);
-      const rawArg = (ctx.args[0] || '').toLowerCase();
+      const rawArg = (ctx.args[0] || '').toLowerCase().trim();
       const isAllIn = /^(alles|all|allin)$/i.test(rawArg);
-      
+
       let amount;
       if (isAllIn) {
-        amount = Math.min(Number(wallet.balance), config.economy.betMax);
+        amount = Math.floor(Number(wallet.balance) || 0);
         if (amount <= 0) {
           return ctx.reply('💸 Du hast nichts, was du setzen könntest.');
         }
@@ -284,7 +284,7 @@ export const economyCommands = [
         amount = parseInt(rawArg, 10);
       }
 
-      if (!amount || amount <= 0) {
+      if (!amount || amount <= 0 || !Number.isFinite(amount)) {
         return ctx.reply(
           'ℹ️ Nutzung: `!slots <betrag>` oder `!slots all`\n' +
           '📊 *Auszahlungen:*\n' +
@@ -292,18 +292,30 @@ export const economyCommands = [
           '🔥 3 Gleiche = ×5\n' +
           '👑 4 Gleiche = ×10\n' +
           '💎 5x 💎 = ×100 Mega-Jackpot\n\n' +
-          '⚠️ `!slots all` setzt deinen *kompletten Kontostand* (max. ' + fmtCoins(config.economy.betMax) + ')'
+          '⚠️ `!slots all` setzt deinen *kompletten Kontostand* — egal wie viel! 🎰🔥'
         );
       }
 
-      if (amount < config.economy.betMin) return ctx.reply(`⚠️ Mindesteinsatz: ${fmtCoins(config.economy.betMin)}`);
-      if (amount > config.economy.betMax) return ctx.reply(`⚠️ Maximaleinsatz: ${fmtCoins(config.economy.betMax)}`);
-
-      if (!(await takeCoins(ctx.sender, amount))) {
-        return ctx.reply(`⚠️ So viel hast du nicht (Kontostand: ${fmtCoins(wallet.balance)}).`);
+      if (!isAllIn) {
+        if (amount < config.economy.betMin) {
+          return ctx.reply(`⚠️ Mindesteinsatz: ${fmtCoins(config.economy.betMin)}`);
+        }
+        if (amount > config.economy.betMax) {
+          return ctx.reply(
+            `⚠️ Maximaleinsatz: ${fmtCoins(config.economy.betMax)}\n` +
+            `🎰 Willst du mehr riskieren? Versuch \`!slots all\`!`
+          );
+        }
       }
 
-      await dbRun('UPDATE coins SET total_gambled = total_gambled + ? WHERE user_jid = ?', [amount, resolveLid(ctx.sender)]);
+      if (!(await takeCoins(ctx.sender, amount))) {
+        return ctx.reply(`⚠️ Abbuchung fehlgeschlagen (Kontostand: ${fmtCoins(wallet.balance)}).`);
+      }
+
+      await dbRun(
+        'UPDATE coins SET total_gambled = total_gambled + ? WHERE user_jid = ?',
+        [amount, resolveLid(ctx.sender)]
+      );
 
       const symbols = spinFair();
       const row = symbols.join(' │ ');
@@ -312,8 +324,8 @@ export const economyCommands = [
       for (const symbol of symbols) {
         counts[symbol] = (counts[symbol] || 0) + 1;
       }
-
       const highest = Math.max(...Object.values(counts));
+
       let factor = 0;
       let jackpot = false;
 
@@ -337,21 +349,34 @@ export const economyCommands = [
 
       let text = '🎰 *CASINO SLOTS*\n';
       if (isAllIn) {
-        text += `🚨 *ALL-IN!* Einsatz: ${fmtCoins(amount)}\n`;
+        text += `🚨🚨🚨 *ALL-IN!* 🚨🚨🚨\n`;
+        text += `💣 Einsatz: *${fmtCoins(amount)}* (dein komplettes Vermögen!)\n`;
+      } else {
+        text += `💰 Einsatz: ${fmtCoins(amount)}\n`;
       }
       text += `┌────────────────────┐\n│ ${row} │\n└────────────────────┘\n\n`;
 
       if (factor > 0) {
-        const win = amount * factor;
+        const win = Math.floor(amount * factor);
         await addCoins(ctx.sender, win, ctx.senderName);
 
         if (jackpot) {
-          text += `🔥🔥🔥 *MEGA JACKPOT!* 🔥🔥🔥\n×${factor} Multiplikator!\n💰 Gewinn: *${fmtCoins(win)}* (Reingewinn: +${fmtCoins(win - amount)})`;
+          text += `🔥🔥🔥 *MEGA JACKPOT!* 🔥🔥🔥\n`;
+          text += `×${factor} Multiplikator!\n`;
+          text += `💰 Gewinn: *${fmtCoins(win)}*\n`;
+          text += `(Reingewinn: +${fmtCoins(win - amount)})`;
         } else {
-          text += `🎉 *Gewonnen!*\n×${factor} Multiplikator\n💰 Gewinn: *${fmtCoins(win)}* (Reingewinn: +${fmtCoins(win - amount)})`;
+          text += `🎉 *Gewonnen!*\n`;
+          text += `×${factor} Multiplikator\n`;
+          text += `💰 Gewinn: *${fmtCoins(win)}*\n`;
+          text += `(Reingewinn: +${fmtCoins(win - amount)})`;
         }
       } else {
-        text += `😬 Nichts gewonnen. (Verloren: ${fmtCoins(amount)})`;
+        text += `😬 Nichts gewonnen.\n`;
+        text += `💸 Verloren: ${fmtCoins(amount)}`;
+        if (isAllIn) {
+          text += `\n🏚️ Du bist pleite … hol dir mit \`!daily\` neues Startkapital.`;
+        }
       }
 
       return ctx.reply(text);
