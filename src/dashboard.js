@@ -135,7 +135,7 @@ export function createDashboard() {
   app.use(express.json({ limit: '256kb' }));
 
   app.use((req, res, next) => {
-    if (req.path !== '/health') res.setHeader('Cache-Control', 'no-store');
+    if (req.path !== '/health') res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     next();
   });
 
@@ -244,7 +244,11 @@ export function createDashboard() {
 
   api.get('/qr', (req, res) => {
     const pairingValid = state.pairingCode && Date.now() - state.pairingCodeUpdatedAt < config.pairing.codeValidMs;
-    const isDataUrl = typeof state.currentQr === 'string' && state.currentQr.startsWith('data:image/');
+    const isDataUrl = typeof state.currentQr === 'string' && state.currentQr.startsWith('data:image/png;base64,');
+    
+    logInfo(`QR requested — Connection: ${state.connection}, QR available: ${isDataUrl}, Length: ${isDataUrl ? state.currentQr.length : 0}`, 'Dashboard.API');
+
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.json({
       connection: state.connection,
       qr: isDataUrl ? state.currentQr : null,
@@ -745,7 +749,7 @@ async function listGroups() {
 
 async function statusPayload() {
   const quota = getAiQuota();
-  const isDataUrl = typeof state.currentQr === 'string' && state.currentQr.startsWith('data:image/');
+  const isDataUrl = typeof state.currentQr === 'string' && state.currentQr.startsWith('data:image/png;base64,');
   return {
     botName: BOT_NAME,
     connection: state.connection,

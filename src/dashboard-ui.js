@@ -306,7 +306,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 
 .search{width:100%;margin-bottom:12px}
 
 .qr-box{display:grid;place-items:center;padding:32px;text-align:center;min-height:300px}
-.qr-box img{width:min(320px,80vw);border-radius:16px;background:#fff;padding:12px;box-shadow:0 0 44px var(--accent-dim),0 0 0 1px var(--line2)}
+.qr-box img{width:min(320px,80vw);border-radius:16px;background:#fff;padding:12px;box-shadow:0 0 44px var(--accent-dim),0 0 0 1px var(--line2);display:block;margin:0 auto}
 
 .pair-code{margin-top:14px;text-align:center;animation:rise .3s var(--ease) both}
 .pair-code b{
@@ -549,6 +549,7 @@ var TABS = [
 ];
 var current = location.pathname === '/qr' ? 'qr' : (location.hash.replace('#','') || 'home');
 var status = null;
+var qrPollTimer = null;
 
 function h(tag, attrs, children){
   var el = document.createElement(tag);
@@ -666,7 +667,21 @@ try {
 }
 api('/status').then(applyStatus).catch(function(){});
 
+function stopQrPolling(){
+  if (qrPollTimer) { clearInterval(qrPollTimer); qrPollTimer = null; }
+}
+
+function startQrPolling(){
+  stopQrPolling();
+  qrPollTimer = setInterval(function(){
+    if (current === 'qr' && !document.hidden) {
+      loadQr();
+    }
+  }, 2500);
+}
+
 function render(){
+  stopQrPolling();
   renderNav();
   content.innerHTML = '';
   content.focus({ preventScroll:true });
@@ -805,9 +820,14 @@ function barChart(daily){
 
 function renderQr(){
   content.appendChild(h('h2', { class:'page-title' }, ['Verbindung / QR']));
-  content.appendChild(h('div', { class:'glass qr-box', id:'qrBox' }, [skel(200, 'width:200px')]));
+  content.appendChild(h('div', { class:'glass qr-box', id:'qrBox' }, [
+    h('div', {}, [
+      h('div', { class:'status-dot connecting', style:'margin:0 auto 12px;width:24px;height:24px' }),
+      h('p', { class:'muted' }, ['Initialisiere QR-Verbindung …'])
+    ])
+  ]));
   var relinkBtn = h('button', { class:'small danger', onclick:function(){
-    if (!confirm('Sitzung wirklich komplett zurücksetzen? Die alte Verknüpfung wird sofort ungültig — danach neu per QR oder Code verbinden. Auf dem alten Handy kann „Verknüpfte Geräte" das noch kurz falsch anzeigen, das ist egal.')) return;
+    if (!confirm('Sitzung wirklich komplett zurücksetzen? Die alte Verknüpfung wird sofort ungültig — danach neu per QR oder Code verbinden.')) return;
     relinkBtn.disabled = true;
     api('/relink', { method:'POST' })
       .then(function(r){ toast('🔁 ' + r.message); setTimeout(loadQr, 800); })
@@ -817,7 +837,7 @@ function renderQr(){
   content.appendChild(h('div', { class:'glass card', style:'margin-top:12px' }, [
     h('h3', {}, ['🆘 Verbindung hängt fest?']),
     h('p', { class:'muted sm', style:'margin-bottom:10px' }, [
-      'Wenn hier dauerhaft „verbindet sich gerade" steht und nie ein QR-/Pairing-Code erscheint, ist die gespeicherte Sitzung vermutlich kaputt. Dieser Knopf löscht sie und startet sofort frisch — unabhängig davon, was das alte Gerät noch anzeigt.'
+      'Wenn hier dauerhaft „verbindet sich gerade" steht und nie ein QR-/Pairing-Code erscheint, ist die gespeicherte Sitzung vermutlich kaputt. Dieser Knopf löscht sie und startet sofort frisch.'
     ]),
     relinkBtn
   ]));
@@ -846,8 +866,11 @@ function renderQr(){
     ' — der ist der zuverlässigere Weg.'
   ]));
   content.appendChild(pairBox);
+
   loadQr();
+  startQrPolling();
 }
+
 function setPairingCodeDisplay(code){
   var el = document.getElementById('pairCodeDisplay');
   if (!el) return;
@@ -860,37 +883,55 @@ function setPairingCodeDisplay(code){
     h('b', {}, [code])
   ]));
 }
+
 function loadQr(){
   var box = document.getElementById('qrBox');
   var pairBox = document.getElementById('pairBox');
   if (!box) return;
-  api('/qr').then(function(res){
-    var qrStr = typeof res.qr === 'string' ? res.qr : '';
-    var sig = res.connection + '|' + (res.updatedAt || 0) + '|' + qrStr + '|' + (res.pairingCode || '');
-    if (box._sig === sig) return;
-    box._sig = sig;
-    box.innerHTML = '';
-    if (res.connection === 'open') {
-      box.appendChild(h('div', {}, [
-        h('div', { style:'font-size:3rem' }, ['✅']),
-        h('div', { class:'h-title' }, ['Bot ist online']),
-        h('p', { class:'muted sm' }, ['Session aktiv — kein QR-Code nötig.'])
-      ]));
-      if (pairBox) pairBox.style.display = 'none';
-      return;
-    }
-    if (qrStr && qrStr.startsWith('data:image/')) {
-      var img = h('img', { alt:'WhatsApp QR-Code', src: qrStr });
-      box.appendChild(img);
-      box.appendChild(h('p', { class:'muted sm', style:'margin-top:12px' }, ['Mit WhatsApp scannen: Einstellungen → Verknüpfte Geräte. Aktualisiert sich automatisch.']));
-    } else {
-      box.appendChild(h('div', {}, [
-        h('div', { class:'status-dot connecting', style:'margin:0 auto 12px;width:24px;height:24px' }),
-        h('p', { class:'muted' }, ['Warte auf neuen QR-Code vom WhatsApp-Server …'])
-      ]));
-    }
-    if (pairBox) { pairBox.style.display = ''; setPairingCodeDisplay(res.pairingCode); }
-  }).catch(function(){ box.textContent = 'QR-Status konnte nicht geladen werden.'; });
+
+  var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  var timeoutId = controller ? setTimeout(function(){ controller.abort(); }, 5000) : null;
+
+  api('/qr', controller ? { signal: controller.signal } : {})
+    .then(function(res){
+      if (timeoutId) clearTimeout(timeoutId);
+      console.log('QR API:', res);
+
+      var qrStr = (typeof res.qr === 'string' && res.qr.startsWith('data:image/png;base64,') && res.qr.length > 100) ? res.qr : null;
+      var sig = res.connection + '|' + (res.updatedAt || 0) + '|' + (qrStr ? 'hasQr' : 'noQr') + '|' + (res.pairingCode || '');
+
+      if (box._sig === sig) return;
+      box._sig = sig;
+      box.innerHTML = '';
+
+      if (res.connection === 'open') {
+        box.appendChild(h('div', {}, [
+          h('div', { style:'font-size:3rem' }, ['✅']),
+          h('div', { class:'h-title' }, ['Bot ist online']),
+          h('p', { class:'muted sm' }, ['Session aktiv — kein QR-Code nötig.'])
+        ]));
+        if (pairBox) pairBox.style.display = 'none';
+        return;
+      }
+
+      if (qrStr) {
+        var img = h('img', { alt:'WhatsApp QR-Code', src: qrStr });
+        box.appendChild(img);
+        box.appendChild(h('p', { class:'muted sm', style:'margin-top:12px' }, ['Mit WhatsApp scannen: Einstellungen → Verknüpfte Geräte. Aktualisiert sich automatisch.']));
+      } else {
+        box.appendChild(h('div', {}, [
+          h('div', { class:'status-dot connecting', style:'margin:0 auto 12px;width:24px;height:24px' }),
+          h('p', { class:'muted' }, ['Warte auf neuen QR-Code vom WhatsApp-Server …'])
+        ]));
+      }
+
+      if (pairBox) { pairBox.style.display = ''; setPairingCodeDisplay(res.pairingCode); }
+    })
+    .catch(function(err){
+      if (timeoutId) clearTimeout(timeoutId);
+      if (err.name === 'AbortError') return;
+      console.warn('QR Fetch-Fehler:', err);
+    });
 }
 
 function renderGroups(){
@@ -1087,7 +1128,7 @@ function renderAgenda(){
     box.appendChild(h('div', { class:'section-h' }, ['🎂 Nächste Geburtstage (' + res.birthdays.length + ')']));
     if (!res.birthdays.length) box.appendChild(h('p', { class:'muted sm' }, ['Keine Geburtstage eingetragen — im Chat: !geburtstag 24.12.']));
     res.birthdays.forEach(function(b){
-      var who = b.name || '+' + String(b.user_jid).split('@')[0];
+      var who = b.name || '+' + String(b.user_jid || '').split('@')[0];
       var when = b.days === 0 ? '🎂 HEUTE!' : b.days === 1 ? 'morgen' : 'in ' + b.days + ' Tagen';
       box.appendChild(h('div', { class:'glass list-item row between' }, [
         h('span', { class:'sm' }, [who + ' — ' + b.day + '.' + b.month + '.']),
