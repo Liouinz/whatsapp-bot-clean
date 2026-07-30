@@ -103,8 +103,15 @@ function cleanupSocket(sock) {
   }
 }
 
-process.on('uncaughtException', (err) => {
+process.on('uncaughtException', async (err) => {
   logger.error(err, 'uncaughtException');
+  stopWatchdog();
+  stopSelfPing();
+  stopDbHeartbeat();
+  stopFlushLoop();
+  await flushAuth().catch(() => {});
+  await flushBuffers().catch(() => {});
+  setTimeout(() => process.exit(1), 1000);
 });
 
 process.on('unhandledRejection', (reason) => {
