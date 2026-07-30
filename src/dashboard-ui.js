@@ -1286,3 +1286,4 @@ function renderSettings(){
 renderNav();
 render();
 })();
+`;
