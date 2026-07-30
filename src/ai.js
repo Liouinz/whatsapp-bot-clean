@@ -19,7 +19,9 @@ let dailyCalls = 0;
 let dailyDay = todayKey();
 let summaryBudget = 10;
 let aiEnabled = false;
-let modelCheckDone = false;
+
+const MODEL_PRIMARY = 'gemini-2.0-flash-exp';
+const MODEL_FALLBACK = 'gemini-1.5-flash';
 
 export async function initAiUsage() {
   const key = (process.env.GEMINI_API_KEY || '').trim();
@@ -30,29 +32,8 @@ export async function initAiUsage() {
   }
 
   try {
-    const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/${config.ai.modelLite}:generateContent`;
-    let res = await fetch(testUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] }),
-    });
-
-    if (res.status === 404) {
-      // Fallback auf gemini-1.5-flash wenn lite fehlschlägt
-      const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`;
-      res = await fetch(fallbackUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-        body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] }),
-      });
-    }
-
-    if (res.status === 401 || res.status === 403) {
-      logger.warn('KI deaktiviert: API-Key ungültig (401/403).', 'ai');
-      aiEnabled = false;
-      return;
-    }
-
+    const ok = (await testModel(MODEL_PRIMARY, key)) || (await testModel(MODEL_FALLBACK, key));
+    if (!ok) throw new Error('Kein Modell erreichbar');
     aiEnabled = true;
     logger.info('KI aktiviert: Gemini API erreichbar.', 'ai');
   } catch (err) {
@@ -63,6 +44,22 @@ export async function initAiUsage() {
   const rows = await dbRows('SELECT calls FROM ai_usage WHERE day = ?', [todayKey()]);
   dailyCalls = rows.length ? Number(rows[0].calls) : 0;
   state.aiCallsToday = dailyCalls;
+}
+
+async function testModel(model, key) {
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] }),
+      }
+    );
+    return res.ok || res.status === 400;
+  } catch {
+    return false;
+  }
 }
 
 function quotaOk() {
@@ -91,62 +88,77 @@ function countCall() {
 function pickModel(question) {
   const t = String(question || '').trim();
   const complex =
-    t.length > 80 ||
-    /\b(code|program|script|analy|debug|fehler|erklär|warum|wieso|schreib|rechne|berechne|übersetz)/i.test(t);
-  return complex ? config.ai.model : config.ai.modelLite;
+    t.length > 120 ||
+    /\b(code|program|script|analy|debug|fehler|erklär|warum|wieso|schreib|rechne|berechne|übersetz|formel|mathe|json|xml)/i.test(t);
+  return complex ? MODEL_PRIMARY : MODEL_FALLBACK;
 }
 
-async function callGemini(prompt, model = config.ai.model) {
+async function callGemini(prompt, model = MODEL_PRIMARY, attempt = 0) {
   if (!aiEnabled) return null;
   const key = (process.env.GEMINI_API_KEY || '').trim();
   if (!key) return null;
 
-  let url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.ai.timeoutMs);
+
   try {
-    let res = await fetch(url, {
+    const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 400, temperature: 0.6 },
+        generationConfig: {
+          maxOutputTokens: 350,
+          temperature: 0.55,
+          topP: 0.9,
+        },
+        safetySettings: [
+          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+        ],
       }),
       signal: controller.signal,
     });
 
-    if (!res.ok && res.status === 404) {
-      // Fallback auf gemini-1.5-flash
-      url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`;
-      res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 400, temperature: 0.6 },
-        }),
-        signal: controller.signal,
-      });
+    if (res.status === 429 && attempt < 2) {
+      const backoff = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+      await sleep(backoff);
+      return callGemini(prompt, model, attempt + 1);
     }
 
     if (!res.ok) {
-      if (res.status === 404 && !modelCheckDone) {
-        modelCheckDone = true;
-        logger.warn(`Gemini Modell ${model} nicht gefunden (404). Bitte config.js prüfen.`, 'ai');
-      } else if (res.status !== 429 && res.status !== 404) {
+      if (res.status === 404) {
+        logger.warn(`Gemini Modell ${model} nicht gefunden.`, 'ai');
+      } else if (res.status !== 429) {
         logError(new Error(`Gemini HTTP ${res.status}`), 'ai');
       }
       return null;
     }
+
     const data = await res.json();
+    if (data?.promptFeedback?.blockReason) {
+      logger.warn(`KI-Antwort blockiert: ${data.promptFeedback.blockReason}`, 'ai');
+      return null;
+    }
+
     const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || '';
     return text.trim() || null;
   } catch (err) {
-    if (err?.name !== 'AbortError') logError(err, 'ai');
+    if (err?.name === 'AbortError') return null;
+    if (attempt < 2) {
+      await sleep(1000);
+      return callGemini(prompt, model, attempt + 1);
+    }
+    logError(err, 'ai');
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 export function getAiQuota() {
@@ -161,12 +173,21 @@ export async function unknownCommandReply(userJid, commandText, knownCommands) {
   userCooldown.set(userJid, true);
 
   countCall();
+  const cleanCmd = commandText.slice(0, 100).replace(/[<>]/g, '');
+  const suggestions = knownCommands.slice(0, 30).join(', ');
+
   const prompt =
-    `Du bist "${BOT_NAME}", ein freundlicher deutscher WhatsApp-Community-Bot. ` +
-    `Ein Nutzer hat den unbekannten Befehl "${commandText.slice(0, 120)}" eingegeben. ` +
-    `Bekannte Befehle (Präfix ${PREFIX}): ${knownCommands.slice(0, 40).join(', ')}. ` +
-    `Antworte kurz (max. 3 Sätze, Deutsch, per Du): Wenn ein bekannter Befehl gemeint sein könnte, schlag ihn vor. ` +
-    `Sonst beantworte die Frage hinter dem Befehl knapp und hilfreich. Keine Markdown-Überschriften.`;
+    `Du bist "${BOT_NAME}", ein freundlicher, humorvoller deutscher WhatsApp-Community-Bot. ` +
+    `Ein Nutzer hat "${cleanCmd}" eingegeben. Das ist kein bekannter Befehl. ` +
+    `Bekannte Befehle: ${suggestions}. ` +
+    `Regeln für deine Antwort:\n` +
+    `1. Maximal 2 Sätze.\n` +
+    `2. Wenn der Nutzer offensichtlich einen Tippfehler gemacht hat, schlage den richtigen Befehl vor.\n` +
+    `3. Wenn es eine Frage ist, beantworte sie knapp und korrekt.\n` +
+    `4. Sprich den Nutzer mit "du" an.\n` +
+    `5. Keine Markdown-Überschriften, keine Aufzählungspunkte, kein Fett/Kursiv mit * oder _.` +
+    `6. Wenn du es nicht weißt, sage das ehrlich.`;
+
   const text = await callGemini(prompt);
   if (!text) return null;
   return { text: text.slice(0, config.ai.maxReplyChars) };
@@ -179,11 +200,15 @@ export async function askAi(userJid, question) {
   userCooldown.set(userJid, true);
 
   countCall();
-  const q = String(question || '').trim().slice(0, 500);
+  const q = String(question || '').trim().slice(0, 500).replace(/[<>]/g, '');
+
   const prompt =
-    `Du bist "${BOT_NAME}", ein hilfsbereiter, freundlicher deutscher WhatsApp-Assistent. ` +
-    `Beantworte die folgende Frage oder Aufgabe knapp, klar und korrekt auf Deutsch (per Du). ` +
-    `Keine Markdown-Überschriften; Codeblöcke nur, wenn ausdrücklich Code verlangt wird.\n\nFrage: ${q}`;
+    `Du bist "${BOT_NAME}", ein hilfsbereiter, freundlicher deutscher WhatsApp-Assistent in einer Gruppen-Community. ` +
+    `Beantworte die folgende Anfrage knapp, klar und korrekt auf Deutsch (per Du, lockerer Ton). ` +
+    `Keine Markdown-Überschriften, keine * oder _ zur Hervorhebung. ` +
+    `Codeblöcke nur, wenn ausdrücklich Code verlangt wird. Maximal 3 Sätze, außer bei Code.\n\n` +
+    `Frage: ${q}`;
+
   const text = await callGemini(prompt, pickModel(q));
   if (!text) return null;
   return { text: text.slice(0, config.ai.maxReplyChars) };
@@ -192,9 +217,9 @@ export async function askAi(userJid, question) {
 async function summarizeError(errorText, ctx) {
   if (!aiEnabled || !quotaOk() || summaryBudget <= 0) return null;
   const prompt =
-    `Fasse diesen Node.js/Baileys-Fehler eines WhatsApp-Bots in 1–2 deutschen Sätzen zusammen ` +
-    `(was ist passiert, was sollte man prüfen). Keine Codeblöcke:\n\n${errorText.slice(0, 1200)}`;
-  const result = await callGemini(prompt);
+    `Fasse diesen Node.js/Baileys-Fehler eines WhatsApp-Bots in 1 deutschen Satz zusammen ` +
+    `(was ist passiert, was sollte man prüfen). Kein Code, keine Aufzählung:\n\n${errorText.slice(0, 1500)}`;
+  const result = await callGemini(prompt, MODEL_FALLBACK);
   if (result) {
     summaryBudget--;
     countCall();

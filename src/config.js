@@ -14,7 +14,6 @@ const parseNumbers = (raw) =>
     .map((n) => n.replace(/\D/g, ''))
     .filter(Boolean);
 
-// FIX: OWNER_NUMBERS korrekt aus ENV laden
 export const OWNER_NUMBERS = parseNumbers(process.env.OWNER_NUMBERS);
 export const BOT_OWNER_NUMBERS = parseNumbers(process.env.BOT_OWNER_NUMBERS);
 
@@ -90,12 +89,12 @@ export const config = {
   },
 
   ai: {
-    model: 'gemini-1.5-flash',
+    model: 'gemini-2.0-flash-exp',
     modelLite: 'gemini-1.5-flash',
-    userCooldownMs: 30000,
-    dailyLimit: 1400,
-    timeoutMs: 15000,
-    maxReplyChars: 900,
+    userCooldownMs: 20000,
+    dailyLimit: 1500,
+    timeoutMs: 12000,
+    maxReplyChars: 800,
   },
 
   db:{

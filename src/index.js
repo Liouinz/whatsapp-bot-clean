@@ -105,13 +105,18 @@ function cleanupSocket(sock) {
 
 process.on('uncaughtException', async (err) => {
   logger.error(err, 'uncaughtException');
-  stopWatchdog();
-  stopSelfPing();
-  stopDbHeartbeat();
-  stopFlushLoop();
-  await flushAuth().catch(() => {});
-  await flushBuffers().catch(() => {});
-  setTimeout(() => process.exit(1), 1000);
+  try {
+    stopWatchdog();
+    stopSelfPing();
+    stopDbHeartbeat();
+    stopFlushLoop();
+    await flushAuth().catch(() => {});
+    await flushBuffers().catch(() => {});
+    await new Promise(r => setTimeout(r, 300));
+  } catch {
+    // ignore
+  }
+  process.exit(1);
 });
 
 process.on('unhandledRejection', (reason) => {
@@ -119,6 +124,7 @@ process.on('unhandledRejection', (reason) => {
 });
 
 process.on('SIGTERM', async () => {
+  logger.info('SIGTERM empfangen — fahre sauber herunter...', 'Shutdown');
   stopWatchdog();
   stopSelfPing();
   stopDbHeartbeat();
@@ -130,6 +136,7 @@ process.on('SIGTERM', async () => {
 });
 
 process.on('SIGINT', async () => {
+  logger.info('SIGINT empfangen — fahre sauber herunter...', 'Shutdown');
   stopWatchdog();
   stopSelfPing();
   stopDbHeartbeat();
@@ -183,7 +190,6 @@ async function startWhatsApp() {
 
       if (qr) {
         try {
-          // Erzeuge ein valides PNG als Base64 DataURL für das Frontend
           state.currentQr = await QRCode.toDataURL(qr, { margin: 2, scale: 8 });
           state.qrUpdatedAt = Date.now();
           console.log('--------------------------------------------------');
@@ -314,7 +320,7 @@ async function main() {
 
     server.on('error', (err) => {
       if (err.code === 'EADDRINUSE') {
-        logger.error(`Port ${port} ist bereits belegt! Bitte stoppe andere laufende Instanzen (z. B. mit 'killall node').`, 'Bootstrap');
+        logger.error(`Port ${port} ist bereits belegt! Bitte stoppe andere laufende Instanzen.`, 'Bootstrap');
         process.exit(1);
       } else {
         logger.error(err, 'Server');

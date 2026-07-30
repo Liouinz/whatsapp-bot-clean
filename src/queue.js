@@ -48,6 +48,7 @@ async function work() {
       const wait = lastSentAt + jitter() - Date.now();
       if (wait > 0) await sleep(wait);
       let sent = false;
+      let lastErr = null;
       for (let attempt = 0; attempt <= config.send.maxRetries && !sent; attempt++) {
         try {
           if (!(await waitForConnection())) {
@@ -61,13 +62,15 @@ async function work() {
           job.resolve?.(result);
           sent = true;
         } catch (err) {
+          lastErr = err;
           if (attempt < config.send.maxRetries) {
             await sleep(config.send.retryBackoffMs * (attempt + 1));
-          } else {
-            logError(err, 'sendQueue');
-            job.resolve?.(null);
           }
         }
+      }
+      if (!sent) {
+        logError(lastErr || new Error('Senden endgültig fehlgeschlagen'), 'sendQueue');
+        job.reject?.(lastErr || new Error('Senden fehlgeschlagen'));
       }
     }
   } finally {
@@ -85,7 +88,7 @@ export function enqueue(jid, content, options = {}) {
       reject(new Error('Sende-Queue voll'));
       return;
     }
-    queue.push({ jid, content, options, resolve });
+    queue.push({ jid, content, options, resolve, reject });
     work().catch((err) => logError(err, 'sendQueue.work'));
   });
 }

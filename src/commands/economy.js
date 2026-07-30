@@ -91,34 +91,34 @@ export async function activeTitle(userJid) {
   return rows.length ? rows[0].title : null;
 }
 
-// ── Faires Slot-System mit gewichteten Symbolen ────────────────────
+// ── Fairer 5-Walzen-Slot (gewichtet, keine Manipulation) ───────────
 
-const SLOT_REELS = [
-  { sym: '🍒', weight: 35 },
-  { sym: '🍋', weight: 28 },
-  { sym: '🍇', weight: 20 },
-  { sym: '🍉', weight: 15 },
-  { sym: '🍀', weight: 10 },
-  { sym: '🔔', weight: 7 },
-  { sym: '⭐', weight: 5 },
-  { sym: '💰', weight: 3 },
-  { sym: '👑', weight: 2 },
-  { sym: '💎', weight: 1 },
+const REEL = [
+  { sym: '🍒', w: 30 },
+  { sym: '🍋', w: 25 },
+  { sym: '🍇', w: 20 },
+  { sym: '🍉', w: 18 },
+  { sym: '🍀', w: 15 },
+  { sym: '🔔', w: 10 },
+  { sym: '⭐', w: 8 },
+  { sym: '💰', w: 5 },
+  { sym: '👑', w: 3 },
+  { sym: '💎', w: 1 },
 ];
 
-const TOTAL_WEIGHT = SLOT_REELS.reduce((sum, r) => sum + r.weight, 0);
+const REEL_TOTAL = REEL.reduce((a, b) => a + b.w, 0);
 
-function spinReel() {
-  let roll = Math.random() * TOTAL_WEIGHT;
-  for (const r of SLOT_REELS) {
-    if (roll < r.weight) return r.sym;
-    roll -= r.weight;
+function spinOne() {
+  let roll = Math.random() * REEL_TOTAL;
+  for (const s of REEL) {
+    roll -= s.w;
+    if (roll <= 0) return s.sym;
   }
-  return SLOT_REELS[0].sym;
+  return REEL[0].sym;
 }
 
-function spinSlots() {
-  return [spinReel(), spinReel(), spinReel(), spinReel(), spinReel()];
+function spinFair() {
+  return Array.from({ length: 5 }, spinOne);
 }
 
 // ── Befehle ────────────────────────────────────────────────────────
@@ -271,16 +271,28 @@ export const economyCommands = [
     usage: '!slots <betrag|allin>',
     async run(ctx) {
       const wallet = await getWallet(ctx.sender, ctx.senderName);
-      const amount = parseAmount(ctx.args[0], Number(wallet.balance));
+      const rawArg = (ctx.args[0] || '').toLowerCase();
+      const isAllIn = /^(alles|all|allin)$/i.test(rawArg);
+      
+      let amount;
+      if (isAllIn) {
+        amount = Math.min(Number(wallet.balance), config.economy.betMax);
+        if (amount <= 0) {
+          return ctx.reply('💸 Du hast nichts, was du setzen könntest.');
+        }
+      } else {
+        amount = parseInt(rawArg, 10);
+      }
 
-      if (!amount) {
+      if (!amount || amount <= 0) {
         return ctx.reply(
-          'ℹ️ Nutzung: `!slots <betrag|allin>` (z.B. `!slots 100` oder `!slots allin`)\n' +
-          '📊 *Gewinne:*\n' +
+          'ℹ️ Nutzung: `!slots <betrag>` oder `!slots all`\n' +
+          '📊 *Auszahlungen:*\n' +
           '🥈 2 Gleiche = ×2\n' +
           '🔥 3 Gleiche = ×5\n' +
-          '👑 4 Gleiche = ×15\n' +
-          '💎 5x 💎 = ×100 Jackpot'
+          '👑 4 Gleiche = ×10\n' +
+          '💎 5x 💎 = ×100 Mega-Jackpot\n\n' +
+          '⚠️ `!slots all` setzt deinen *kompletten Kontostand* (max. ' + fmtCoins(config.economy.betMax) + ')'
         );
       }
 
@@ -293,7 +305,7 @@ export const economyCommands = [
 
       await dbRun('UPDATE coins SET total_gambled = total_gambled + ? WHERE user_jid = ?', [amount, resolveLid(ctx.sender)]);
 
-      const symbols = spinSlots();
+      const symbols = spinFair();
       const row = symbols.join(' │ ');
 
       const counts = {};
@@ -308,33 +320,38 @@ export const economyCommands = [
       if (symbols.every((s) => s === '💎')) {
         factor = 100;
         jackpot = true;
+      } else if (symbols.every((s) => s === '👑')) {
+        factor = 50;
+        jackpot = true;
+      } else if (symbols.every((s) => s === '💰')) {
+        factor = 30;
       } else if (highest === 5) {
         factor = 25;
       } else if (highest === 4) {
-        factor = 15;
+        factor = 10;
       } else if (highest === 3) {
         factor = 5;
       } else if (highest === 2) {
         factor = 2;
       }
 
-      let text =
-        `🎰 *CASINO SLOTS*\n` +
-        `┌────────────────────┐\n` +
-        `│ ${row} │\n` +
-        `└────────────────────┘\n\n`;
+      let text = '🎰 *CASINO SLOTS*\n';
+      if (isAllIn) {
+        text += `🚨 *ALL-IN!* Einsatz: ${fmtCoins(amount)}\n`;
+      }
+      text += `┌────────────────────┐\n│ ${row} │\n└────────────────────┘\n\n`;
 
       if (factor > 0) {
         const win = amount * factor;
         await addCoins(ctx.sender, win, ctx.senderName);
 
         if (jackpot) {
-          text += `🔥🔥🔥 *JACKPOT!* 🔥🔥🔥\n×${factor} Multiplikator!\n💰 Gewinn: *${fmtCoins(win)}* (Reingewinn: +${fmtCoins(win - amount)})`;
+          text += `🔥🔥🔥 *MEGA JACKPOT!* 🔥🔥🔥\n×${factor} Multiplikator!\n💰 Gewinn: *${fmtCoins(win)}* (Reingewinn: +${fmtCoins(win - amount)})`;
         } else {
           text += `🎉 *Gewonnen!*\n×${factor} Multiplikator\n💰 Gewinn: *${fmtCoins(win)}* (Reingewinn: +${fmtCoins(win - amount)})`;
         }
       } else {
-        text += `😬 Leider keine Übereinstimmung. (Verloren: ${fmtCoins(amount)})`;
+        text += `😬 Nichts gewonnen. (Verloren: ${fmtCoins(amount)})`;
       }
 
       return ctx.reply(text);
