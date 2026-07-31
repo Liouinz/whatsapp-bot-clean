@@ -12,7 +12,7 @@ export function todayKey() {
 }
 
 /**
- * Puffer-Flush Logik fuer asynchrone Batch-Operationen
+ * Puffer-Flush Logik für asynchrone Batch-Operationen
  */
 const xpBuffer = new Map();
 const statBuffer = new Map();
@@ -47,6 +47,10 @@ export async function flushBuffers() {
   const xpEntries = Array.from(xpBuffer.values());
   const statEntries = Array.from(statBuffer.values());
   const groupMsgEntries = Array.from(groupMsgBuffer.values());
+
+  xpBuffer.clear();
+  statBuffer.clear();
+  groupMsgBuffer.clear();
 
   const promises = [];
 
@@ -83,14 +87,10 @@ export async function flushBuffers() {
   }
   
   try {
-    // Limit concurrency via chunks to avoid Turso rate limits & memory issues
     const CHUNK = 50;
     for (let i = 0; i < promises.length; i += CHUNK) {
       await Promise.all(promises.slice(i, i + CHUNK));
     }
-    xpBuffer.clear();
-    statBuffer.clear();
-    groupMsgBuffer.clear();
   } catch (err) {
     logger.warn(`Flush-Fehler: ${err.message}`, 'db.flush');
   }

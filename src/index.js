@@ -13,7 +13,7 @@ import { loadMutes, handleJoin } from './moderation.js';
 import { initAiUsage } from './ai.js';
 import { state, setForceRelinkHandler, setPairingCodeRequester } from './state.js';
 import { preflight } from './preflight.js';
-import { startScheduler } from './scheduler.js';
+import { startScheduler, stopScheduler } from './scheduler.js';
 import { loadGlobalSettings } from './global.js';
 
 let watchdogTimer = null;
@@ -103,49 +103,33 @@ function cleanupSocket(sock) {
   }
 }
 
+async function gracefulShutdown(reason) {
+  logger.info(`${reason} empfangen — fahre sauber herunter...`, 'Shutdown');
+  stopWatchdog();
+  stopSelfPing();
+  stopDbHeartbeat();
+  stopScheduler();
+  stopFlushLoop();
+  try {
+    await flushAuth();
+    await flushBuffers();
+  } catch (err) {
+    logger.error(err, 'Shutdown');
+  }
+  process.exit(0);
+}
+
 process.on('uncaughtException', async (err) => {
   logger.error(err, 'uncaughtException');
-  try {
-    stopWatchdog();
-    stopSelfPing();
-    stopDbHeartbeat();
-    stopFlushLoop();
-    await flushAuth().catch(() => {});
-    await flushBuffers().catch(() => {});
-    await new Promise(r => setTimeout(r, 300));
-  } catch {
-    // ignore
-  }
-  process.exit(1);
+  await gracefulShutdown('uncaughtException');
 });
 
 process.on('unhandledRejection', (reason) => {
   logger.error(reason, 'unhandledRejection');
 });
 
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM empfangen — fahre sauber herunter...', 'Shutdown');
-  stopWatchdog();
-  stopSelfPing();
-  stopDbHeartbeat();
-  stopFlushLoop();
-  await flushAuth().catch(() => {});
-  await flushBuffers().catch(() => {});
-  await new Promise(r => setTimeout(r, 500));
-  process.exit(0);
-});
-
-process.on('SIGINT', async () => {
-  logger.info('SIGINT empfangen — fahre sauber herunter...', 'Shutdown');
-  stopWatchdog();
-  stopSelfPing();
-  stopDbHeartbeat();
-  stopFlushLoop();
-  await flushAuth().catch(() => {});
-  await flushBuffers().catch(() => {});
-  await new Promise(r => setTimeout(r, 500));
-  process.exit(0);
-});
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 async function startWhatsApp() {
   logger.info('Starte Baileys WhatsApp Socket...', 'Baileys');

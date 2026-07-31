@@ -32,8 +32,9 @@ export async function dbRun(sql, args = []) {
 export async function dbRows(sql, args = []) {
   try {
     const res = await dbRun(sql, args);
-    return res.rows;
-  } catch {
-    return [];
+    return res.rows || [];
+  } catch (err) {
+    console.error(`❌ [DB ERROR] dbRows Query fehlgeschlagen: ${err.message}`, { sql, args });
+    throw err;
   }
 }

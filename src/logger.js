@@ -14,7 +14,7 @@ function pushRing(level, msg, context = '') {
     msg: String(msg).slice(0, 500),
   });
 
-  if (ring.length > maxRingSize) {
+  while (ring.length > maxRingSize) {
     ring.shift();
   }
 }
@@ -43,7 +43,9 @@ export const logger = {
     if (errorSummarizer) {
       try {
         errorSummarizer(text, ctx);
-      } catch {}
+      } catch (sumErr) {
+        console.error('⚠️ ErrorSummarizer fehlgeschlagen:', sumErr);
+      }
     }
   },
 
@@ -55,10 +57,9 @@ export const logger = {
   },
 
   getRing() {
-    return ring;
+    return [...ring];
   },
 };
-
 
 // Alte Kompatibilität
 export function logError(err, context = '') {
@@ -86,13 +87,12 @@ export function trace(msg, context = '') {
 }
 
 export function getLogs() {
-  return ring;
+  return [...ring];
 }
 
 export function getRecentLogs(n = 50) {
   return ring.slice(-n);
 }
-
 
 // AI Fehler-Zusammenfassung
 export function setErrorSummarizer(fn) {

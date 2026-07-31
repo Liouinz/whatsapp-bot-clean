@@ -33,7 +33,6 @@ export async function useTursoAuthState(session = 'main') {
   const exec = (arg) => withRetry(() => db.execute(arg));
   const batch = (stmts) => withRetry(() => db.batch(stmts, 'write'));
 
-  // FIX: LRU-Cache für keyCache (max 5000)
   const keyCache = new Map();
   const pendingWrites = new Map();
   let writeTimeout = null;
@@ -65,8 +64,8 @@ export async function useTursoAuthState(session = 'main') {
       if (stmts.length) {
         await batch(stmts);
       }
-      for (const keyId of currentWrites.keys()) {
-        if (pendingWrites.get(keyId) === currentWrites.get(keyId)) {
+      for (const [keyId, val] of currentWrites.entries()) {
+        if (pendingWrites.get(keyId) === val) {
           pendingWrites.delete(keyId);
         }
       }
@@ -96,8 +95,12 @@ export async function useTursoAuthState(session = 'main') {
         sql: `SELECT id, data FROM auth_keys WHERE id IN (${chunk.map(() => '?').join(', ')})`,
         args: chunk.map((id) => `${session}:${id}`),
       });
-      for (const row of res.rows) {
-        out.set(String(row.id).slice(session.length + 1), JSON.parse(row.data, BufferJSON.reviver));
+      for (const row of res.rows || []) {
+        try {
+          out.set(String(row.id).slice(session.length + 1), JSON.parse(row.data, BufferJSON.reviver));
+        } catch (err) {
+          console.error(`⚠️ Key Parsing Error für Key ${row.id}:`, err);
+        }
       }
     }
     return out;
@@ -105,7 +108,13 @@ export async function useTursoAuthState(session = 'main') {
 
   const readCreds = async () => {
     const res = await exec({ sql: 'SELECT data FROM auth_creds WHERE id = ?', args: [session] });
-    return res.rows.length ? JSON.parse(res.rows[0].data, BufferJSON.reviver) : null;
+    if (!res.rows || !res.rows.length) return null;
+    try {
+      return JSON.parse(res.rows[0].data, BufferJSON.reviver);
+    } catch (err) {
+      console.error('⚠️ Auth Creds Parsing Error:', err);
+      return null;
+    }
   };
 
   const creds = (await readCreds()) || initAuthCreds();
@@ -139,7 +148,6 @@ export async function useTursoAuthState(session = 'main') {
 
               if (value) {
                 keyCache.set(keyId, value);
-                // FIX: LRU-Check
                 if (keyCache.size > 5000) keyCache.delete(keyCache.keys().next().value);
               }
 
@@ -159,7 +167,6 @@ export async function useTursoAuthState(session = 'main') {
 
               if (value) {
                 keyCache.set(keyId, value);
-                // FIX: LRU-Check
                 if (keyCache.size > 5000) keyCache.delete(keyCache.keys().next().value);
               } else {
                 keyCache.delete(keyId);

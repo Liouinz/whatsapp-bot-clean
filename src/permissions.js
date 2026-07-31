@@ -32,6 +32,7 @@ function participantIds(p) {
 }
 
 export async function getGroupMeta(groupJid, force = false) {
+  if (!groupJid || !String(groupJid).endsWith('@g.us')) return null;
   const cached = metaCache.get(groupJid);
   if (!force && cached && Date.now() - cached.at < META_CACHE_MS) return cached.meta;
   if (!state.sock) return cached?.meta || null;
@@ -58,13 +59,11 @@ function learnLidMappings(meta) {
     const lid = normalizeId(p.lid || (String(p.id).endsWith('@lid') ? p.id : null));
     const pn = normalizeId(p.phoneNumber || p.jid || (String(p.id).endsWith('@s.whatsapp.net') ? p.id : null));
     if (lid && pn) {
-      // FIX: LRU-Logik statt clear()
       if (lidToPn.size > 20_000) lidToPn.delete(lidToPn.keys().next().value);
       lidToPn.set(lid, pn);
       const key = `${meta.id}|${lid}|${pn}`;
       if (persistedMappings.has(key)) continue;
       persistedMappings.add(key);
-      // FIX: LRU-Logik statt clear()
       if (persistedMappings.size > 20_000) persistedMappings.delete(persistedMappings.keys().next().value);
       dbRun(
         `INSERT INTO members (group_jid, user_jid, user_lid, last_seen) VALUES (?, ?, ?, ?)
@@ -82,7 +81,7 @@ export function resolveLid(id) {
 }
 
 export function senderCandidates(msg) {
-  const key = msg.key || {};
+  const key = msg?.key || {};
   const raw = [
     key.participant,
     key.participantPn,

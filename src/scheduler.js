@@ -19,7 +19,9 @@ try {
   if (typeof ev.maybeAutoEvent === 'function') {
     maybeAutoEvent = ev.maybeAutoEvent;
   }
-} catch {}
+} catch (err) {
+  logError(err, 'scheduler.importEvents');
+}
 
 let tickTimer = null;
 
@@ -29,8 +31,12 @@ async function processDueMessages() {
     [Date.now()]
   );
   for (const r of rows) {
-    await dbRun('UPDATE scheduled_messages SET done = 1, done_at = ? WHERE id = ?', [Date.now(), r.id]);
-    await sendText(r.chat_jid, String(r.text));
+    try {
+      await dbRun('UPDATE scheduled_messages SET done = 1, done_at = ? WHERE id = ?', [Date.now(), r.id]);
+      await sendText(r.chat_jid, String(r.text));
+    } catch (err) {
+      logError(err, 'scheduler.processDueMessages');
+    }
   }
 }
 

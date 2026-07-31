@@ -51,6 +51,7 @@ const GZ = new Map(
 /** Antwort mit optionalem Gzip (je nach Accept-Encoding) senden. */
 function sendAsset(req, res, key, cacheControl) {
   const a = GZ.get(key);
+  if (!a) return res.status(404).end();
   res.setHeader('Content-Type', a.type);
   res.setHeader('Cache-Control', cacheControl);
   res.setHeader('Vary', 'Accept-Encoding');
@@ -226,19 +227,20 @@ export function createDashboard() {
       Connection: 'keep-alive',
     });
     let closed = false;
-    const push = async () => {
+    const timer = setInterval(async () => {
       if (closed) return;
       try {
-        res.write(`data: ${JSON.stringify(await statusPayload())}\n\n`);
-      } catch {
-        /* Verbindung weg */
+        const payload = await statusPayload();
+        if (!closed) res.write(`data: ${JSON.stringify(payload)}\n\n`);
+      } catch (err) {
+        logError(err, 'panel.events.push');
       }
-    };
-    push();
-    const timer = setInterval(push, 3000);
+    }, 3000);
+
     req.on('close', () => {
       closed = true;
       clearInterval(timer);
+      res.end();
     });
   });
 
@@ -317,7 +319,6 @@ export function createDashboard() {
     const boolFields = ['enabled', 'antilink', 'antispam', 'blacklist_on', 'welcome', 'levelup_announce'];
     try {
       if (boolFields.includes(field)) {
-        // Fix SQL Injection: Validate field against whitelist
         await dbRun('INSERT OR IGNORE INTO group_settings (jid) VALUES (?)', [jid]);
         await dbRun(`UPDATE group_settings SET ${field} = ? WHERE jid = ?`, [value ? 1 : 0, jid]);
         invalidateSettings(jid);
