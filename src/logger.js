@@ -5,7 +5,6 @@ const ring = [];
 const maxRingSize = 500;
 
 let errorSummarizer = null;
-let isSummarizing = false;
 
 function pushRing(level, msg, context = '') {
   ring.push({
@@ -41,14 +40,12 @@ export const logger = {
     console.error(`❌ [ERROR] ${ctx ? `[${ctx}] ` : ''}${text}`);
     pushRing('error', text, ctx);
 
-    if (errorSummarizer && !isSummarizing) {
-      isSummarizing = true;
+    if (errorSummarizer) {
       try {
-        Promise.resolve(errorSummarizer(text, ctx)).finally(() => {
-          isSummarizing = false;
+        Promise.resolve(errorSummarizer(text, ctx)).catch((sumErr) => {
+          console.error('⚠️ ErrorSummarizer fehlgeschlagen:', sumErr);
         });
       } catch (sumErr) {
-        isSummarizing = false;
         console.error('⚠️ ErrorSummarizer synchron fehlgeschlagen:', sumErr);
       }
     }

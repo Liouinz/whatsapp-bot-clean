@@ -54,12 +54,22 @@ export async function initDb() {
     `CREATE TABLE IF NOT EXISTS player_contracts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_jid TEXT, type TEXT, terms TEXT, signed_at INTEGER, expires_at INTEGER)`,
     `CREATE TABLE IF NOT EXISTS active_event (id INTEGER PRIMARY KEY, event_id TEXT, name TEXT, emoji TEXT, xp_mult REAL DEFAULT 1.0, coin_mult REAL DEFAULT 1.0, started_at INTEGER, expires_at INTEGER)`,
     `CREATE TABLE IF NOT EXISTS user_boosts (user_jid TEXT, boost_type TEXT, multiplier REAL, expires_at INTEGER, PRIMARY KEY (user_jid, boost_type))`,
-    `CREATE TABLE IF NOT EXISTS allowed_chats (jid TEXT PRIMARY KEY, note TEXT)`
+    `CREATE TABLE IF NOT EXISTS allowed_chats (jid TEXT PRIMARY KEY, note TEXT)`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_warnings_expires ON warnings(expires_at)`
   ];
 
   for (const sql of schemas) {
     await db.execute(sql).catch((err) => {
       console.error(`⚠️ Schema Execution Warnung: ${err.message}`);
     });
+  }
+
+  // Sicherheitsprüfung: Stelle sicher, dass jede DATA_TABLE auch im Schema definiert ist
+  for (const table of DATA_TABLES) {
+    const defined = schemas.some((s) => s.toLowerCase().includes(`create table if not exists ${table}`));
+    if (!defined) {
+      throw new Error(`[SCHEMA ERROR] Tabelle '${table}' aus DATA_TABLES ist in initDb() nicht definiert!`);
+    }
   }
 }

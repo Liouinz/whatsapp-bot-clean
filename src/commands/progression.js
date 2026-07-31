@@ -1,6 +1,5 @@
 // Fortschritts-Systeme: Erfolge (!erfolge), Prestige (!prestige) und globale
-// Ranglisten (!bestenliste). Erfolge werden lazy beim Ansehen geprüft &
-// belohnt (INSERT OR IGNORE → einmalig), kein Schreibaufwand pro Event.
+// Ranglisten (!bestenliste).
 
 import { PREFIX } from '../config.js';
 import { dbRun, dbRows, bufferXp } from '../db.js';

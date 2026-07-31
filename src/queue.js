@@ -43,11 +43,19 @@ async function work() {
   if (running) return;
   running = true;
   try {
+    if (!(await waitForConnection())) {
+      while (queue.length) {
+        const job = queue.shift();
+        job.reject?.(new Error('Socket nicht verbunden (Timeout / Disconnect)'));
+      }
+      return;
+    }
+
     while (queue.length) {
       const job = queue.shift();
 
-      if (!(await waitForConnection())) {
-        job.reject?.(new Error('Socket nicht verbunden (Timeout)'));
+      if (state.connection !== 'open') {
+        job.reject?.(new Error('Socket nicht verbunden'));
         continue;
       }
 

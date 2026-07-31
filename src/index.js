@@ -7,7 +7,7 @@ import { logger } from './logger.js';
 import { loadCommands } from './loader.js';
 import { createDashboard } from './dashboard.js';
 import { initDb, startFlushLoop, stopFlushLoop, flushBuffers } from './db.js';
-import { useTursoAuthState, flushAuth } from './auth.js';
+import { useTursoAuthState, flushAuth, clearAuthSession } from './auth.js';
 import { handleUpsert, loadToggles, setRegistry } from './router.js';
 import { loadMutes, handleJoin } from './moderation.js';
 import { initAiUsage } from './ai.js';
@@ -208,6 +208,21 @@ async function startWhatsApp() {
         botSock = null;
         state.sock = null;
 
+        // Fatal-Codes abfangen (401, 403, 440 -> kein unendlicher Reconnect)
+        if ([401, 403, 440].includes(statusCode)) {
+          logger.error(`Kritischer Auth-Fehler (${statusCode}). Bot wird gestoppt. Bitte neu verknüpfen.`, 'Baileys');
+          state.stopped = true;
+          state.stopReason = `Auth-Fehler ${statusCode}`;
+          return;
+        }
+
+        // Code 515 (Restart Required) -> sofort neu verbinden
+        if (statusCode === 515) {
+          logger.info('Code 515 empfangen — führe sofortigen Reconnect durch.', 'Baileys');
+          setTimeout(() => startWhatsApp(), 500);
+          return;
+        }
+
         state.reconnectAttempts = (state.reconnectAttempts || 0) + 1;
         const maxAttempts = config.reconnect?.maxAttempts || 10;
 
@@ -215,16 +230,16 @@ async function startWhatsApp() {
           if (statusCode === DisconnectReason.loggedOut) {
             logger.info('Auth-Daten werden zurückgesetzt für neuen QR-Code...', 'Baileys');
             try {
-              const auth = await useTursoAuthState('main');
-              await auth.clearSession();
+              await clearAuthSession('main');
             } catch (err) {
               logger.error(err, 'Baileys.clearSession');
             }
           }
           const baseDelay = config.reconnect?.baseDelayMs || 1000;
           const maxDelay = config.reconnect?.maxDelayMs || 30000;
-          const delay = Math.min(maxDelay, baseDelay * Math.pow(2, state.reconnectAttempts - 1));
-          logger.info(`Reconnection-Versuch ${state.reconnectAttempts}/${maxAttempts} in ${delay}ms...`, 'Baileys');
+          const jitter = Math.random() * 500;
+          const delay = Math.min(maxDelay, baseDelay * Math.pow(2, state.reconnectAttempts - 1)) + jitter;
+          logger.info(`Reconnection-Versuch ${state.reconnectAttempts}/${maxAttempts} in ${Math.round(delay)}ms...`, 'Baileys');
           setTimeout(() => startWhatsApp(), delay);
         } else {
           logger.error('Maximale Reconnect-Versuche erreicht. Bot wird nicht neu verbunden.', 'Baileys');
@@ -327,8 +342,7 @@ async function main() {
       state.qrUpdatedAt = 0;
       state.pairingCode = null;
       
-      const auth = await useTursoAuthState('main');
-      await auth.clearSession();
+      await clearAuthSession('main');
       
       state.reconnectAttempts = 0;
       setTimeout(() => startWhatsApp(), 1500);

@@ -17,15 +17,19 @@ export function getDb() {
 export async function dbRun(sql, args = []) {
   assertNotAuthWrite(sql);
   const db = getDb();
-  try {
-    return await db.execute({ sql, args });
-  } catch (err) {
-    const retryable = /locked|busy|timeout|network|ECONNRESET/i.test(String(err));
-    if (retryable) {
-      await new Promise((r) => setTimeout(r, 500));
-      return db.execute({ sql, args });
+  let tries = 0;
+  while (tries < 3) {
+    try {
+      return await db.execute({ sql, args });
+    } catch (err) {
+      tries++;
+      const retryable = /locked|busy|timeout|network|ECONNRESET/i.test(String(err));
+      if (retryable && tries < 3) {
+        await new Promise((r) => setTimeout(r, 250 * Math.pow(2, tries)));
+      } else {
+        throw err;
+      }
     }
-    throw err;
   }
 }
 
@@ -35,6 +39,11 @@ export async function dbRows(sql, args = []) {
     return res.rows || [];
   } catch (err) {
     console.error(`❌ [DB ERROR] dbRows Query fehlgeschlagen: ${err.message}`, { sql, args });
-    throw err;
+    return [];
   }
+}
+
+export async function dbRowsStrict(sql, args = []) {
+  const res = await dbRun(sql, args);
+  return res.rows || [];
 }

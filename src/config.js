@@ -89,8 +89,8 @@ export const config = {
   },
 
   ai: {
-    model: 'gemini-2.0-flash-exp',
-    modelLite: 'gemini-1.5-flash',
+    model: process.env.GEMINI_MODEL_PRIMARY || 'gemini-2.0-flash-exp',
+    modelLite: process.env.GEMINI_MODEL_FALLBACK || 'gemini-1.5-flash',
     userCooldownMs: 20000,
     dailyLimit: 1500,
     timeoutMs: 12000,

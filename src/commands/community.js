@@ -139,7 +139,6 @@ export const communityCommands = [
     desc: 'Lebt der Bot? (Antwortzeit)',
     usage: '!ping',
     async run(ctx) {
-      // FIX: Zeitmessung vor dem Senden
       const t0 = Date.now();
       await ctx.reply(`🏓 *Pong!* (${Date.now() - t0}ms)`);
     },

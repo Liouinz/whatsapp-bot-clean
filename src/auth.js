@@ -28,6 +28,13 @@ export async function flushAuth() {
   }
 }
 
+export async function clearAuthSession(session = 'main') {
+  const db = getDb();
+  const exec = (arg) => withRetry(() => db.execute(arg));
+  await exec({ sql: 'DELETE FROM auth_creds WHERE id = ?', args: [session] });
+  await exec({ sql: 'DELETE FROM auth_keys WHERE id LIKE ?', args: [`${session}:%`] });
+}
+
 export async function useTursoAuthState(session = 'main') {
   const db = getDb();
   const exec = (arg) => withRetry(() => db.execute(arg));
@@ -198,9 +205,7 @@ export async function useTursoAuthState(session = 'main') {
         clearTimeout(writeTimeout);
         writeTimeout = null;
       }
-
-      await exec({ sql: 'DELETE FROM auth_creds WHERE id = ?', args: [session] });
-      await exec({ sql: 'DELETE FROM auth_keys WHERE id LIKE ?', args: [`${session}:%`] });
+      await clearAuthSession(session);
     },
   };
 }

@@ -177,10 +177,10 @@ async function processWeeklyReports() {
   const now = new Date();
   if (now.getDay() !== config.weeklyReport.weekday || now.getHours() < config.weeklyReport.hour) return;
   const today = todayKey();
-  const lastWeeklySent = getGlobalFlag('last_weekly_sent_date');
+  const lastWeeklySent = getGlobalFlag('last_weekly_report_sent');
   if (lastWeeklySent === today) return;
   
-  await setGlobalFlag('last_weekly_sent_date', today);
+  await setGlobalFlag('last_weekly_report_sent', today);
   const rows = await dbRows('SELECT jid FROM group_settings WHERE weekly_report = 1 AND enabled = 1', []);
   for (const r of rows) {
     try {

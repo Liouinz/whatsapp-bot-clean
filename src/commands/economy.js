@@ -9,9 +9,6 @@ import { getBoostMult } from '../boosts.js';
 import { getPrestigeMult } from '../prestige.js';
 import { getEventCoinMult } from '../events.js';
 
-// ── Kern-Helfer ────────────────────────────────────────────────────
-
-/** Konto laden (legt es mit Startguthaben an, wenn es noch nicht existiert). */
 export async function getWallet(userJid, name = '') {
   const user = resolveLid(userJid);
   const rows = await dbRows('SELECT * FROM coins WHERE user_jid = ?', [user]);
@@ -39,7 +36,6 @@ export async function getWallet(userJid, name = '') {
   };
 }
 
-/** Coins gutschreiben (earned zählt für die Statistik). */
 export async function addCoins(userJid, amount, name = '') {
   const user = resolveLid(userJid);
   const safeAmount = Math.max(0, Math.floor(Number(amount) || 0));
@@ -50,7 +46,6 @@ export async function addCoins(userJid, amount, name = '') {
   );
 }
 
-/** Coins abbuchen — false, wenn das Guthaben nicht reicht (atomar via WHERE). */
 export async function takeCoins(userJid, amount) {
   const user = resolveLid(userJid);
   const safeAmount = Math.floor(Number(amount) || 0);
@@ -63,7 +58,6 @@ export async function takeCoins(userJid, amount) {
   return Number(res.rowsAffected || 0) > 0 || (res.changes !== undefined && res.changes > 0);
 }
 
-/** VERDIENTE Coins gutschreiben — wendet den aktiven Coin-Boost an. */
 export async function earnCoins(userJid, amount, name = '') {
   const u = resolveLid(userJid);
   const [boost, prestige] = await Promise.all([
@@ -80,7 +74,6 @@ export function fmtCoins(n) {
 }
 
 function parseAmount(arg, balance, allowAllIn = false) {
-  // ALL-IN ignoriert betMax komplett — setzt den kompletten Kontostand
   if (/^(alles|all|allin)$/i.test(arg || '')) {
     return allowAllIn ? Math.floor(Number(balance) || 0) : Math.min(balance, config.economy.betMax);
   }
@@ -88,15 +81,10 @@ function parseAmount(arg, balance, allowAllIn = false) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-/** Aktiver Titel (or null). */
 export async function activeTitle(userJid) {
   const rows = await dbRows('SELECT title FROM user_titles WHERE user_jid = ?', [resolveLid(userJid)]);
   return rows.length ? rows[0].title : null;
 }
-
-// ── Dynamische Slot-Walzen (LOGARITHMISCHE Einsatz-Skalierung) ─────
-// Je höher der Einsatz, desto brutaler die Verschiebung zu schlechten Symbolen.
-// KEIN CAP — funktioniert von 10 Coins bis zu Billionen.
 
 const BASE_REEL = [
   { sym: '🍒', w: 30, tier: 'low' },
@@ -111,15 +99,6 @@ const BASE_REEL = [
   { sym: '💎', w: 1, tier: 'jackpot' },
 ];
 
-/**
- * Logarithmische Risk-Skala — KEIN CAP!
- * 10 Coins      → risk ≈ 0.1   (fast normal)
- * 1.000 Coins   → risk ≈ 1.0   (spürbar schwieriger)
- * 1 Mio Coins   → risk ≈ 4.0   (brutal)
- * 1 Mrd Coins   → risk ≈ 9.0   (nahezu unmöglich)
- * 1 Bio Coins   → risk ≈ 16.0  (praktisch nur noch 🍒🍋🍇)
- * 22 Bio Coins  → risk ≈ 19.8  (Jackpot-Chance: ~0.0000001%)
- */
 function getDynamicReel(bet) {
   const logBet = Math.log10(Math.max(1, Number(bet)));
   const risk = Math.pow(logBet / 3, 2);
@@ -128,20 +107,16 @@ function getDynamicReel(bet) {
     let weight = s.w;
     switch (s.tier) {
       case 'jackpot':
-        // 💎👑 — bei Billionen praktisch unmöglich
         weight *= Math.max(0.000001, Math.exp(-risk * 1.2));
         break;
       case 'high':
-        // ⭐💰 — bei Millionen schon sehr selten
         weight *= Math.max(0.0001, Math.exp(-risk * 0.7));
         break;
       case 'mid':
-        // 🍉🍀🔔 — bei hohen Einsätzen seltener
         weight *= Math.max(0.01, Math.exp(-risk * 0.35));
         break;
       case 'low':
       default:
-        // 🍒🍋🍇 — bei hohen Einsätzen DOMINIEREN die Walzen
         weight *= (1 + risk * 0.6);
         break;
     }
@@ -166,8 +141,6 @@ function spinDynamic(bet) {
 
   return Array.from({ length: 5 }, spinOne);
 }
-
-// ── Befehle ────────────────────────────────────────────────────────
 
 export const economyCommands = [
   {
@@ -343,7 +316,6 @@ export const economyCommands = [
         );
       }
 
-      // Limit-Prüfung nur für feste Beträge
       if (!isAllIn) {
         if (amount < config.economy.betMin) return ctx.reply(`⚠️ Mindesteinsatz: ${fmtCoins(config.economy.betMin)}`);
         if (amount > config.economy.betMax) {
@@ -365,7 +337,6 @@ export const economyCommands = [
         [amount, resolveLid(ctx.sender)]
       );
 
-      // LOGARITHMISCHER SPIN — skaliert mit dem Einsatz
       const symbols = spinDynamic(amount);
       const row = symbols.join(' │ ');
 

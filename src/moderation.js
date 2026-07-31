@@ -2,16 +2,13 @@
 // Warn-Ablauf, Mute-Durchsetzung, Anti-Raid und Ban-Durchsetzung bei Joins.
 
 import { config } from './config.js';
-import { dbRun, dbRows } from './db.js';
+import { dbRun, dbRows, dbRowsStrict } from './db.js';
 import { sendText } from './queue.js';
 import { logError, logInfo } from './logger.js';
 import { botIsAdmin, isUserAdmin, resolveLid, normalizeId, invalidateGroupMeta } from './permissions.js';
 import { state } from './state.js';
 import TTLCache from './core/cache/ttlCache.js';
 
-// Links: explizite URLs, Einladungs-/Kurzlink-Dienste UND nackte Domains mit
-// Pfad ("beispiel.xyz/abc") — die alte Regex hat t.me/discord.gg/bit.ly & Co.
-// komplett übersehen.
 export const LINK_RE = new RegExp(
   '(https?://\\S+|www\\.\\S+' +
     '|\\b(?:chat\\.whatsapp\\.com|wa\\.me|wa\\.link|t\\.me|telegram\\.me|discord\\.gg|discord(?:app)?\\.com/invite|' +
@@ -21,9 +18,7 @@ export const LINK_RE = new RegExp(
   'i'
 );
 
-// ── Gruppen-Einstellungen (mit kleinem Cache) ──────────────────────
-
-const settingsCache = new Map(); // groupJid → { row, at }
+const settingsCache = new Map();
 const SETTINGS_CACHE_MS = 30_000;
 
 export async function getGroupSettings(groupJid) {
@@ -32,8 +27,6 @@ export async function getGroupSettings(groupJid) {
   const rows = await dbRows('SELECT * FROM group_settings WHERE jid = ?', [groupJid]);
   let row = rows[0];
   if (!row) {
-    // Neue Gruppe → EINGESCHRÄNKTER Modus (enabled=0). Der Bot bleibt still, bis
-    // ein OWNER/Admin die Gruppe per Befehl freischaltet.
     await dbRun('INSERT OR IGNORE INTO group_settings (jid, enabled) VALUES (?, 0)', [groupJid]).catch(() => {});
     row = {
       jid: groupJid, enabled: 0, antilink: 0, antispam: 0,
@@ -48,8 +41,6 @@ export function invalidateSettings(groupJid) {
   if (groupJid) settingsCache.delete(groupJid);
   else settingsCache.clear();
 }
-
-// ── Wort-Blacklist ─────────────────────────────────────────────────
 
 const LEET = { 0: 'o', 1: 'i', 3: 'e', 4: 'a', 5: 's', 7: 't', 8: 'b', '@': 'a', $: 's', '€': 'e' };
 
@@ -82,8 +73,6 @@ export function invalidateBlockedWords(groupJid) {
   if (groupJid) wordsCache.delete(groupJid);
   else wordsCache.clear();
 }
-
-// ── Warnungen + Eskalation ─────────────────────────────────────────
 
 export async function activeWarnings(groupJid, userJid) {
   const rows = await dbRows(
@@ -120,18 +109,20 @@ export async function clearWarnings(groupJid, userJid) {
   await audit('clearwarns', groupJid, user, 'admin', '');
 }
 
-// ── Mute ───────────────────────────────────────────────────────────
-
 const muteCache = new TTLCache({ ttlMs: 86400_000, maxSize: 5000 });
 
 export async function loadMutes() {
   muteCache.clear();
-  const rows = await dbRows('SELECT group_jid, user_jid, until FROM mutes WHERE until > ?', [Date.now()]);
-  for (const r of rows) {
-    const ttl = Number(r.until) - Date.now();
-    if (ttl > 0) {
-      muteCache.set(`${r.group_jid}|${r.user_jid}`, Number(r.until), ttl);
+  try {
+    const rows = await dbRowsStrict('SELECT group_jid, user_jid, until FROM mutes WHERE until > ?', [Date.now()]);
+    for (const r of rows) {
+      const ttl = Number(r.until) - Date.now();
+      if (ttl > 0) {
+        muteCache.set(`${r.group_jid}|${r.user_jid}`, Number(r.until), ttl);
+      }
     }
+  } catch (err) {
+    logError(err, 'moderation.loadMutes');
   }
 }
 
@@ -178,8 +169,6 @@ export function isMuted(groupJid, userCandidates) {
   return 0;
 }
 
-// ── Kick & Ban ─────────────────────────────────────────────────────
-
 export async function kickUser(groupJid, userJid, reason = '') {
   if (state.connection !== 'open') return false;
   const user = resolveLid(userJid);
@@ -214,14 +203,17 @@ export async function unbanUser(groupJid, userJid, byJid = 'admin') {
 }
 
 async function isBanned(groupJid, userJid) {
-  const rows = await dbRows('SELECT 1 FROM bans WHERE group_jid = ? AND user_jid = ?', [
-    groupJid,
-    resolveLid(userJid),
-  ]);
-  return rows.length > 0;
+  try {
+    const rows = await dbRowsStrict('SELECT 1 FROM bans WHERE group_jid = ? AND user_jid = ?', [
+      groupJid,
+      resolveLid(userJid),
+    ]);
+    return rows.length > 0;
+  } catch (err) {
+    logError(err, 'moderation.isBanned');
+    return true; // Bei DB-Fehler im Zweifel kicken
+  }
 }
-
-// ── Auto-Moderation pro Nachricht ──────────────────────────────────
 
 const spamTracker = new Map();
 
@@ -294,8 +286,6 @@ async function deleteMessage(msg, groupJid) {
     return false;
   }
 }
-
-// ── Anti-Raid + Joins ──────────────────────────────────────────────
 
 const joinTracker = new Map();
 

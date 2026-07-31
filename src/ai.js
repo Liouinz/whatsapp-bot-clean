@@ -19,9 +19,10 @@ let dailyCalls = 0;
 let dailyDay = todayKey();
 let summaryBudget = 10;
 let aiEnabled = false;
+let summarizing = false;
 
-const MODEL_PRIMARY = 'gemini-2.0-flash-exp';
-const MODEL_FALLBACK = 'gemini-1.5-flash';
+const MODEL_PRIMARY = config.ai.model;
+const MODEL_FALLBACK = config.ai.modelLite;
 
 export async function initAiUsage() {
   const key = (process.env.GEMINI_API_KEY || '').trim();
@@ -128,11 +129,9 @@ async function callGemini(prompt, model = MODEL_PRIMARY, attempt = 0) {
     }
 
     if (!res.ok) {
-      if (res.status === 404 || res.status >= 500) {
-        if (model === MODEL_PRIMARY) {
-          logger.warn(`Gemini Modell ${model} lieferte HTTP ${res.status}. Fallback auf ${MODEL_FALLBACK}`, 'ai');
-          return callGemini(prompt, MODEL_FALLBACK, attempt);
-        }
+      if ((res.status === 404 || res.status >= 500) && model === MODEL_PRIMARY) {
+        logger.warn(`Gemini Modell ${model} lieferte HTTP ${res.status}. Fallback auf ${MODEL_FALLBACK}`, 'ai');
+        return callGemini(prompt, MODEL_FALLBACK, attempt);
       }
       return null;
     }
@@ -214,16 +213,21 @@ export async function askAi(userJid, question) {
 }
 
 async function summarizeError(errorText, ctx) {
-  if (!aiEnabled || !quotaOk() || summaryBudget <= 0) return null;
-  summaryBudget--;
-  const prompt =
-    `Fasse diesen Node.js/Baileys-Fehler eines WhatsApp-Bots in 1 deutschen Satz zusammen ` +
-    `(was ist passiert, was sollte man prüfen). Kein Code, keine Aufzählung:\n\n${errorText.slice(0, 1500)}`;
-  const result = await callGemini(prompt, MODEL_FALLBACK);
-  if (result) {
-    countCall();
+  if (summarizing || !aiEnabled || !quotaOk() || summaryBudget <= 0) return null;
+  summarizing = true;
+  try {
+    summaryBudget--;
+    const prompt =
+      `Fasse diesen Node.js/Baileys-Fehler eines WhatsApp-Bots in 1 deutschen Satz zusammen ` +
+      `(was ist passiert, was sollte man prüfen). Kein Code, keine Aufzählung:\n\n${errorText.slice(0, 1500)}`;
+    const result = await callGemini(prompt, MODEL_FALLBACK);
+    if (result) {
+      countCall();
+    }
+    return result;
+  } finally {
+    summarizing = false;
   }
-  return result;
 }
 
 setErrorSummarizer(summarizeError);

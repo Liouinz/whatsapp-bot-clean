@@ -3,7 +3,7 @@ import { logger } from './logger.js';
 import { getDb } from './core/database/client.js';
 
 export { PROTECTED_TABLES, assertNotAuthWrite, deleteTargetTable } from './core/database/guard.js';
-export { getDb, dbRun, dbRows } from './core/database/client.js';
+export { getDb, dbRun, dbRows, dbRowsStrict } from './core/database/client.js';
 export { DATA_TABLES, PROTECTED_TABLES_SET, initDb } from './core/database/schema.js';
 export { wipeAllData } from './core/database/wipe.js';
 

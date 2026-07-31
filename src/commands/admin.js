@@ -23,21 +23,18 @@ async function requireBotAdmin(ctx) {
   return false;
 }
 
-/** Admins, Owner und der Bot selbst sind vor Moderations-Aktionen geschützt. */
 async function requireUnprotectedTarget(ctx, target) {
   if (!(await isProtectedTarget(ctx.chatJid, target))) return true;
   await ctx.reply('⛔ Diese Person ist Admin (oder der Bot selbst) — Moderations-Aktionen gehen nur gegen normale Mitglieder.');
   return false;
 }
 
-/** "an"/"aus" (bzw. on/off/1/0) parsen → true/false/null. */
 function parseOnOff(word) {
   if (/^(an|on|1)$/i.test(word || '')) return true;
   if (/^(aus|off|0)$/i.test(word || '')) return false;
   return null;
 }
 
-/** Schalter in group_settings umlegen + Cache invalidieren. */
 async function setGroupFlag(ctx, field, value) {
   await dbRun('INSERT OR IGNORE INTO group_settings (jid) VALUES (?)', [ctx.chatJid]);
   await dbRun(`UPDATE group_settings SET ${field} = ? WHERE jid = ?`, [value ? 1 : 0, ctx.chatJid]);
@@ -113,8 +110,6 @@ export const adminCommands = [
       if (!target) return ctx.reply(NO_TARGET);
       if (!(await requireBotAdmin(ctx))) return;
       if (!(await requireUnprotectedTarget(ctx, target))) return;
-      // Nur 1–4-stellige Zahlen zählen als Minuten (sonst würde eine als
-      // Argument getippte Telefonnummer als Dauer fehlinterpretiert).
       let minutes = parseInt(ctx.args.find((a) => /^\d{1,4}$/.test(a)) || '', 10);
       if (!minutes || minutes < 1) minutes = config.moderation.muteMinutesDefault;
       minutes = Math.min(minutes, config.moderation.muteMinutesMax);
