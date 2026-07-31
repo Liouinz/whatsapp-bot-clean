@@ -23,7 +23,7 @@ function progressBar(have, need, width = 10) {
 export const profileCommands = [
   {
     name: 'profil',
-    aliases: ['profile', 'me'],
+    aliases: ['profile', 'me', 'profil-anzeigen', 'werbinich'],
     group: 'community',
     desc: 'Deine Visitenkarte (oder die von @person)',
     usage: '!profil [@person]',
