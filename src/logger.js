@@ -5,6 +5,7 @@ const ring = [];
 const maxRingSize = 500;
 
 let errorSummarizer = null;
+let isSummarizing = false;
 
 function pushRing(level, msg, context = '') {
   ring.push({
@@ -40,11 +41,15 @@ export const logger = {
     console.error(`❌ [ERROR] ${ctx ? `[${ctx}] ` : ''}${text}`);
     pushRing('error', text, ctx);
 
-    if (errorSummarizer) {
+    if (errorSummarizer && !isSummarizing) {
+      isSummarizing = true;
       try {
-        errorSummarizer(text, ctx);
+        Promise.resolve(errorSummarizer(text, ctx)).finally(() => {
+          isSummarizing = false;
+        });
       } catch (sumErr) {
-        console.error('⚠️ ErrorSummarizer fehlgeschlagen:', sumErr);
+        isSummarizing = false;
+        console.error('⚠️ ErrorSummarizer synchron fehlgeschlagen:', sumErr);
       }
     }
   },
@@ -61,7 +66,6 @@ export const logger = {
   },
 };
 
-// Alte Kompatibilität
 export function logError(err, context = '') {
   logger.error(err, context);
 }
@@ -94,7 +98,6 @@ export function getRecentLogs(n = 50) {
   return ring.slice(-n);
 }
 
-// AI Fehler-Zusammenfassung
 export function setErrorSummarizer(fn) {
   if (typeof fn === 'function') {
     errorSummarizer = fn;

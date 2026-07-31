@@ -36,9 +36,9 @@ export const config = {
   },
 
   reconnect: {
-    baseDelayMs: 500,
+    baseDelayMs: 1000,
     maxDelayMs: 30000,
-    maxAttempts: 5,
+    maxAttempts: 10,
   },
 
   messages: {
@@ -97,22 +97,22 @@ export const config = {
     maxReplyChars: 800,
   },
 
-  db:{
-    flushIntervalMs:10000,
+  db: {
+    flushIntervalMs: 10000,
   },
 
-  birthdays:{
-    hour:9,
-    coinsGift:500,
+  birthdays: {
+    hour: 9,
+    coinsGift: 500,
   },
 
-  polls:{
-    maxOptions:10,
-    autoCloseHours:24,
+  polls: {
+    maxOptions: 10,
+    autoCloseHours: 24,
   },
 
-  scheduler:{
-    tickMs:30000,
+  scheduler: {
+    tickMs: 30000,
   },
 
   weeklyReport: {
@@ -120,16 +120,16 @@ export const config = {
     hour: 18,
   },
 
-  slowmode:{
-    maxSeconds:300,
+  slowmode: {
+    maxSeconds: 300,
   },
 
-  pairing:{
-    codeValidMs:120000,
+  pairing: {
+    codeValidMs: 120000,
   },
 
-  log:{
-    ringSize:500,
+  log: {
+    ringSize: 500,
   },
 
   keepAlive: {
@@ -139,27 +139,27 @@ export const config = {
     stuckMs: 220000,
   },
 
-  games:{
-    quizTimeoutMs:60000,
-    ratenMax:100,
-    ratenMaxTries:10,
-    xpRewardQuiz:25,
-    xpRewardRaten:20,
-    xpRewardGalgen:30,
-    xpRewardTtt:30,
-    coinsRewardQuiz:40,
-    coinsRewardRaten:30,
-    coinsRewardGalgen:40,
-    coinsRewardTtt:40,
-    tttTimeoutMs:300000,
-    galgenMaxFails:6,
+  games: {
+    quizTimeoutMs: 60000,
+    ratenMax: 100,
+    ratenMaxTries: 10,
+    xpRewardQuiz: 25,
+    xpRewardRaten: 20,
+    xpRewardGalgen: 30,
+    xpRewardTtt: 30,
+    coinsRewardQuiz: 40,
+    coinsRewardRaten: 30,
+    coinsRewardGalgen: 40,
+    coinsRewardTtt: 40,
+    tttTimeoutMs: 300000,
+    galgenMaxFails: 6,
   },
 
-  web:{
-    sessionTtlMs:7 * 24 * 60 * 60 * 1000,
-    loginMaxFails:5,
-    loginLockMinutes:15,
-    restartCooldownMs:120000,
+  web: {
+    sessionTtlMs: 7 * 24 * 60 * 60 * 1000,
+    loginMaxFails: 5,
+    loginLockMinutes: 15,
+    restartCooldownMs: 120000,
   },
 };
 
@@ -169,5 +169,4 @@ export const REQUIRED_ENV = [
   'OWNER_NUMBERS',
   'ACCESS_SECRET',
   'SELF_URL',
-  'GEMINI_API_KEY',
 ];

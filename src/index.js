@@ -209,7 +209,9 @@ async function startWhatsApp() {
         state.sock = null;
 
         state.reconnectAttempts = (state.reconnectAttempts || 0) + 1;
-        if (state.reconnectAttempts < (config.reconnect?.maxAttempts || 10)) {
+        const maxAttempts = config.reconnect?.maxAttempts || 10;
+
+        if (state.reconnectAttempts < maxAttempts) {
           if (statusCode === DisconnectReason.loggedOut) {
             logger.info('Auth-Daten werden zurückgesetzt für neuen QR-Code...', 'Baileys');
             try {
@@ -219,7 +221,11 @@ async function startWhatsApp() {
               logger.error(err, 'Baileys.clearSession');
             }
           }
-          setTimeout(() => startWhatsApp(), 5000);
+          const baseDelay = config.reconnect?.baseDelayMs || 1000;
+          const maxDelay = config.reconnect?.maxDelayMs || 30000;
+          const delay = Math.min(maxDelay, baseDelay * Math.pow(2, state.reconnectAttempts - 1));
+          logger.info(`Reconnection-Versuch ${state.reconnectAttempts}/${maxAttempts} in ${delay}ms...`, 'Baileys');
+          setTimeout(() => startWhatsApp(), delay);
         } else {
           logger.error('Maximale Reconnect-Versuche erreicht. Bot wird nicht neu verbunden.', 'Baileys');
         }
@@ -291,10 +297,10 @@ async function main() {
     ]);
     logger.success('Runtime-Zustände erfolgreich geladen.', 'Bootstrap');
 
-    const commands = await loadCommands();
-    const uniqueCommands = Array.from(commands.values()).filter((v, i, a) => a.findIndex(c => c.name === v.name) === i);
+    const commandsMap = await loadCommands();
+    const uniqueCommands = Array.from(commandsMap.values()).filter((v, i, a) => a.findIndex(c => c.name === v.name) === i);
     setRegistry(uniqueCommands);
-    logger.success(`${commands.size} Befehle erfolgreich geladen.`, 'Bootstrap');
+    logger.success(`${uniqueCommands.length} Befehle erfolgreich geladen.`, 'Bootstrap');
 
     const app = createDashboard();
     const port = process.env.PORT || 3000;

@@ -3,7 +3,7 @@
 //  (b) kurze Fehler-Zusammenfassung für den Owner.
 // Nie auf normale Nachrichten. Pro-User-Cooldown + hartes Tages-Kontingent.
 
-import { BOT_NAME, PREFIX, config } from './config.js';
+import { BOT_NAME, config } from './config.js';
 import { state, rolloverDay } from './state.js';
 import { dbRun, dbRows, bufferStat, todayKey } from './db.js';
 import { logError, logger, setErrorSummarizer } from './logger.js';
@@ -128,10 +128,11 @@ async function callGemini(prompt, model = MODEL_PRIMARY, attempt = 0) {
     }
 
     if (!res.ok) {
-      if (res.status === 404) {
-        logger.warn(`Gemini Modell ${model} nicht gefunden.`, 'ai');
-      } else if (res.status !== 429) {
-        logError(new Error(`Gemini HTTP ${res.status}`), 'ai');
+      if (res.status === 404 || res.status >= 500) {
+        if (model === MODEL_PRIMARY) {
+          logger.warn(`Gemini Modell ${model} lieferte HTTP ${res.status}. Fallback auf ${MODEL_FALLBACK}`, 'ai');
+          return callGemini(prompt, MODEL_FALLBACK, attempt);
+        }
       }
       return null;
     }
@@ -146,11 +147,9 @@ async function callGemini(prompt, model = MODEL_PRIMARY, attempt = 0) {
     return text.trim() || null;
   } catch (err) {
     if (err?.name === 'AbortError') return null;
-    if (attempt < 2) {
-      await sleep(1000);
-      return callGemini(prompt, model, attempt + 1);
+    if (model === MODEL_PRIMARY) {
+      return callGemini(prompt, MODEL_FALLBACK, attempt);
     }
-    logError(err, 'ai');
     return null;
   } finally {
     clearTimeout(timer);
@@ -216,12 +215,12 @@ export async function askAi(userJid, question) {
 
 async function summarizeError(errorText, ctx) {
   if (!aiEnabled || !quotaOk() || summaryBudget <= 0) return null;
+  summaryBudget--;
   const prompt =
     `Fasse diesen Node.js/Baileys-Fehler eines WhatsApp-Bots in 1 deutschen Satz zusammen ` +
     `(was ist passiert, was sollte man prüfen). Kein Code, keine Aufzählung:\n\n${errorText.slice(0, 1500)}`;
   const result = await callGemini(prompt, MODEL_FALLBACK);
   if (result) {
-    summaryBudget--;
     countCall();
   }
   return result;

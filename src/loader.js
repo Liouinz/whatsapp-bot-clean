@@ -42,13 +42,12 @@ export async function loadCommands(dir = path.join(process.cwd(), 'src', 'comman
 
         for (const c of cmds) {
           if (c && c.name) {
-            // Standardisierte Metadaten für die automatische Registry / Hilfe
             c.category = c.category || c.group || path.basename(dir);
             c.desc = c.desc || c.description || 'Keine Beschreibung';
             c.usage = c.usage || `!${c.name}`;
 
             if (commands.has(c.name)) {
-              logger.warn(`Doppelter Command-Name erkannt: ${c.name}`, 'Loader');
+              logger.warn(`Doppelter Command-Name überschrieben: ${c.name}`, 'Loader');
             }
             commands.set(c.name, c);
             if (c.aliases) {

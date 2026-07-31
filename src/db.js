@@ -11,9 +11,6 @@ export function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
-/**
- * Puffer-Flush Logik für asynchrone Batch-Operationen
- */
 const xpBuffer = new Map();
 const statBuffer = new Map();
 const groupMsgBuffer = new Map();
@@ -44,61 +41,88 @@ export function bufferGroupMessage(groupJid) {
 
 export async function flushBuffers() {
   const db = getDb();
-  const xpEntries = Array.from(xpBuffer.values());
-  const statEntries = Array.from(statBuffer.values());
-  const groupMsgEntries = Array.from(groupMsgBuffer.values());
 
-  xpBuffer.clear();
-  statBuffer.clear();
-  groupMsgBuffer.clear();
+  const xpEntries = Array.from(xpBuffer.entries());
+  const statEntries = Array.from(statBuffer.entries());
+  const groupMsgEntries = Array.from(groupMsgBuffer.entries());
 
-  const promises = [];
+  const tasks = [];
 
-  for (const entry of xpEntries) {
-    promises.push(
-      db.execute({
+  for (const [key, entry] of xpEntries) {
+    tasks.push({
+      type: 'xp',
+      key,
+      entry,
+      promise: db.execute({
         sql: `INSERT INTO xp (group_jid, user_jid, xp, messages, name) VALUES (?, ?, ?, 1, ?)
               ON CONFLICT(group_jid, user_jid) DO UPDATE SET xp = xp + excluded.xp, messages = messages + 1, name = excluded.name`,
-        args: [entry.chatJid, entry.userJid, entry.amount, entry.name]
-      })
-    );
+        args: [entry.chatJid, entry.userJid, entry.amount, entry.name],
+      }),
+    });
   }
-  
-  for (const entry of statEntries) {
+
+  for (const [key, entry] of statEntries) {
     const fieldMap = { messages: 'messages', commands: 'commands', ai_calls: 'ai_calls' };
     const col = fieldMap[entry.field] || 'messages';
-    promises.push(
-      db.execute({
+    tasks.push({
+      type: 'stat',
+      key,
+      entry,
+      promise: db.execute({
         sql: `INSERT INTO daily_stats (day, messages, commands, ai_calls) VALUES (?, ?, ?, ?)
               ON CONFLICT(day) DO UPDATE SET ${col} = ${col} + excluded.${col}`,
-        args: [entry.day, entry.field === 'messages' ? entry.count : 0, entry.field === 'commands' ? entry.count : 0, entry.field === 'ai_calls' ? entry.count : 0]
-      })
-    );
+        args: [
+          entry.day,
+          entry.field === 'messages' ? entry.count : 0,
+          entry.field === 'commands' ? entry.count : 0,
+          entry.field === 'ai_calls' ? entry.count : 0,
+        ],
+      }),
+    });
   }
-  
-  for (const entry of groupMsgEntries) {
-    promises.push(
-      db.execute({
+
+  for (const [key, entry] of groupMsgEntries) {
+    tasks.push({
+      type: 'groupMsg',
+      key,
+      entry,
+      promise: db.execute({
         sql: `INSERT INTO group_daily (group_jid, day, messages) VALUES (?, ?, ?)
               ON CONFLICT(group_jid, day) DO UPDATE SET messages = messages + excluded.messages`,
-        args: [entry.groupJid, entry.day, entry.count]
-      })
-    );
+        args: [entry.groupJid, entry.day, entry.count],
+      }),
+    });
   }
-  
-  try {
-    const CHUNK = 50;
-    for (let i = 0; i < promises.length; i += CHUNK) {
-      await Promise.all(promises.slice(i, i + CHUNK));
+
+  if (!tasks.length) return;
+
+  const results = await Promise.allSettled(tasks.map((t) => t.promise));
+
+  results.forEach((res, idx) => {
+    const task = tasks[idx];
+    if (res.status === 'fulfilled') {
+      if (task.type === 'xp') {
+        const current = xpBuffer.get(task.key);
+        if (current && current.amount === task.entry.amount) xpBuffer.delete(task.key);
+      } else if (task.type === 'stat') {
+        const current = statBuffer.get(task.key);
+        if (current && current.count === task.entry.count) statBuffer.delete(task.key);
+      } else if (task.type === 'groupMsg') {
+        const current = groupMsgBuffer.get(task.key);
+        if (current && current.count === task.entry.count) groupMsgBuffer.delete(task.key);
+      }
+    } else {
+      logger.warn(`Flush-Teilfehler (${task.type}): ${res.reason?.message}`, 'db.flush');
     }
-  } catch (err) {
-    logger.warn(`Flush-Fehler: ${err.message}`, 'db.flush');
-  }
+  });
 }
 
 export function startFlushLoop() {
   if (flushTimer) return;
-  flushTimer = setInterval(() => flushBuffers().catch((err) => logger.warn(`Flush-Loop-Fehler: ${err.message}`, 'db.flush')), config.db.flushIntervalMs || 10000);
+  flushTimer = setInterval(
+    () => flushBuffers().catch((err) => logger.warn(`Flush-Loop-Fehler: ${err.message}`, 'db.flush')),
+    config.db.flushIntervalMs || 10000
+  );
 }
 
 export function stopFlushLoop() {

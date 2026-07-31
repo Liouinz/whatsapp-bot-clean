@@ -14,7 +14,6 @@ export const PROTECTED_TABLES_SET = new Set(['auth_creds', 'auth_keys']);
 export async function initDb() {
   const db = getDb();
   
-  // FIX: Vollständiges Schema für alle Kern-Tabellen hinzugefügt
   const schemas = [
     `CREATE TABLE IF NOT EXISTS group_settings (jid TEXT PRIMARY KEY, enabled INTEGER DEFAULT 0, antilink INTEGER DEFAULT 0, antispam INTEGER DEFAULT 0, blacklist_on INTEGER DEFAULT 1, welcome INTEGER DEFAULT 0, rules TEXT, welcome_text TEXT, levelup_announce INTEGER DEFAULT 1, slowmode_secs INTEGER DEFAULT 0, weekly_report INTEGER DEFAULT 0)`,
     `CREATE TABLE IF NOT EXISTS coins (user_jid TEXT PRIMARY KEY, name TEXT, balance INTEGER DEFAULT 0, last_daily TEXT, streak INTEGER DEFAULT 0, total_earned INTEGER DEFAULT 0, total_gambled INTEGER DEFAULT 0)`,
@@ -53,17 +52,14 @@ export async function initDb() {
     `CREATE TABLE IF NOT EXISTS game_scores (group_jid TEXT, user_jid TEXT, game TEXT, wins INTEGER DEFAULT 0, name TEXT, PRIMARY KEY (group_jid, user_jid, game))`,
     `CREATE TABLE IF NOT EXISTS quests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_jid TEXT, title TEXT, description TEXT, reward_coins INTEGER, reward_xp INTEGER, completed INTEGER DEFAULT 0, created_at INTEGER, completed_at INTEGER)`,
     `CREATE TABLE IF NOT EXISTS player_contracts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_jid TEXT, type TEXT, terms TEXT, signed_at INTEGER, expires_at INTEGER)`,
-    `CREATE TABLE IF NOT EXISTS active_event (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, type TEXT, multiplier REAL, start_at INTEGER, end_at INTEGER, active INTEGER DEFAULT 0)`,
+    `CREATE TABLE IF NOT EXISTS active_event (id INTEGER PRIMARY KEY, event_id TEXT, name TEXT, emoji TEXT, xp_mult REAL DEFAULT 1.0, coin_mult REAL DEFAULT 1.0, started_at INTEGER, expires_at INTEGER)`,
     `CREATE TABLE IF NOT EXISTS user_boosts (user_jid TEXT, boost_type TEXT, multiplier REAL, expires_at INTEGER, PRIMARY KEY (user_jid, boost_type))`,
     `CREATE TABLE IF NOT EXISTS allowed_chats (jid TEXT PRIMARY KEY, note TEXT)`
   ];
 
   for (const sql of schemas) {
-    await db.execute(sql).catch(() => {});
-  }
-
-  // Fallback für alle restlichen Tabellen
-  for (const t of DATA_TABLES) {
-    await db.execute(`CREATE TABLE IF NOT EXISTS ${t} (id TEXT PRIMARY KEY, data TEXT)`).catch(() => {});
+    await db.execute(sql).catch((err) => {
+      console.error(`⚠️ Schema Execution Warnung: ${err.message}`);
+    });
   }
 }

@@ -12,6 +12,7 @@ import { releaseExpiredRaidLocks } from './moderation.js';
 import { congratulateBirthdays } from './commands/birthdays.js';
 import { renderPollResult, closePoll } from './commands/polls.js';
 import { sweepContracts } from './commands/quests.js';
+import { getGlobalFlag, setGlobalFlag } from './global.js';
 
 let maybeAutoEvent = async () => {};
 try {
@@ -172,14 +173,14 @@ export async function buildWeeklyReport(groupJid) {
   return text;
 }
 
-let lastWeeklySent = '';
-
 async function processWeeklyReports() {
   const now = new Date();
   if (now.getDay() !== config.weeklyReport.weekday || now.getHours() < config.weeklyReport.hour) return;
   const today = todayKey();
+  const lastWeeklySent = getGlobalFlag('last_weekly_sent_date');
   if (lastWeeklySent === today) return;
-  lastWeeklySent = today;
+  
+  await setGlobalFlag('last_weekly_sent_date', today);
   const rows = await dbRows('SELECT jid FROM group_settings WHERE weekly_report = 1 AND enabled = 1', []);
   for (const r of rows) {
     try {

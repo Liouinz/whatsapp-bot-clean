@@ -19,7 +19,7 @@ function recordSent(id) {
   sentIds.set(id, true);
 }
 
-const WAIT_FOR_CONNECTION_MS = 45_000;
+const WAIT_FOR_CONNECTION_MS = 10_000;
 
 const jitter = () =>
   config.send.jitterMinMs +
@@ -32,7 +32,7 @@ async function waitForConnection() {
   while (Date.now() < deadline) {
     if (state.sock && state.connection === 'open') return true;
     if (state.stopped) return false;
-    await sleep(1500);
+    await sleep(1000);
   }
   return false;
 }
@@ -45,14 +45,21 @@ async function work() {
   try {
     while (queue.length) {
       const job = queue.shift();
+
+      if (!(await waitForConnection())) {
+        job.reject?.(new Error('Socket nicht verbunden (Timeout)'));
+        continue;
+      }
+
       const wait = lastSentAt + jitter() - Date.now();
       if (wait > 0) await sleep(wait);
       let sent = false;
       let lastErr = null;
+
       for (let attempt = 0; attempt <= config.send.maxRetries && !sent; attempt++) {
         try {
-          if (!(await waitForConnection())) {
-            throw new Error('Socket nicht verbunden (Timeout beim Warten auf Reconnect)');
+          if (state.connection !== 'open') {
+            throw new Error('Verbindung während des Sendens verloren');
           }
           const result = await state.sock.sendMessage(job.jid, job.content, job.options);
           rolloverDay();

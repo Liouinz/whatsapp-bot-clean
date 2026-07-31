@@ -20,11 +20,11 @@ async function withRetry(fn, tries = 4) {
   throw lastErr;
 }
 
-let globalFlush = null;
+const activeFlushers = new Set();
 
 export async function flushAuth() {
-  if (globalFlush) {
-    await globalFlush();
+  for (const flusher of activeFlushers) {
+    await flusher().catch((err) => console.error('⚠️ Auth Flush Error:', err));
   }
 }
 
@@ -76,7 +76,7 @@ export async function useTursoAuthState(session = 'main') {
     }
   };
 
-  globalFlush = flushPendingWrites;
+  activeFlushers.add(flushPendingWrites);
 
   const scheduleFlush = () => {
     if (!writeTimeout) {
@@ -191,6 +191,7 @@ export async function useTursoAuthState(session = 'main') {
     flush: flushPendingWrites,
 
     clearSession: async () => {
+      activeFlushers.delete(flushPendingWrites);
       keyCache.clear();
       pendingWrites.clear();
       if (writeTimeout) {
