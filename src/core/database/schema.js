@@ -35,7 +35,7 @@ export async function initDb() {
     `CREATE TABLE IF NOT EXISTS user_profiles (user_jid TEXT PRIMARY KEY, name TEXT, age INTEGER, location TEXT, hobbies TEXT, bio TEXT, birthday TEXT, updated_at INTEGER)`,
     `CREATE TABLE IF NOT EXISTS scheduled_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_jid TEXT, send_at INTEGER, text TEXT, created_by TEXT, done INTEGER DEFAULT 0, done_at INTEGER)`,
     `CREATE TABLE IF NOT EXISTS inventory (user_jid TEXT, item_id TEXT, qty INTEGER DEFAULT 0, PRIMARY KEY (user_jid, item_id))`,
-    `CREATE TABLE IF NOT EXISTS prestige (user_jid TEXT PRIMARY KEY, level INTEGER DEFAULT 0)`,
+    `CREATE TABLE IF NOT EXISTS prestige (user_jid TEXT PRIMARY KEY, level INTEGER DEFAULT 0, updated_at INTEGER)`,
     `CREATE TABLE IF NOT EXISTS user_achievements (user_jid TEXT, ach_id TEXT, unlocked_at INTEGER, PRIMARY KEY (user_jid, ach_id))`,
     `CREATE TABLE IF NOT EXISTS members (group_jid TEXT, user_jid TEXT, user_lid TEXT, last_seen INTEGER, PRIMARY KEY (group_jid, user_jid))`,
     `CREATE TABLE IF NOT EXISTS groups (jid TEXT PRIMARY KEY, name TEXT, member_count INTEGER, bot_is_admin INTEGER DEFAULT 0, updated_at INTEGER)`,
@@ -46,14 +46,14 @@ export async function initDb() {
     `CREATE TABLE IF NOT EXISTS millionaire_daily (user_jid TEXT PRIMARY KEY, day TEXT)`,
     `CREATE TABLE IF NOT EXISTS nightmode (group_jid TEXT PRIMARY KEY, enabled INTEGER DEFAULT 0, start_hhmm TEXT DEFAULT '22:00', end_hhmm TEXT DEFAULT '07:00', is_closed INTEGER DEFAULT 0)`,
     `CREATE TABLE IF NOT EXISTS custom_commands (name TEXT PRIMARY KEY, reply TEXT, by_jid TEXT, created_at INTEGER)`,
-    `CREATE TABLE IF NOT EXISTS birthdays (user_jid TEXT PRIMARY KEY, name TEXT, day INTEGER, month INTEGER, year INTEGER, chat_jid TEXT)`,
+    `CREATE TABLE IF NOT EXISTS birthdays (user_jid TEXT PRIMARY KEY, name TEXT, day INTEGER, month INTEGER, year INTEGER, group_jid TEXT, last_congratulated TEXT)`,
     `CREATE TABLE IF NOT EXISTS polls (id INTEGER PRIMARY KEY AUTOINCREMENT, group_jid TEXT, question TEXT, options TEXT, created_by TEXT, created_at INTEGER, open INTEGER DEFAULT 1)`,
-    `CREATE TABLE IF NOT EXISTS poll_votes (poll_id INTEGER, user_jid TEXT, option_index INTEGER, PRIMARY KEY (poll_id, user_jid))`,
+    `CREATE TABLE IF NOT EXISTS poll_votes (poll_id INTEGER, user_jid TEXT, option_idx INTEGER, PRIMARY KEY (poll_id, user_jid))`,
     `CREATE TABLE IF NOT EXISTS game_scores (group_jid TEXT, user_jid TEXT, game TEXT, wins INTEGER DEFAULT 0, name TEXT, PRIMARY KEY (group_jid, user_jid, game))`,
     `CREATE TABLE IF NOT EXISTS quests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_jid TEXT, title TEXT, description TEXT, reward_coins INTEGER, reward_xp INTEGER, completed INTEGER DEFAULT 0, created_at INTEGER, completed_at INTEGER)`,
-    `CREATE TABLE IF NOT EXISTS player_contracts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_jid TEXT, type TEXT, terms TEXT, signed_at INTEGER, expires_at INTEGER)`,
+    `CREATE TABLE IF NOT EXISTS player_contracts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_jid TEXT, name TEXT, contract_id TEXT, baseline INTEGER DEFAULT 0, accepted_at INTEGER, expires_at INTEGER, chat_jid TEXT, done INTEGER DEFAULT 0)`,
     `CREATE TABLE IF NOT EXISTS active_event (id INTEGER PRIMARY KEY, event_id TEXT, name TEXT, emoji TEXT, xp_mult REAL DEFAULT 1.0, coin_mult REAL DEFAULT 1.0, started_at INTEGER, expires_at INTEGER)`,
-    `CREATE TABLE IF NOT EXISTS user_boosts (user_jid TEXT, boost_type TEXT, multiplier REAL, expires_at INTEGER, PRIMARY KEY (user_jid, boost_type))`,
+    `CREATE TABLE IF NOT EXISTS user_boosts (user_jid TEXT, type TEXT, mult REAL, expires_at INTEGER, PRIMARY KEY (user_jid, type))`,
     `CREATE TABLE IF NOT EXISTS allowed_chats (jid TEXT PRIMARY KEY, note TEXT)`,
     `CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_warnings_expires ON warnings(expires_at)`
@@ -65,7 +65,6 @@ export async function initDb() {
     });
   }
 
-  // Sicherheitsprüfung: Stelle sicher, dass jede DATA_TABLE auch im Schema definiert ist
   for (const table of DATA_TABLES) {
     const defined = schemas.some((s) => s.toLowerCase().includes(`create table if not exists ${table}`));
     if (!defined) {

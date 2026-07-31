@@ -39,7 +39,7 @@ export async function congratulateBirthdays() {
   if (now.getHours() < config.birthdays.hour) return;
   const today = todayKey();
   const rows = await dbRows(
-    'SELECT * FROM birthdays WHERE day = ? AND month = ? AND last_congratulated != ?',
+    'SELECT * FROM birthdays WHERE day = ? AND month = ? AND (last_congratulated IS NULL OR last_congratulated != ?)',
     [now.getDate(), now.getMonth() + 1, today]
   );
   for (const r of rows) {

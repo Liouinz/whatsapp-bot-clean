@@ -1,10 +1,6 @@
 // Boost-Engine: aktive Zeit-Effekte (+XP%, +Coins%) pro Nutzer.
 // Eigenes Modul, damit economy.js und items.js es nutzen können, ohne einen
 // Import-Zyklus zu bauen. Liest/schreibt nur die DB-Tabelle user_boosts.
-//
-// Performance: getBoostMult() liegt im heißen Pfad (XP pro Nachricht). Deshalb
-// ein kurzer RAM-Cache pro Nutzer (60 s) — höchstens ein DB-Read je Nutzer und
-// Minute, statt einer Abfrage pro Nachricht.
 
 import { dbRun, dbRows } from './db.js';
 
