@@ -65,6 +65,27 @@ export async function initDb() {
     });
   }
 
+  // ── Migrationen: Spalten, die nachtraeglich zu bereits existierenden
+  // Tabellen hinzugefuegt wurden. CREATE TABLE IF NOT EXISTS greift bei
+  // Tabellen, die schon existieren, nicht mehr - daher hier gezielt per
+  // ALTER TABLE nachziehen, nur wenn die Spalte wirklich fehlt.
+  const migrations = [
+    { table: 'birthdays', column: 'last_congratulated', ddl: 'TEXT' },
+    { table: 'player_contracts', column: 'done', ddl: 'INTEGER DEFAULT 0' },
+  ];
+  for (const { table, column, ddl } of migrations) {
+    try {
+      const info = await db.execute(`PRAGMA table_info(${table})`);
+      const hasColumn = (info.rows || []).some((r) => r.name === column);
+      if (!hasColumn) {
+        await db.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+        console.log(`✅ Migration: Spalte '${column}' zu '${table}' hinzugefügt.`);
+      }
+    } catch (err) {
+      console.error(`⚠️ Migration Warnung (${table}.${column}): ${err.message}`);
+    }
+  }
+
   for (const table of DATA_TABLES) {
     const defined = schemas.some((s) => s.toLowerCase().includes(`create table if not exists ${table}`));
     if (!defined) {
