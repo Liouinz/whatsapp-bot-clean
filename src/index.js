@@ -1,4 +1,5 @@
 import http from 'node:http';
+import https from 'node:https';
 import QRCode from 'qrcode';
 import { makeWASocket, DisconnectReason, fetchLatestBaileysVersion, jidNormalizedUser } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
@@ -46,18 +47,26 @@ function startSelfPing() {
     return;
   }
   selfPingTimer = setInterval(() => {
-    const req = http.get(url, { timeout: 10000 }, (res) => {
-      if (res.statusCode !== 200) {
-        logger.warn(`Self-Ping Antwort: ${res.statusCode}`, 'KeepAlive');
-      }
-    });
-    req.on('error', (err) => {
+    try {
+      const client = url.startsWith('https:') ? https : http;
+      const req = client.get(url, { timeout: 10000 }, (res) => {
+        if (res.statusCode !== 200) {
+          logger.warn(`Self-Ping Antwort: ${res.statusCode}`, 'KeepAlive');
+        }
+        res.resume();
+      });
+      req.on('error', (err) => {
+        logger.warn(`Self-Ping fehlgeschlagen: ${err.message}`, 'KeepAlive');
+      });
+      req.on('timeout', () => {
+        req.destroy();
+        logger.warn('Self-Ping Timeout.', 'KeepAlive');
+      });
+    } catch (err) {
+      // http.get()/https.get() werfen bei ungueltiger URL synchron - das darf
+      // den Prozess nie mitreissen (war die Ursache der Crash-Loop).
       logger.warn(`Self-Ping fehlgeschlagen: ${err.message}`, 'KeepAlive');
-    });
-    req.on('timeout', () => {
-      req.destroy();
-      logger.warn('Self-Ping Timeout.', 'KeepAlive');
-    });
+    }
   }, config.keepAlive.selfPingMs || 30000);
   if (selfPingTimer.unref) selfPingTimer.unref();
   logger.info(`Self-Ping aktiv: alle ${config.keepAlive.selfPingMs || 30000}ms → ${url}`, 'KeepAlive');
