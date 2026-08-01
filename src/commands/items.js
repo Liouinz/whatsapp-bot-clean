@@ -195,7 +195,7 @@ export const itemCommands = [
   },
   {
     name: 'benutzen',
-    aliases: ['use', 'aktivieren'],
+    aliases: ['use'],
     group: 'economy',
     desc: 'Benutzt ein Item (Boost aktivieren / Titel anlegen)',
     usage: '!benutzen <id>',

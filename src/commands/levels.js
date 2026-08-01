@@ -42,27 +42,7 @@ export const levelCommands = [
       );
     },
   },
-  {
-    name: 'leaderboard',
-    aliases: ['top', 'rangliste'],
-    group: 'community',
-    desc: 'Die Top 10 dieser Gruppe',
-    usage: '!leaderboard',
-    groupOnly: true,
-    async run(ctx) {
-      await flushBuffers();
-      const rows = await dbRows(
-        'SELECT user_jid, name, xp FROM xp WHERE group_jid = ? ORDER BY xp DESC LIMIT 10',
-        [ctx.chatJid]
-      );
-      if (!rows.length) return ctx.reply('ℹ️ Hier hat noch niemand XP gesammelt — legt los! ⭐');
-      const medals = ['🥇', '🥈', '🥉'];
-      const lines = rows.map((r, i) => {
-        const { level } = levelProgress(Number(r.xp));
-        const who = r.name || `+${String(r.user_jid).split('@')[0]}`;
-        return `${medals[i] || `${i + 1}.`} *${who}* — Level ${level} (${r.xp} XP)`;
-      });
-      return ctx.reply(`🏆 *Rangliste — Top ${rows.length}*\n${lines.join('\n')}`);
-    },
-  },
 ];
+// Hinweis: Das frühere 'leaderboard'-Kommando wurde entfernt — es war durch
+// rankings.js' !rangliste (Name + beide Aliase top/leaderboard) bereits
+// vollständig unerreichbar geworden. !rangliste xp deckt denselben Fall ab.

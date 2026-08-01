@@ -145,7 +145,7 @@ function spinDynamic(bet) {
 export const economyCommands = [
   {
     name: 'daily',
-    aliases: ['taeglich'],
+    aliases: ['taeglich', 'abholen'],
     category: 'economy',
     desc: 'Tägliche Coins abholen (Streak-Bonus!)',
     usage: '!daily',
@@ -189,7 +189,7 @@ export const economyCommands = [
 
   {
     name: 'coins',
-    aliases: ['konto', 'geld'],
+    aliases: ['konto', 'geld', 'balance', 'bal'],
     category: 'economy',
     desc: 'Zeigt deinen Kontostand',
     usage: '!coins',
@@ -209,7 +209,7 @@ export const economyCommands = [
 
   {
     name: 'geben',
-    aliases: ['pay', 'zahlen'],
+    aliases: ['pay', 'zahlen', 'überweisen', 'send'],
     category: 'economy',
     desc: 'Überweist jemandem Coins',
     usage: '!geben @person <betrag>',

@@ -3,7 +3,7 @@
 
 export const wuerfelCommand = {
   name: 'wuerfel',
-  aliases: ['würfel', 'dice'],
+  aliases: ['würfel', 'dice', 'roll'],
   group: 'games',
   desc: 'Würfelt — auch mehrere: !wuerfel 2d20',
   usage: '!wuerfel [seiten | NdM]',

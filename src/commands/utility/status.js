@@ -1,6 +1,5 @@
 export default {
   name: 'status',
-  aliases: ['stats'],
   description: 'Zeigt den Systemstatus des Bots an',
   category: 'tools',
   async run(ctx) {
