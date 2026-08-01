@@ -56,18 +56,18 @@ export async function useTursoAuthState(session = 'main') {
     const currentWrites = new Map(pendingWrites);
     const stmts = [];
 
-    for (const [keyId, value] of currentWrites.entries()) {
-      stmts.push(
-        value
-          ? {
-              sql: 'INSERT OR REPLACE INTO auth_keys (id, data) VALUES (?, ?)',
-              args: [`${session}:${keyId}`, JSON.stringify(value, BufferJSON.replacer)],
-            }
-          : { sql: 'DELETE FROM auth_keys WHERE id = ?', args: [`${session}:${keyId}`] }
-      );
-    }
-
     try {
+      for (const [keyId, value] of currentWrites.entries()) {
+        stmts.push(
+          value
+            ? {
+                sql: 'INSERT OR REPLACE INTO auth_keys (id, data) VALUES (?, ?)',
+                args: [`${session}:${keyId}`, JSON.stringify(value, BufferJSON.replacer)],
+            }
+            : { sql: 'DELETE FROM auth_keys WHERE id = ?', args: [`${session}:${keyId}`] }
+        );
+      }
+
       if (stmts.length) {
         await batch(stmts);
       }
