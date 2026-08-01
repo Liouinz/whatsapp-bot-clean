@@ -48,7 +48,9 @@ test('Kaufen bucht Coins ab und legt ins Inventar', async () => {
   await cmd('kaufen').run(ctx);
   assert.equal(await getQty(USER, 'boost_xp_10_1h'), 1);
   const w = await getWallet(USER);
-  assert.equal(Number(w.balance), 10_100 - 500);
+  // Frisches Wallet startet bei config.economy.startBalance (10.000), plus die
+  // addCoins(10_000) oben, minus den Item-Preis (500).
+  assert.equal(Number(w.balance), 10_000 + 10_000 - 500);
   assert.match(ctx.replies[0], /Gekauft/);
 });
 

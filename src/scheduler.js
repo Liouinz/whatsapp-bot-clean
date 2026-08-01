@@ -4,7 +4,7 @@
 
 import { BOT_NAME, config } from './config.js';
 import { state } from './state.js';
-import { dbRun, dbRows, todayKey, flushBuffers } from './db.js';
+import { dbRun, dbRows, todayKey, flushBuffers, PROTECTED_TABLES, deleteTargetTable } from './db.js';
 import { sendText } from './queue.js';
 import { logError, logInfo } from './logger.js';
 import { botIsAdmin } from './permissions.js';
@@ -192,6 +192,22 @@ async function processWeeklyReports() {
   if (rows.length) logInfo(`📈 Wochenreport an ${rows.length} Gruppe(n) gesendet.`);
 }
 
+// Automatisches Aufraeumen abgelaufener Daten. Nutzt bewusst dieselben
+// Schutz-Primitiven (PROTECTED_TABLES/deleteTargetTable) wie der Panel-Wipe,
+// damit die Baileys-Session (auth_creds/auth_keys) garantiert nie angefasst
+// wird - zusaetzlich zur globalen assertNotAuthWrite()-Sperre in db.js.
+export async function runCleanup() {
+  const now = Date.now();
+  const queries = [
+    { sql: 'DELETE FROM warnings WHERE expires_at IS NOT NULL AND expires_at <= ?', args: [now] },
+  ];
+  for (const { sql, args } of queries) {
+    const table = deleteTargetTable(sql);
+    if (!table || PROTECTED_TABLES.has(table)) continue;
+    await dbRun(sql, args).catch((err) => logError(err, 'scheduler.cleanup'));
+  }
+}
+
 export function startScheduler() {
   if (tickTimer) return;
   tickTimer = setInterval(async () => {
@@ -205,6 +221,7 @@ export function startScheduler() {
       await processWeeklyReports();
       await sweepContracts();
       await maybeAutoEvent();
+      await runCleanup();
     } catch (err) {
       logError(err, 'scheduler.tick');
     }

@@ -39,6 +39,20 @@ function stopWatchdog() {
 
 let selfPingTimer = null;
 
+// startWhatsApp() wird bei jedem Reconnect per setTimeout aufgerufen. Ohne
+// .catch() wuerde ein Fehler dort (z.B. Turso- oder Netzwerk-Hickser beim
+// Auth-Laden/Versions-Check) den kompletten Prozess als unhandled rejection
+// mitreissen - identisches Crash-Loop-Muster wie beim frueheren Self-Ping-Bug.
+function safeStartWhatsApp(delay) {
+  setTimeout(() => {
+    startWhatsApp().catch((err) => {
+      logger.error(err, 'Baileys.reconnect');
+      logger.warn('Reconnect fehlgeschlagen — neuer Versuch in 5s.', 'Baileys');
+      safeStartWhatsApp(5000);
+    });
+  }, delay);
+}
+
 function startSelfPing() {
   if (selfPingTimer) clearInterval(selfPingTimer);
   const url = config.selfUrl?.trim();
@@ -161,6 +175,7 @@ async function startWhatsApp() {
     version,
     auth: authState,
     logger: baileysLogger,
+    keepAliveIntervalMs: config.keepAlive.wsKeepAliveMs,
   });
 
   botSock = sock;
@@ -228,7 +243,7 @@ async function startWhatsApp() {
         // Code 515 (Restart Required) -> sofort neu verbinden
         if (statusCode === 515) {
           logger.info('Code 515 empfangen — führe sofortigen Reconnect durch.', 'Baileys');
-          setTimeout(() => startWhatsApp(), 500);
+          safeStartWhatsApp(500);
           return;
         }
 
@@ -249,7 +264,7 @@ async function startWhatsApp() {
           const jitter = Math.random() * 500;
           const delay = Math.min(maxDelay, baseDelay * Math.pow(2, state.reconnectAttempts - 1)) + jitter;
           logger.info(`Reconnection-Versuch ${state.reconnectAttempts}/${maxAttempts} in ${Math.round(delay)}ms...`, 'Baileys');
-          setTimeout(() => startWhatsApp(), delay);
+          safeStartWhatsApp(delay);
         } else {
           logger.error('Maximale Reconnect-Versuche erreicht. Bot wird nicht neu verbunden.', 'Baileys');
         }
@@ -354,7 +369,7 @@ async function main() {
       await clearAuthSession('main');
       
       state.reconnectAttempts = 0;
-      setTimeout(() => startWhatsApp(), 1500);
+      safeStartWhatsApp(1500);
     });
 
     startSelfPing();
