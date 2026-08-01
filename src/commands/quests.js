@@ -109,7 +109,7 @@ export function resetQuestState() { lastSweep = 0; }
 export const questCommands = [
   {
     name: 'vertraege',
-    aliases: ['verträge', 'quests', 'contracts'],
+    aliases: ['verträge', 'quests', 'contracts', 'missionen'],
     group: 'economy',
     desc: 'Zeigt verfügbare Verträge (Aufgaben mit Belohnung)',
     usage: '!vertraege',

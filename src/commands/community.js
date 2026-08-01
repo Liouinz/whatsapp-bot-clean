@@ -26,7 +26,7 @@ function fmtUptime(ms) {
 export const communityCommands = [
   {
     name: 'hilfe',
-    aliases: ['help', 'menu'],
+    aliases: ['help', 'menu', 'h'],
     group: 'community',
     desc: 'Zeigt alle Befehle, schön gruppiert',
     usage: '!hilfe [befehl]',
@@ -135,6 +135,7 @@ export const communityCommands = [
   },
   {
     name: 'ping',
+    aliases: ['p'],
     group: 'community',
     desc: 'Lebt der Bot? (Antwortzeit)',
     usage: '!ping',

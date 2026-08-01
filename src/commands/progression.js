@@ -91,7 +91,7 @@ export const progressionCommands = [
   },
   {
     name: 'prestige',
-    aliases: ['prestij'],
+    aliases: ['prestij', 'resetlevel'],
     group: 'community',
     desc: 'Coins gegen permanenten Prestige-Rang (+Coin-Bonus)',
     usage: '!prestige [aufsteigen]',

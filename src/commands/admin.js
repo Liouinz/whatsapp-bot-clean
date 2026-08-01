@@ -138,6 +138,7 @@ export const adminCommands = [
   },
   {
     name: 'warn',
+    aliases: ['verwarnen'],
     group: 'admin',
     desc: 'Verwarnt eine Person (eskaliert automatisch zu Mute/Kick)',
     usage: '!warn @person [grund]',
