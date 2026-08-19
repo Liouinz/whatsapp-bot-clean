@@ -15,10 +15,6 @@ import { getAiQuota, initAiUsage } from './ai.js';
 import { registry, isCommandEnabled, setCommandEnabled, loadToggles, resetXpCache } from './router.js';
 import { listCustom, loadCustomCommands } from './commands/custom.js';
 import { loadAfk } from './commands/afk.js';
-import { loadActiveMillionaire } from './commands/millionaer.js';
-import { resetBoostCache } from './boosts.js';
-import { resetQuestState } from './commands/quests.js';
-import { resetPrestigeCache } from './prestige.js';
 import { resetEventCache } from './events.js';
 import { resetGlobalCache, getGlobalFlag, setGlobalFlag } from './global.js';
 import { invalidateSettings, invalidateBlockedWords, loadMutes, unmuteUser, unbanUser, clearWarnings, kickUser, banUser, audit } from './moderation.js';
@@ -406,11 +402,10 @@ export function createDashboard() {
     res.json({ ok: true, enabled: isCommandEnabled(name) });
   });
 
-  const GLOBAL_KEYS = { xp: 'system_xp', spiele: 'system_spiele', economy: 'system_economy', maintenance: 'maintenance' };
+  const GLOBAL_KEYS = { xp: 'system_xp', maintenance: 'maintenance' };
   const globalPayload = () => ({
     xp: getGlobalFlag('system_xp'),
     spiele: getGlobalFlag('system_spiele'),
-    economy: getGlobalFlag('system_economy'),
     maintenance: getGlobalFlag('maintenance'),
   });
   api.get('/global', (req, res) => res.json(globalPayload()));
@@ -497,19 +492,13 @@ export function createDashboard() {
       }
       const since14 = new Date(Date.now() - 13 * 86_400_000).toISOString().slice(0, 10);
       const since7 = new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
-      const [daily, topGroups, richest, champions, counters] = await Promise.all([
+      const [daily, topGroups, counters] = await Promise.all([
         dbRows('SELECT day, messages, commands, ai_calls FROM daily_stats WHERE day >= ? ORDER BY day', [since14]),
         dbRows(
           `SELECT gd.group_jid, COALESCE(g.name, gd.group_jid) AS name, SUM(gd.messages) AS msgs
            FROM group_daily gd LEFT JOIN groups g ON g.jid = gd.group_jid
            WHERE gd.day >= ? GROUP BY gd.group_jid ORDER BY msgs DESC LIMIT 8`,
           [since7]
-        ),
-        dbRows('SELECT name, user_jid, balance FROM coins ORDER BY balance DESC LIMIT 8', []),
-        dbRows(
-          `SELECT name, user_jid, SUM(wins) AS wins FROM game_scores
-           GROUP BY user_jid ORDER BY wins DESC LIMIT 8`,
-          []
         ),
         Promise.all([
           dbRows('SELECT COUNT(*) AS c FROM warnings WHERE expires_at > ?', [Date.now()]),
@@ -521,8 +510,6 @@ export function createDashboard() {
       const payload = {
         daily,
         topGroups,
-        richest,
-        champions,
         counts: {
           warns: Number(counters[0][0]?.c || 0),
           custom: Number(counters[1][0]?.c || 0),
@@ -609,15 +596,12 @@ export function createDashboard() {
       invalidateSettings();
       invalidateBlockedWords();
       resetXpCache();
-      resetBoostCache();
-      resetQuestState();
-      resetPrestigeCache();
       resetEventCache();
       resetGlobalCache();
       groupCache.at = 0;
       groupCache.list = [];
       statsCache = { at: 0, data: null };
-      await Promise.all([loadToggles(), loadCustomCommands(), loadAfk(), loadMutes(), initAiUsage(), loadActiveMillionaire()]);
+      await Promise.all([loadToggles(), loadCustomCommands(), loadAfk(), loadMutes(), initAiUsage()]);
       await audit('db-wipe', '', '', 'panel', `${tables} Tabellen geleert`);
       logWarn(`🗑️ Datenbank über das Panel komplett geleert (${tables} Tabellen).`);
 
@@ -772,7 +756,6 @@ async function statusPayload() {
     global: {
       xp: getGlobalFlag('system_xp'),
       spiele: getGlobalFlag('system_spiele'),
-      economy: getGlobalFlag('system_economy'),
       maintenance: getGlobalFlag('maintenance'),
     },
   };

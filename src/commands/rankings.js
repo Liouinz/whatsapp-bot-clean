@@ -7,7 +7,7 @@ export const rankingCommands = [
     aliases: ['top', 'leaderboard', 'beste'],
     group: 'utility',
     desc: 'Zeigt Community-Ranglisten',
-    usage: '!rangliste [nachrichten|xp|coins|level]',
+    usage: '!rangliste [nachrichten|xp|level]',
     groupOnly: true,
     async run(ctx) {
       const type = ctx.args[0]?.toLowerCase() || 'nachrichten';
@@ -37,14 +37,6 @@ export const rankingCommands = [
           icon = '⭐';
           break;
           
-        case 'coins':
-          rows = await dbRows(
-            `SELECT user_jid, name, balance as total FROM coins ORDER BY balance DESC LIMIT 10`
-          );
-          title = 'Coins-Rangliste';
-          icon = '💰';
-          break;
-          
         case 'level':
           rows = await dbRows(
             `SELECT l.user_jid, COALESCE(x.name, l.user_jid) as name, l.level, COALESCE(x.xp, 0) as total 
@@ -59,7 +51,7 @@ export const rankingCommands = [
           break;
           
         default:
-          return ctx.reply(`ℹ️ Gueltige Ranglisten: nachrichten, xp, coins, level\nBeispiel: !rangliste xp`);
+          return ctx.reply(`ℹ️ Gueltige Ranglisten: nachrichten, xp, level\nBeispiel: !rangliste xp`);
       }
       
       if (!rows.length) return ctx.reply('ℹ️ Noch keine Daten vorhanden.');

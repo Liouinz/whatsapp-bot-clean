@@ -14,7 +14,6 @@ const { state } = await import('../src/state.js');
 const events = await import('../src/events.js');
 const { getEvent } = await import('../src/data/events.js');
 const { eventCommands } = await import('../src/commands/events.js');
-const { earnCoins, getWallet, addCoins } = await import('../src/commands/economy.js');
 
 const USER = '491711111111@s.whatsapp.net';
 const cmd = (n) => eventCommands.find((c) => c.name === n || c.aliases?.includes(n));
@@ -28,40 +27,29 @@ function fakeCtx(args, { admin = true } = {}) {
     isAdmin: async () => admin, reply: (t) => { replies.push(t); return Promise.resolve(); }, replies };
 }
 async function reset() {
-  for (const t of ['active_event', 'coins', 'group_settings']) await dbRun(`DELETE FROM ${t}`, []).catch(() => {});
+  for (const t of ['active_event', 'group_settings']) await dbRun(`DELETE FROM ${t}`, []).catch(() => {});
   events.resetEventCache();
 }
 before(async () => { await initDb(); });
 beforeEach(reset);
 
-test('Ohne Event sind die Multiplikatoren 1', () => {
+test('Ohne Event ist der Multiplikator 1', () => {
   assert.equal(events.getEventXpMult(), 1);
-  assert.equal(events.getEventCoinMult(), 1);
 });
 
 test('setEvent aktiviert die globalen Multiplikatoren', async () => {
   await events.setEvent(getEvent('mega'), 2);
   assert.equal(events.getEventXpMult(), 2);
-  assert.equal(events.getEventCoinMult(), 2);
   assert.ok(events.getActiveEvent());
 });
 
 test('Abgelaufenes Event wird lazy deaktiviert', async () => {
-  await events.setEvent(getEvent('coin_rush'), 1);
+  await events.setEvent(getEvent('mega'), 1);
   await dbRun('UPDATE active_event SET expires_at = ? WHERE id = 1', [Date.now() - 1000]);
   events.resetEventCache();
   await events.loadActiveEvent();
-  assert.equal(events.getEventCoinMult(), 1);
+  assert.equal(events.getEventXpMult(), 1);
   assert.equal(events.getActiveEvent(), null);
-});
-
-test('Event-Coin-Multiplikator wirkt in earnCoins', async () => {
-  await addCoins(USER, 0, 'Tester');
-  await events.setEvent(getEvent('coin_rush'), 1);
-  const before = Number((await getWallet(USER)).balance);
-  const earned = await earnCoins(USER, 100, 'Tester');
-  assert.equal(earned, 200, 'Coin-Rush verdoppelt');
-  assert.equal(Number((await getWallet(USER)).balance) - before, 200);
 });
 
 test('loadActiveEvent stellt ein laufendes Event nach „Neustart" wieder her', async () => {
@@ -75,10 +63,10 @@ test('loadActiveEvent stellt ein laufendes Event nach „Neustart" wieder her', 
 
 test('!event start (Admin) aktiviert und kündigt an', async () => {
   await dbRun('INSERT OR IGNORE INTO group_settings (jid, enabled) VALUES (?, 1)', ['9@g.us']);
-  const ctx = fakeCtx(['start', 'coin_rush', '2']);
+  const ctx = fakeCtx(['start', 'double_xp', '2']);
   await cmd('event').run(ctx);
   assert.match(ctx.replies[0], /läuft jetzt/);
-  assert.equal(events.getEventCoinMult(), 2);
+  assert.equal(events.getEventXpMult(), 2);
 });
 
 test('!event start von Nicht-Admin wird abgelehnt', async () => {

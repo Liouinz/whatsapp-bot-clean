@@ -6,7 +6,7 @@ import { logger } from './logger.js';
 // Der eine gueltige Command-Vertrag: ein Objekt mit `name` und `run()`.
 //
 // Die run-Pflicht ist bewusst streng. Hilfsmodule wie commands/games/index.js
-// exportieren Funktionen (addWin, checkGameAnswer) und Maps — und Funktionen
+// koennen Funktionen und Maps exportieren — und Funktionen
 // besitzen ebenfalls ein `.name`-Property. Ohne die run-Pruefung wuerden sie
 // als Commands registriert. `run` ist der reale Dispatch-Vertrag: router.js
 // ruft ausschliesslich `command.run(ctx)` auf.

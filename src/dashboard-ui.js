@@ -817,8 +817,6 @@ function renderStats(){
       box.appendChild(gEl);
     }
     var lists = h('div', { class:'grid cols2', style:'margin-top:12px' });
-    lists.appendChild(topList('💰 Die Reichsten', res.richest, function(r){ return nfmt(r.balance) + ' 🪙'; }));
-    lists.appendChild(topList('🎮 Spiele-Champions', res.champions, function(r){ return nfmt(r.wins) + ' Siege'; }));
     box.appendChild(lists);
   }).catch(function(e){ box.innerHTML = ''; box.appendChild(h('p', { class:'muted' }, [e.message])); });
 }
@@ -1077,7 +1075,7 @@ function renderCommands(){
   content.appendChild(box);
   api('/commands').then(function(res){
     box.innerHTML = '';
-    var groups = { community:'👥 Community', economy:'💰 Coins & Shop', tools:'🧰 Tools', games:'🎮 Spiele & Spaß', admin:'🛡️ Admin' };
+    var groups = { community:'👥 Community', tools:'🧰 Tools', utility:'📊 Ranglisten & Status', admin:'🛡️ Admin' };
     Object.keys(groups).forEach(function(gk){
       var cmds = res.commands.filter(function(c){ return c.group === gk; });
       if (!cmds.length) return;
@@ -1216,8 +1214,6 @@ function renderSettings(){
   content.appendChild(h('h2', { class:'page-title' }, ['Extras']));
   var SYS = [
     { key:'xp', label:'⭐ XP-System', hint:'Level & XP für Nachrichten' },
-    { key:'spiele', label:'🎮 Spiele', hint:'Quiz, Zahlenraten, Galgenmännchen, Millionär …' },
-    { key:'economy', label:'💰 Economy', hint:'Coins, Shop, Wetten, Verträge' },
     { key:'maintenance', label:'🔧 Wartungsmodus', hint:'Sperrt alle Befehle — nur Bot-Owner können weiter bedienen', danger:true }
   ];
   var sysBox = h('div', {});
@@ -1301,7 +1297,7 @@ function renderSettings(){
   ]));
   var wipeSession = h('input', { type:'checkbox' });
   var wipeBtn = h('button', { class:'danger', onclick:function(){
-    var typed = prompt('⚠️ Das löscht ALLE Bot-Daten unwiderruflich: XP, Coins, Einstellungen, Verwarnungen, Custom-Befehle, Statistiken.\\n\\nZum Bestätigen exakt LÖSCHEN eintippen:');
+    var typed = prompt('⚠️ Das löscht ALLE Bot-Daten unwiderruflich: XP, Einstellungen, Verwarnungen, Custom-Befehle, Statistiken.\\n\\nZum Bestätigen exakt LÖSCHEN eintippen:');
     if (typed === null) return;
     if (typed !== 'LÖSCHEN') return toast('⚠️ Abgebrochen — Bestätigung war nicht exakt "LÖSCHEN".');
     wipeBtn.disabled = true;
@@ -1312,7 +1308,7 @@ function renderSettings(){
   } }, ['🗑️ Komplette Datenbank löschen']);
   content.appendChild(h('div', { class:'glass card danger-zone', style:'margin-top:12px' }, [
     h('h3', {}, ['🚨 Danger-Zone']),
-    h('p', { class:'muted sm', style:'margin-bottom:10px' }, ['Setzt den Bot komplett auf Null: alle XP, Coins, Einstellungen, Verwarnungen, eigenen Befehle und Statistiken werden gelöscht. Das lässt sich NICHT rückgängig machen — vorher oben per Export sichern!']),
+    h('p', { class:'muted sm', style:'margin-bottom:10px' }, ['Setzt den Bot komplett auf Null: alle XP, Einstellungen, Verwarnungen, eigenen Befehle und Statistiken werden gelöscht. Das lässt sich NICHT rückgängig machen — vorher oben per Export sichern!']),
     h('label', { class:'row', style:'gap:8px;margin-bottom:10px;cursor:pointer' }, [ wipeSession, h('span', { class:'sm' }, ['Auch WhatsApp-Verknüpfung löschen (danach neu per QR koppeln)']) ]),
     wipeBtn
   ]));

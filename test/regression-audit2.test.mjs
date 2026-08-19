@@ -13,7 +13,6 @@ process.env.DATABASE_KEY = 'unused';
 const { initDb, dbRun, dbRows, getDb } = await import('../src/db.js');
 const { useTursoAuthState } = await import('../src/auth.js');
 const { setGlobalFlag, getGlobalFlag } = await import('../src/global.js');
-const { transferCoins, getWallet, addCoins } = await import('../src/commands/economy.js');
 
 before(async () => { await initDb(); });
 
@@ -159,39 +158,4 @@ test('H-3: der Claim gewinnt genau einmal, auch bei parallelen Ticks', async () 
 
   const results = await Promise.all([claim(), claim(), claim()]);
   assert.equal(results.filter(Boolean).length, 1, 'nur ein Tick darf senden');
-});
-
-// ── H-4: Transfers vernichten keine Coins ───────────────────────────
-
-test('H-4: transferCoins ist atomar — Summe bleibt erhalten', async () => {
-  const from = 'h4-from@s.whatsapp.net';
-  const to = 'h4-to@s.whatsapp.net';
-  await dbRun('DELETE FROM coins', []);
-  const a0 = (await getWallet(from, 'A')).balance;
-  const b0 = (await getWallet(to, 'B')).balance;
-  const total0 = Number(a0) + Number(b0);
-
-  const ok = await transferCoins(from, to, 500, 'A');
-  assert.equal(ok, true);
-
-  const a1 = Number((await getWallet(from)).balance);
-  const b1 = Number((await getWallet(to)).balance);
-  assert.equal(a1, Number(a0) - 500, 'Absender korrekt belastet');
-  assert.equal(b1, Number(b0) + 500, 'Empfaenger korrekt gutgeschrieben');
-  assert.equal(a1 + b1, total0, 'keine Coins vernichtet oder erzeugt');
-});
-
-test('H-4: Transfer ohne Deckung aendert gar nichts', async () => {
-  const from = 'h4b-from@s.whatsapp.net';
-  const to = 'h4b-to@s.whatsapp.net';
-  await dbRun('DELETE FROM coins', []);
-  await getWallet(from, 'A');
-  await getWallet(to, 'B');
-  const a0 = Number((await getWallet(from)).balance);
-  const b0 = Number((await getWallet(to)).balance);
-
-  const ok = await transferCoins(from, to, a0 + 1_000_000, 'A');
-  assert.equal(ok, false, 'Transfer wird abgelehnt');
-  assert.equal(Number((await getWallet(from)).balance), a0, 'Absender unveraendert');
-  assert.equal(Number((await getWallet(to)).balance), b0, 'Empfaenger unveraendert — keine Coins aus dem Nichts');
 });

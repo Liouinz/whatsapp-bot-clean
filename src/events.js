@@ -1,5 +1,5 @@
 // Event-Engine: höchstens EIN aktives globales Event. Der Multiplikator liegt
-// als einzelner Wert im RAM (currentEvent) — Lesen im heißen Pfad (XP/Coins)
+// als einzelner Wert im RAM (currentEvent) — Lesen im heißen Pfad (XP)
 // kostet KEINEN DB-Zugriff. Persistiert in active_event (Einzelzeile) für
 // Restart-Festigkeit; auto-Wochenend-Event über den Scheduler.
 
@@ -17,7 +17,6 @@ function active() {
 }
 
 export function getEventXpMult() { return active()?.xpMult ?? 1; }
-export function getEventCoinMult() { return active()?.coinMult ?? 1; }
 export function getActiveEvent() { return active(); }
 
 export async function setEvent(def, hours) {
@@ -79,7 +78,7 @@ function fmtRemaining(expiresAt) {
 
 export function eventBanner(ev) {
   return `${ev.emoji} *EVENT: ${ev.name}!*\n` +
-    `${ev.xpMult > 1 ? `⭐ ×${ev.xpMult} XP  ` : ''}${ev.coinMult > 1 ? `🪙 ×${ev.coinMult} Coins` : ''}`.trim() +
+    `${ev.xpMult > 1 ? `⭐ ×${ev.xpMult} XP` : ''}`.trim() +
     `\n⏳ Noch ${fmtRemaining(ev.expiresAt)} aktiv!`;
 }
 

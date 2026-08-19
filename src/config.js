@@ -54,25 +54,7 @@ export const config = {
     senderRateWindowMs: 60000,
   },
 
-  economy: {
-    dailyMin: 150,
-    dailyMax: 850,
-    streakBonus: 50,
-    streakBonusMax: 250,
-    giveMin: 10,
-    betMin: 10,
-    betMax: 500000,
-    startBalance: 10000,
-  },
 
-  rob: {
-    cooldownMs: 300000,
-    minTargetBalance: 100,
-    percent: 0.15,
-    capAmount: 5000,
-    successChance: 0.35,
-    failPenaltyPct: 0.5,
-  },
 
   moderation: {
     warnExpiryDays: 7,
@@ -110,7 +92,6 @@ export const config = {
 
   birthdays: {
     hour: 9,
-    coinsGift: 500,
   },
 
   polls: {
@@ -146,21 +127,6 @@ export const config = {
     stuckMs: 220000,
   },
 
-  games: {
-    quizTimeoutMs: 60000,
-    ratenMax: 100,
-    ratenMaxTries: 10,
-    xpRewardQuiz: 25,
-    xpRewardRaten: 20,
-    xpRewardGalgen: 30,
-    xpRewardTtt: 30,
-    coinsRewardQuiz: 40,
-    coinsRewardRaten: 30,
-    coinsRewardGalgen: 40,
-    coinsRewardTtt: 40,
-    tttTimeoutMs: 300000,
-    galgenMaxFails: 6,
-  },
 
   web: {
     sessionTtlMs: 7 * 24 * 60 * 60 * 1000,

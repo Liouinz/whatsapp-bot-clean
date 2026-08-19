@@ -10,10 +10,8 @@ import { listCustom } from './custom.js';
 const GROUP_TITLES = {
   admin: '🛡️ *Admin & Moderation*',
   community: '👥 *Community*',
-  economy: '💰 *Coins & Shop*',
   tools: '🧰 *Tools*',
   utility: '📊 *Ranglisten & Status*',
-  games: '🎮 *Spiele & Spaß*',
 };
 
 function fmtUptime(ms) {
@@ -44,7 +42,7 @@ export const communityCommands = [
       }
 
       const isAdmin = await ctx.isAdmin();
-      const groups = ['community', 'economy', 'tools', 'utility', 'games', ...(isAdmin ? ['admin'] : [])];
+      const groups = ['community', 'tools', 'utility', ...(isAdmin ? ['admin'] : [])];
       let text = `🤖 *${BOT_NAME} — Hilfe*\n_Präfix: ${PREFIX} · z. B. ${PREFIX}ping_\n`;
       for (const g of groups) {
         const cmds = ctx.registry.filter((c) => c.group === g && !c.hidden);
@@ -71,7 +69,7 @@ export const communityCommands = [
       const quota = getAiQuota();
       return ctx.reply(
         `🤖 *${BOT_NAME}*\n` +
-          `Dein Community-Assistent: Moderation, Level-System, Tools & Spiele.\n\n` +
+          `Dein Community-Assistent: Moderation, Level-System und Tools.\n\n` +
           `• ⏱️ Online seit: ${fmtUptime(Date.now() - state.startedAt)}\n` +
           `• 📨 Heute gesendet: ${state.sentToday} Nachrichten\n` +
           `• 🤖 KI-Aufrufe heute: ${quota.used}/${quota.limit}\n\n` +

@@ -11,7 +11,6 @@ import { botIsAdmin } from './permissions.js';
 import { releaseExpiredRaidLocks } from './moderation.js';
 import { congratulateBirthdays } from './commands/birthdays.js';
 import { renderPollResult, closePoll } from './commands/polls.js';
-import { sweepContracts } from './commands/quests.js';
 
 let maybeAutoEvent = async () => {};
 try {
@@ -166,17 +165,13 @@ export async function buildWeeklyReport(groupJid) {
   await flushBuffers();
   const days = lastDays(7);
   const dayKeys = days.map((d) => d.toISOString().slice(0, 10));
-  const [daily, topRows, warnRows, gameRows] = await Promise.all([
+  const [daily, topRows, warnRows] = await Promise.all([
     dbRows(
       `SELECT day, messages FROM group_daily WHERE group_jid = ? AND day >= ?`,
       [groupJid, dayKeys[0]]
     ),
     dbRows('SELECT name, user_jid, messages FROM xp WHERE group_jid = ? ORDER BY messages DESC LIMIT 3', [groupJid]),
     dbRows('SELECT COUNT(*) AS c FROM warnings WHERE group_jid = ? AND created_at >= ?', [groupJid, days[0].getTime()]),
-    dbRows(
-      'SELECT name, user_jid, SUM(wins) AS w FROM game_scores WHERE group_jid = ? GROUP BY user_jid ORDER BY w DESC LIMIT 1',
-      [groupJid]
-    ),
   ]);
 
   const perDay = new Map(daily.map((r) => [r.day, Number(r.messages)]));
@@ -202,10 +197,6 @@ export async function buildWeeklyReport(groupJid) {
   }
   const warnsThisWeek = Number(warnRows[0]?.c || 0);
   text += warnsThisWeek > 0 ? `⚠️ Verwarnungen diese Woche: ${warnsThisWeek}\n` : '✅ Keine Verwarnungen diese Woche — vorbildlich!\n';
-  if (gameRows.length && Number(gameRows[0].w) > 0) {
-    const champ = gameRows[0].name || '+' + String(gameRows[0].user_jid).split('@')[0];
-    text += `🎮 Spiele-Champion: *${champ}* (${gameRows[0].w} Siege)\n`;
-  }
   text += `\n— _${BOT_NAME}_`;
   return text;
 }
@@ -259,7 +250,6 @@ export function startScheduler() {
       await congratulateBirthdays();
       await autoClosePolls();
       await processWeeklyReports();
-      await sweepContracts();
       await maybeAutoEvent();
     } catch (err) {
       logError(err, 'scheduler.tick');

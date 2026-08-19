@@ -13,8 +13,8 @@ Der Bot folgt einer strikt modularisierten Schichtenarchitektur (Single Responsi
   - `guard.js`: Kritischer Session-Schutz (blockiert absolut jeden Schreibzugriff auf `auth_creds` und `auth_keys`).
   - `schema.js`: Tabellendefinitionen und Initialisierungs-Routine (`initDb`).
   - `wipe.js`: Sicheres Zurücksetzen der Datenbank unter strikter Beachtung des Session-Schutzes.
-- **`src/services/`**: Geschäftslogik für Economy, Moderation, Scheduler, AI und Events.
-- **`src/commands/`**: Isolierte Befehlsmodule (Admin, Economy, Spiele, Tools etc.).
+- **Service-Schicht** (flache `src/*.js`): Moderation, Scheduler, AI und Events. Ein `src/services/`-Verzeichnis existiert nicht.
+- **`src/commands/`**: Befehlsmodule (Admin, Community, Tools, Utility).
 
 ---
 

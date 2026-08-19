@@ -10,7 +10,7 @@ Stabiler, sicherer WhatsApp-Community-Bot auf Basis von [`@whiskeysockets/bailey
 - **KI (Gemini) nur als Fallback** für unbekannte Befehle + Fehler-Zusammenfassungen. Pro-User-Cooldown + Tageslimit. Nie auf normale Nachrichten.
 - **Sauberer Fehlerlog** — Baileys-Decrypt-Rauschen wird gefiltert, identische Fehler dedupliziert.
 - **Web-Panel „Control Center"** — Aurora-Glow + Dark Glassmorphism, mobile-first: Live-Status (SSE), Statistik-Charts, QR-Ansicht, Gruppen-Einstellungen, Befehls-Toggles, Moderation, Planung (Schedules/Geburtstage/Umfragen), Logs, Akzentfarben-Wechsler, Config-Export/-Import.
-- **80+ Befehle** — Moderation mit Warn-Eskalation (Warn → Mute → Kick), Anti-Link/-Spam/-Raid, Slowmode, Nachtmodus, Wochenreport, XP/Level, **Economy** (Coins, Daily-Streak, Wetten, Slots, Titel-Shop), Profile, Umfragen, Geburtstage mit Auto-Gratulation, AFK, Custom-Commands/FAQ, geplante Nachrichten, Tools (`!qr`, `!timer`, `!rechne` — ohne `eval`, `!password`, `!zufall`), Spiele (Quiz, Zahlenraten, Galgenmännchen, TicTacToe, Slots, 8ball u. v. m.).
+- **76 Befehle** — Moderation mit Warn-Eskalation (Warn → Mute → Kick), Anti-Link/-Spam/-Raid, Slowmode, Nachtmodus, Wochenreport, XP/Level mit Ranglisten, Profile, Umfragen, Geburtstage mit Auto-Gratulation, AFK, Custom-Commands/FAQ, geplante Nachrichten, Saison-Events und Tools (`!qr`, `!timer`, `!rechne` — ohne `eval`, `!password`, `!zufall`).
 
 ## Struktur
 
@@ -33,7 +33,7 @@ src/
   dashboard.js    Panel-Server (Auth, API, SSE) — Sicherheit s. u.
   dashboard-ui.js Panel-UI (Vanilla HTML/CSS/JS, kein Build-Step)
   commands/       admin, community, levels, profile, afk, custom, schedule,
-                  tools, games, fun, economy, polls, birthdays
+                  tools, fun, polls, birthdays
 ```
 
 ## Render-Env-Variablen
