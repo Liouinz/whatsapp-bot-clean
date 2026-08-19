@@ -12,6 +12,7 @@ const GROUP_TITLES = {
   community: '👥 *Community*',
   economy: '💰 *Coins & Shop*',
   tools: '🧰 *Tools*',
+  utility: '📊 *Ranglisten & Status*',
   games: '🎮 *Spiele & Spaß*',
 };
 
@@ -43,7 +44,7 @@ export const communityCommands = [
       }
 
       const isAdmin = await ctx.isAdmin();
-      const groups = ['community', 'economy', 'tools', 'games', ...(isAdmin ? ['admin'] : [])];
+      const groups = ['community', 'economy', 'tools', 'utility', 'games', ...(isAdmin ? ['admin'] : [])];
       let text = `🤖 *${BOT_NAME} — Hilfe*\n_Präfix: ${PREFIX} · z. B. ${PREFIX}ping_\n`;
       for (const g of groups) {
         const cmds = ctx.registry.filter((c) => c.group === g && !c.hidden);
