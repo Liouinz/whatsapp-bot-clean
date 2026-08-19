@@ -33,8 +33,11 @@ async function processDueMessages() {
   );
   for (const r of rows) {
     try {
-      await dbRun('UPDATE scheduled_messages SET done = 1, done_at = ? WHERE id = ?', [Date.now(), r.id]);
+      // Erst senden, dann abhaken. Umgekehrt war die Nachricht bereits als
+      // erledigt committed, wenn sendText scheiterte (z. B. Bot offline zur
+      // Faelligkeit) — sie ging dauerhaft verloren und wurde nie erneut versucht.
       await sendText(r.chat_jid, String(r.text));
+      await dbRun('UPDATE scheduled_messages SET done = 1, done_at = ? WHERE id = ?', [Date.now(), r.id]);
     } catch (err) {
       logError(err, 'scheduler.processDueMessages');
     }

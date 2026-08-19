@@ -197,14 +197,37 @@ export async function useTursoAuthState(session = 'main') {
 
     flush: flushPendingWrites,
 
-    clearSession: async () => {
-      activeFlushers.delete(flushPendingWrites);
-      keyCache.clear();
-      pendingWrites.clear();
+    // Gibt diese Auth-State-Instanz frei, ohne die Session in der DB zu loeschen.
+    // Muss bei jedem Reconnect fuer die VORHERIGE Instanz aufgerufen werden:
+    // useTursoAuthState() legt pro Aufruf einen neuen Flusher in activeFlushers
+    // an. Ohne Freigabe waechst das Set mit jedem Reconnect, und ein alter,
+    // noch anhaengender Flusher kann nach einem Relink veraltete Keys in die
+    // frisch aufgebaute Session zurueckschreiben.
+    dispose: async ({ flush = true } = {}) => {
       if (writeTimeout) {
         clearTimeout(writeTimeout);
         writeTimeout = null;
       }
+      activeFlushers.delete(flushPendingWrites);
+      // Beim regulaeren Reconnect ausstehende Key-Writes noch wegschreiben,
+      // beim Relink hingegen verwerfen — dort sind sie per Definition stale.
+      if (flush) {
+        await flushPendingWrites().catch((err) =>
+          console.error('⚠️ Auth Dispose Flush Error:', err)
+        );
+      }
+      keyCache.clear();
+      pendingWrites.clear();
+    },
+
+    clearSession: async () => {
+      if (writeTimeout) {
+        clearTimeout(writeTimeout);
+        writeTimeout = null;
+      }
+      activeFlushers.delete(flushPendingWrites);
+      keyCache.clear();
+      pendingWrites.clear();
       await clearAuthSession(session);
     },
   };

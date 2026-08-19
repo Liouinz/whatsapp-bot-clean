@@ -20,6 +20,29 @@ import { loadGlobalSettings } from './global.js';
 let watchdogTimer = null;
 let botSock = null;
 
+// Lifecycle-Zustand des Reconnects. Ohne gehaltenes Timer-Handle konnte ein
+// bereits geplanter Reconnect parallel zu einem manuellen Relink feuern und
+// einen zweiten Socket gegen dieselbe Session oeffnen.
+let reconnectTimer = null;
+let connecting = false;
+let authHandle = null;
+
+function cancelPendingReconnect() {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+}
+
+function scheduleReconnect(delayMs) {
+  cancelPendingReconnect();
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    startWhatsApp().catch((err) => logger.error(err, 'Baileys.reconnect'));
+  }, delayMs);
+  if (reconnectTimer.unref) reconnectTimer.unref();
+}
+
 function startWatchdog(sock) {
   if (watchdogTimer) clearInterval(watchdogTimer);
   watchdogTimer = setInterval(() => {
@@ -114,6 +137,7 @@ function cleanupSocket(sock) {
 
 async function gracefulShutdown(reason) {
   logger.info(`${reason} empfangen — fahre sauber herunter...`, 'Shutdown');
+  cancelPendingReconnect();
   stopWatchdog();
   stopSelfPing();
   stopDbHeartbeat();
@@ -141,8 +165,36 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 async function startWhatsApp() {
+  if (connecting) {
+    logger.warn('startWhatsApp() laeuft bereits — doppelter Aufruf ignoriert.', 'Baileys');
+    return;
+  }
+  connecting = true;
+  try {
+    await startWhatsAppInner();
+  } finally {
+    connecting = false;
+  }
+}
+
+async function startWhatsAppInner() {
   logger.info('Starte Baileys WhatsApp Socket...', 'Baileys');
-  const { state: authState, saveCreds } = await useTursoAuthState('main');
+
+  // Ein bereits geplanter Reconnect darf nicht zusaetzlich feuern, sonst
+  // laufen zwei Baileys-Sockets gegen dieselbe Session.
+  cancelPendingReconnect();
+
+  // Vorherige Auth-State-Instanz freigeben. Ohne das waechst activeFlushers
+  // mit jedem Reconnect, und ein alter Flusher kann spaeter stale Keys in die
+  // neue Session schreiben.
+  if (authHandle) {
+    const previous = authHandle;
+    authHandle = null;
+    await previous.dispose().catch((err) => logger.error(err, 'Baileys.authDispose'));
+  }
+
+  authHandle = await useTursoAuthState('main');
+  const { state: authState, saveCreds } = authHandle;
   const { version, isLatest } = await fetchLatestBaileysVersion();
   logger.info(`Baileys Version v${version.join('.')}, isLatest: ${isLatest}`, 'Baileys');
 
@@ -225,15 +277,30 @@ async function startWhatsApp() {
           return;
         }
 
-        // Code 515 (Restart Required) -> sofort neu verbinden
-        if (statusCode === 515) {
-          logger.info('Code 515 empfangen — führe sofortigen Reconnect durch.', 'Baileys');
-          setTimeout(() => startWhatsApp(), 500);
-          return;
-        }
-
         state.reconnectAttempts = (state.reconnectAttempts || 0) + 1;
         const maxAttempts = config.reconnect?.maxAttempts || 10;
+
+        // Code 515 (Restart Required) -> schnell neu verbinden, aber gezaehlt.
+        // Frueher lief dieser Pfad am Zaehler und am Cap vorbei: haelt die
+        // Ursache an (z. B. beschaedigte Keys), reconnectete der Bot endlos
+        // alle 500 ms gegen Turso und WhatsApp.
+        if (statusCode === 515) {
+          if (state.reconnectAttempts >= maxAttempts) {
+            logger.error(
+              `Code 515 dauerhaft (${state.reconnectAttempts} Versuche). Bot wird gestoppt.`,
+              'Baileys'
+            );
+            state.stopped = true;
+            state.stopReason = 'Code 515 — Reconnect-Limit erreicht';
+            return;
+          }
+          logger.info(
+            `Code 515 empfangen — Reconnect-Versuch ${state.reconnectAttempts}/${maxAttempts}.`,
+            'Baileys'
+          );
+          scheduleReconnect(500);
+          return;
+        }
 
         if (state.reconnectAttempts < maxAttempts) {
           if (statusCode === DisconnectReason.loggedOut) {
@@ -249,9 +316,13 @@ async function startWhatsApp() {
           const jitter = Math.random() * 500;
           const delay = Math.min(maxDelay, baseDelay * Math.pow(2, state.reconnectAttempts - 1)) + jitter;
           logger.info(`Reconnection-Versuch ${state.reconnectAttempts}/${maxAttempts} in ${Math.round(delay)}ms...`, 'Baileys');
-          setTimeout(() => startWhatsApp(), delay);
+          scheduleReconnect(delay);
         } else {
           logger.error('Maximale Reconnect-Versuche erreicht. Bot wird nicht neu verbunden.', 'Baileys');
+          // Ohne dieses Flag blieb der Bot still liegen: das Panel sah weiterhin
+          // einen laufenden, nur "geschlossenen" Bot statt "aufgegeben".
+          state.stopped = true;
+          state.stopReason = `Reconnect-Limit (${maxAttempts}) erreicht`;
         }
       } else if (connection === 'open') {
         state.lastConnectedAt = Date.now();
@@ -343,6 +414,9 @@ async function main() {
 
     setForceRelinkHandler(async () => {
       logger.info('Force-Relink: Auth-Session wird zurückgesetzt...', 'Relink');
+      // Einen bereits geplanten automatischen Reconnect abbrechen, sonst
+      // startet er zusaetzlich zum Relink einen zweiten Socket.
+      cancelPendingReconnect();
       stopWatchdog();
       cleanupSocket(botSock);
       botSock = null;
@@ -350,11 +424,22 @@ async function main() {
       state.currentQr = null;
       state.qrUpdatedAt = 0;
       state.pairingCode = null;
-      
+
+      // Ausstehende Key-Writes der alten Instanz verwerfen (nicht flushen) —
+      // nach dem Zuruecksetzen der Session sind sie stale und wuerden die
+      // frische Session beschaedigen.
+      if (authHandle) {
+        const previous = authHandle;
+        authHandle = null;
+        await previous.dispose({ flush: false }).catch((err) => logger.error(err, 'Relink.dispose'));
+      }
+
       await clearAuthSession('main');
-      
+
       state.reconnectAttempts = 0;
-      setTimeout(() => startWhatsApp(), 1500);
+      state.stopped = false;
+      state.stopReason = null;
+      scheduleReconnect(1500);
     });
 
     startSelfPing();

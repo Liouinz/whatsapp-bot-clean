@@ -17,6 +17,13 @@ const parseNumbers = (raw) =>
 export const OWNER_NUMBERS = parseNumbers(process.env.OWNER_NUMBERS);
 export const BOT_OWNER_NUMBERS = parseNumbers(process.env.BOT_OWNER_NUMBERS);
 
+// Der Preflight prueft nur, ob die Variable gesetzt ist — nicht, ob nach dem
+// Strippen aller Nicht-Ziffern etwas uebrig bleibt. Ein Tippfehler ergab damit
+// eine leere Owner-Liste, und niemand kam mehr an die Owner-Befehle.
+export function hasValidOwners() {
+  return OWNER_NUMBERS.length > 0 || BOT_OWNER_NUMBERS.length > 0;
+}
+
 export const config = {
   botName: BOT_NAME,
   ownerNumbers: OWNER_NUMBERS,

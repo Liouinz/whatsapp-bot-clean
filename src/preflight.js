@@ -2,7 +2,7 @@
 // Ziel: Konfigurationsfehler in Klartext melden statt kryptisch zu crashen.
 
 import { createClient } from '@libsql/client';
-import { REQUIRED_ENV } from './config.js';
+import { REQUIRED_ENV, hasValidOwners } from './config.js';
 
 const RETRIES = 3;
 const RETRY_BASE_MS = 2000;
@@ -22,6 +22,18 @@ export async function preflight() {
     fail(
       `Fehlende Umgebungsvariable(n): ${missing.join(', ')}. ` +
         'Bitte im Render-Dashboard unter "Environment" setzen (ohne Anführungszeichen/Leerzeichen).'
+    );
+  }
+
+  // Gesetzt-sein allein genuegt nicht: parseNumbers() entfernt alle Nicht-
+  // Ziffern, sodass ein Vertipper eine leere Owner-Liste ergibt — der Bot
+  // startet dann normal, aber niemand kann je einen Owner-Befehl ausfuehren.
+  if (!hasValidOwners()) {
+    fail(
+      'OWNER_NUMBERS/BOT_OWNER_NUMBERS enthalten keine gueltige Telefonnummer. ' +
+        'Erwartet werden Ziffern im internationalen Format, per Komma getrennt ' +
+        '(z. B. "491701234567,491709876543"). Ohne gueltige Nummer waere kein ' +
+        'Owner-Befehl mehr ausfuehrbar.'
     );
   }
 
