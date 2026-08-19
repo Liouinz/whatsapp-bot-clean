@@ -8,8 +8,6 @@ import { dbRun, dbRows } from './db.js';
 // Standardwerte: Systeme sind AN, Wartung ist AUS.
 const DEFAULTS = {
   system_xp: true,
-  system_spiele: true,
-  system_economy: true,
   maintenance: false,
 };
 
@@ -41,6 +39,4 @@ export function resetGlobalCache() { cache.clear(); }
 
 // Bequeme Kurzabfragen für den Router (heißer Pfad).
 export const xpEnabled = () => getGlobalFlag('system_xp');
-export const gamesEnabled = () => getGlobalFlag('system_spiele');
-export const economyEnabled = () => getGlobalFlag('system_economy');
 export const maintenanceOn = () => getGlobalFlag('maintenance');

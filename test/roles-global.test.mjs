@@ -84,8 +84,6 @@ test('Gruppen-Admin ist im DM nur USER (kein Gruppenkontext)', async () => {
 
 test('Standardwerte: Systeme AN, Wartung AUS', () => {
   assert.equal(global.xpEnabled(), true);
-  assert.equal(global.gamesEnabled(), true);
-  assert.equal(global.economyEnabled(), true);
   assert.equal(global.maintenanceOn(), false);
 });
 
@@ -97,12 +95,12 @@ test('setGlobalFlag wirkt sofort im RAM', async () => {
 });
 
 test('Flags überleben Neustart (persistiert + loadGlobalSettings)', async () => {
-  await global.setGlobalFlag('system_economy', false);
+  await global.setGlobalFlag('system_xp', false);
   await global.setGlobalFlag('maintenance', true);
   global.resetGlobalCache();
-  assert.equal(global.economyEnabled(), true, 'nach Cache-Reset erst wieder Default');
+  assert.equal(global.xpEnabled(), true, 'nach Cache-Reset erst wieder Default');
   await global.loadGlobalSettings();
-  assert.equal(global.economyEnabled(), false, 'aus DB wiederhergestellt');
+  assert.equal(global.xpEnabled(), false, 'aus DB wiederhergestellt');
   assert.equal(global.maintenanceOn(), true);
 });
 

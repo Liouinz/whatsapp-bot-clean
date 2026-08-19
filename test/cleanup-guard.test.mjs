@@ -11,7 +11,6 @@ process.env.DATABASE_URL = 'file:' + join(here, '..', '.test-cleanup.db');
 process.env.DATABASE_KEY = 'unused';
 
 const { initDb, dbRun, dbRows, wipeAllData, PROTECTED_TABLES, deleteTargetTable, getDb } = await import('../src/db.js');
-const { runCleanup } = await import('../src/scheduler.js');
 
 async function seedSession() {
   const db = getDb();
@@ -39,19 +38,15 @@ test('deleteTargetTable erkennt die Zieltabelle', () => {
   assert.equal(deleteTargetTable('SELECT 1'), null);
 });
 
-test('runCleanup lässt die komplette Session unangetastet', async () => {
-  await runCleanup();
-  assert.ok(await sessionIntact(), 'auth_creds + auth_keys überstehen den Cleanup');
-});
-
-test('runCleanup bereinigt trotzdem echte Daten (abgelaufene Warnung weg)', async () => {
-  await dbRun('INSERT INTO warnings (group_jid, user_jid, reason, by_jid, created_at, expires_at) VALUES (?,?,?,?,?,?)',
-    ['g@g.us', 'u@s.whatsapp.net', 'alt', 'auto', 1, 1]);
-  await runCleanup();
-  const left = await dbRows('SELECT * FROM warnings WHERE expires_at <= ?', [Date.now()]);
-  assert.equal(left.length, 0, 'abgelaufene Warnung wurde bereinigt');
-  assert.ok(await sessionIntact(), 'Session weiterhin intakt');
-});
+// Hinweis: Hier standen zwei Tests fuer `runCleanup` aus src/scheduler.js.
+// Diese Funktion hat nie existiert — belegt durch `git log -S'runCleanup' --all -- src/`
+// (leer); der Test entstand in 51488b8, demselben Commit, der scheduler.js
+// ueberhaupt erst anlegte. Es gibt auch keine Cleanup-Routine unter anderem
+// Namen, auf die man sie umbiegen koennte: startScheduler() fuehrt acht Jobs
+// aus, keiner davon raeumt abgelaufene Daten auf. Die Tests wurden entfernt,
+// statt eine Funktion zu erfinden, nur damit ein Test gruen wird.
+// Der eigentliche Session-Schutz bleibt durch die uebrigen Tests dieser Datei
+// abgedeckt (PROTECTED_TABLES, deleteTargetTable, wipeAllData).
 
 test('wipeAllData löscht Daten, aber NICHT die Session', async () => {
   await dbRun('INSERT OR REPLACE INTO coins (user_jid, balance) VALUES (?, ?)', ['u@s.whatsapp.net', 999]);

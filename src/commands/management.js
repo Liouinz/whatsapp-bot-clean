@@ -20,7 +20,7 @@ const fmtUptime = (ms) => {
 };
 
 const GROUP_SYSTEMS = { antilink: 'antilink', antispam: 'antispam', welcome: 'welcome', levelup: 'levelup_announce' };
-const GLOBAL_SYSTEMS = { xp: 'system_xp', spiele: 'system_spiele', economy: 'system_economy' };
+const GLOBAL_SYSTEMS = { xp: 'system_xp' };
 
 export function isActivationCommand(text) {
   const t = String(text || '').trim().toLowerCase().replace(/^[!\/]+/, '').replace(/\s+/g, ' ').trim();
@@ -79,7 +79,7 @@ export const managementCommands = [
           `• Server-RAM frei: ${fmtBytes(os.freemem())} / ${fmtBytes(os.totalmem())}\n` +
           `• CPU-Last (1 Min): ${load.toFixed(2)} · Kerne: ${os.cpus().length}\n` +
           `• Sende-Queue: ${queueLength()} · Gruppen: ${groups[0]?.c ?? '?'}\n` +
-          `• Systeme: XP ${onoff(getGlobalFlag('system_xp'))} · Spiele ${onoff(getGlobalFlag('system_spiele'))} · Economy ${onoff(getGlobalFlag('system_economy'))}\n` +
+          `• Systeme: XP ${onoff(getGlobalFlag('system_xp'))}\n` +
           (wartung ? '⚠️ *WARTUNGSMODUS AKTIV* — nur Bot-Owner können Befehle nutzen.' : '')
       );
     },
@@ -103,7 +103,7 @@ export const managementCommands = [
   {
     name: 'global',
     group: 'admin',
-    desc: 'Globale Systeme schalten (xp/spiele/economy/antilink/antispam/welcome/levelup)',
+    desc: 'Globale Systeme schalten (xp/antilink/antispam/welcome/levelup)',
     usage: '!global <system> an|aus',
     botOwnerOnly: true,
     async run(ctx) {
@@ -114,7 +114,7 @@ export const managementCommands = [
         return ctx.reply(
           `ℹ️ Nutzung: \`${PREFIX}global <system> an|aus\`\n` +
             `Systeme: ${known.join(', ')}\n` +
-            `Aktuell global: xp ${onoff(getGlobalFlag('system_xp'))} · spiele ${onoff(getGlobalFlag('system_spiele'))} · economy ${onoff(getGlobalFlag('system_economy'))}`
+            `Aktuell global: xp ${onoff(getGlobalFlag('system_xp'))}`
         );
       }
       if (GLOBAL_SYSTEMS[sys]) {

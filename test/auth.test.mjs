@@ -9,14 +9,21 @@ process.env.OWNER_NUMBERS = '491700000000';
 process.env.DATABASE_URL = 'file:' + join(here, '..', '.test-auth.db');
 process.env.DATABASE_KEY = 'unused';
 
-const { initDb, dbRun } = await import('../src/db.js');
+const { initDb, getDb } = await import('../src/db.js');
 const { useTursoAuthState } = await import('../src/auth.js');
 
 const SESSION = 'testsession';
 before(async () => { await initDb(); });
 beforeEach(async () => {
-  await dbRun('DELETE FROM auth_creds WHERE id = ?', [SESSION]).catch(() => {});
-  await dbRun('DELETE FROM auth_keys WHERE id LIKE ?', [`${SESSION}:%`]).catch(() => {});
+  // WICHTIG: nicht ueber dbRun aufraeumen. Der Session-Guard blockt jeden
+  // Schreibzugriff auf auth_creds/auth_keys, und ein `.catch(() => {})`
+  // verschluckte den Fehler — die Isolation lief dadurch komplett ins Leere.
+  // Folge: auf einer warmen Test-DB ueberlebten die Zeilen des vorherigen
+  // Laufs und der Reconnect-Test wurde aus dem falschen Grund gruen.
+  // Der Testcode greift deshalb bewusst direkt auf den Client zu.
+  const db = getDb();
+  await db.execute({ sql: 'DELETE FROM auth_creds WHERE id = ?', args: [SESSION] });
+  await db.execute({ sql: 'DELETE FROM auth_keys WHERE id LIKE ?', args: [`${SESSION}:%`] });
 });
 
 test('Signal-Keys überleben einen "Reconnect" (frischer Store) mit Buffer-Integrität', async () => {

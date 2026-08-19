@@ -484,7 +484,9 @@ export const adminCommands = [
     group: 'admin',
     desc: 'Startet den Bot neu (2 Min Cooldown)',
     usage: '!neustart',
-    adminOnly: true,
+    // Bot-weit wirksam: ein Neustart trifft ALLE Gruppen. Als adminOnly konnte
+    // der Admin einer beliebigen Gruppe den Bot fuer alle anderen abschiessen.
+    botOwnerOnly: true,
     async run(ctx) {
       const now = Date.now();
       const wait = config.web.restartCooldownMs - (now - lastRestartAt);
@@ -504,7 +506,9 @@ export const adminCommands = [
     group: 'admin',
     desc: 'Listet alle Gruppen, in denen der Bot ist',
     usage: '!gruppen',
-    adminOnly: true,
+    // Gibt Namen und Groesse ALLER Gruppen aus — das ist bot-weite Information
+    // und darf nicht am Admin einer einzelnen Gruppe haengen.
+    botOwnerOnly: true,
     async run(ctx) {
       try {
         const all = await state.sock.groupFetchAllParticipating();
@@ -539,31 +543,4 @@ export const adminCommands = [
       );
     },
   },
-  {
-    name: 'cheat',
-    aliases: ['givemoney', 'coinsgeben'],
-    group: 'admin',
-    desc: 'Gibt dir selbst Coins (Nur für den Owner)',
-    usage: '!cheat [menge]',
-    ownerOnly: true,
-    groupOnly: false,
-    async run(ctx) {
-      let amount = parseInt(ctx.args.find((a) => /^\d+$/.test(a)) || '', 10);
-      if (!amount || isNaN(amount)) amount = 1000000;
-
-      const target = ctx.sender;
-
-      await dbRun(
-        `INSERT INTO coins (user_jid, balance, total_earned) VALUES (?, ?, ?)
-         ON CONFLICT(user_jid) DO UPDATE SET 
-           balance = balance + excluded.balance,
-           total_earned = total_earned + excluded.balance`,
-        [target, amount, amount]
-      );
-
-      return ctx.reply(
-        `💰 Cheat erfolgreich aktiviert!\n• Gutgeschrieben: +${amount.toLocaleString('de-DE')} Coins`
-      );
-    },
-  },  
 ];

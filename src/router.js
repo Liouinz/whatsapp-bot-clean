@@ -4,25 +4,21 @@
 
 import { PREFIX, config } from './config.js';
 import { state, rolloverDay, bumpActivity } from './state.js';
-import { dbRows, dbRun, bufferXp, bufferStat, bufferGroupMessage, xpToLevel } from './db.js';
+import { dbRows, dbRowsStrict, dbRun, bufferXp, bufferStat, bufferGroupMessage, xpToLevel } from './db.js';
 import { replyTo, sendText, wasSentByBot } from './queue.js';
 import { logError } from './logger.js';
 import {
   senderCandidates, senderJid, isOwner, isBotOwner, isUserAdmin, getGroupMeta, resolveLid, getRoleLevel,
 } from './permissions.js';
-import { xpEnabled, gamesEnabled, economyEnabled, maintenanceOn } from './global.js';
+import { xpEnabled, maintenanceOn } from './global.js';
 import { checkAutoMod, getGroupSettings } from './moderation.js';
 import { getAfk, clearAfk, fmtSince } from './commands/afk.js';
 import { resolveCustom, listCustom } from './commands/custom.js';
-import { checkGameAnswer } from './commands/games/index.js';
-import { checkMillionaireAnswer } from './commands/millionaer.js';
 import { unknownCommandReply, askAi } from './ai.js';
 import TTLCache from './core/cache/ttlCache.js';
 
 import { isActivationCommand, activateGroup } from './commands/management.js';
-import { getBoostMult } from './boosts.js';
 import { getEventXpMult } from './events.js';
-import { activeTitle } from './commands/economy.js';
 
 // ── Registry + Live-Toggles ────────────────────────────────────────
 
@@ -46,8 +42,18 @@ export function setRegistry(commands) {
 const toggles = new Map(); // name → enabled (live schaltbar übers Panel)
 
 export async function loadToggles() {
+  // Nicht vorab leeren: dbRows glaettet DB-Fehler zu [], wodurch ein Ausfall
+  // beim Laden jeden vom Owner deaktivierten Befehl still wieder aktiviert
+  // haette (isCommandEnabled faellt ohne Eintrag auf `true` zurueck).
+  let rows;
+  try {
+    rows = await dbRowsStrict('SELECT name, enabled FROM command_toggles', []);
+  } catch (err) {
+    logError(err, 'router.loadToggles');
+    return;
+  }
   toggles.clear();
-  for (const r of await dbRows('SELECT name, enabled FROM command_toggles', [])) {
+  for (const r of rows) {
     toggles.set(r.name, Number(r.enabled) === 1);
   }
 }
@@ -162,9 +168,8 @@ async function grantXp(chatJid, userJid, name, settings) {
   const baseAmount =
     config.xp.perMessageMin +
     Math.floor(Math.random() * (config.xp.perMessageMax - config.xp.perMessageMin + 1));
-  // Aktiven XP-Boost (Item) + globalen Event-Multiplikator anwenden.
-  // getBoostMult cached im RAM, getEventXpMult ist ein reiner RAM-Wert.
-  const amount = Math.round(baseAmount * (await getBoostMult(user, 'xp').catch(() => 1)) * getEventXpMult());
+  // Globalen Event-Multiplikator anwenden (reiner RAM-Wert).
+  const amount = Math.round(baseAmount * getEventXpMult());
   const before = xpTotals.get(key);
   const after = before + amount;
   xpTotals.set(key, after);
@@ -178,8 +183,7 @@ async function grantXp(chatJid, userJid, name, settings) {
        ON CONFLICT(group_jid, user_jid) DO UPDATE SET level = excluded.level`,
       [chatJid, user, newLevel]
     ).catch(() => {});
-    const title = await activeTitle(user).catch(() => null);
-    const who = title ? `${name || 'Jemand'} ${title}` : name || 'Jemand';
+    const who = name || 'Jemand';
     await sendText(chatJid, `🎉 *Level-Up!* ${who} ist jetzt *Level ${newLevel}* ⭐`);
   }
 }
@@ -414,15 +418,10 @@ async function handleMessage(msg) {
     await notifyAfkMentions(msg, chatJid);
   }
 
-  // 4) Kein Befehl → Spiele-Antworten prüfen, XP vergeben, fertig (keine KI!)
+  // 4) Kein Befehl → XP vergeben, fertig (keine KI!)
   if (!text.startsWith(PREFIX)) {
-    if (isGroup) {
-      const ctxLite = makeCtx(msg, chatJid, isGroup, senderIds, sender, senderName, text, []);
-      // Millionär-Antwort (A/B/C/D) zuerst — greift nur bei laufendem Spiel (RAM-Check)
-      const consumed = (await checkMillionaireAnswer(ctxLite)) || (await checkGameAnswer(ctxLite));
-      if (!consumed && text.length >= config.xp.minMessageLength) {
-        await grantXp(chatJid, sender, senderName, settings);
-      }
+    if (isGroup && text.length >= config.xp.minMessageLength) {
+      await grantXp(chatJid, sender, senderName, settings);
     }
     return;
   }
@@ -461,15 +460,6 @@ async function handleMessage(msg) {
     }
     if (command.adminOnly && !(await ctx.isAdmin())) {
       return ctx.reply('⛔ Dafür brauchst du Admin-Rechte in dieser Gruppe.');
-    }
-    // Global abschaltbare Systeme (Bot-Owner umgeht die Sperre)
-    if (!ctx.isBotOwner) {
-      if (command.group === 'games' && !gamesEnabled()) {
-        return ctx.reply('🎮 Das Spiele-System ist gerade global deaktiviert.');
-      }
-      if (command.group === 'economy' && !economyEnabled()) {
-        return ctx.reply('💰 Das Economy-System ist gerade global deaktiviert.');
-      }
     }
     rolloverDay();
     state.commandsToday++;

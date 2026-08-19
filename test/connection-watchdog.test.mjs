@@ -21,7 +21,7 @@ test('Baileys-WebSocketClient bietet weiterhin die Liveness-Getter', async () =>
 
 test('index.js verdrahtet den Watchdog vollständig', () => {
   // Watchdog wird gestartet und beim Shutdown wieder gestoppt.
-  assert.match(indexSrc, /startWatchdog\(\)/, 'Watchdog wird in main() gestartet');
+  assert.match(indexSrc, /startWatchdog\(sock\)/, 'Watchdog wird mit dem Socket gestartet');
   assert.match(indexSrc, /clearInterval\(watchdogTimer\)/, 'Watchdog wird beim Shutdown gestoppt');
   // Zombie-Erkennung stützt sich auf den ws.isOpen-Getter.
   assert.match(indexSrc, /ws\.isOpen/, 'Zombie-Check nutzt ws.isOpen');
