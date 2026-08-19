@@ -6,7 +6,11 @@ export const DATA_TABLES = [
   'prestige', 'scheduled_messages', 'polls', 'poll_votes', 'birthdays',
   'custom_commands', 'faq', 'rob_cooldown', 'active_event', 'global_settings',
   'group_daily', 'player_contracts', 'quests', 'command_toggles', 'levels',
-  'blocked_words', 'antiraid', 'audit_log', 'ai_usage', 'members', 'nightmode', 'allowed_chats'
+  'blocked_words', 'antiraid', 'audit_log', 'ai_usage', 'members', 'nightmode', 'allowed_chats',
+  // Diese fuenf wurden von initDb() angelegt, fehlten aber in DATA_TABLES und
+  // ueberlebten damit jeden "Alle Daten loeschen"-Wipe aus dem Panel — inklusive
+  // der personenbezogenen Profildaten in user_profiles.
+  'user_profiles', 'groups', 'daily_stats', 'millionaire_games', 'millionaire_daily'
 ];
 
 export const PROTECTED_TABLES_SET = new Set(['auth_creds', 'auth_keys']);

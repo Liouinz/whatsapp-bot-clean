@@ -3,6 +3,62 @@ import path from 'path';
 import { pathToFileURL } from 'url';
 import { logger } from './logger.js';
 
+// Der eine gueltige Command-Vertrag: ein Objekt mit `name` und `run()`.
+//
+// Die run-Pflicht ist bewusst streng. Hilfsmodule wie commands/games/index.js
+// exportieren Funktionen (addWin, checkGameAnswer) und Maps — und Funktionen
+// besitzen ebenfalls ein `.name`-Property. Ohne die run-Pruefung wuerden sie
+// als Commands registriert. `run` ist der reale Dispatch-Vertrag: router.js
+// ruft ausschliesslich `command.run(ctx)` auf.
+function isCommand(value) {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    typeof value.name === 'string' &&
+    value.name.length > 0 &&
+    typeof value.run === 'function'
+  );
+}
+
+// Akzeptiert alle drei im Projekt vorkommenden Export-Formen:
+//   export const xCommands = [ {...}, {...} ]   (Sammeldatei)
+//   export default { name, run }                (Einzeldatei)
+//   export const xCommand = { name, run }       (Einzeldatei, bare named)
+// Doppelte Nennung desselben Objekts (z. B. in Array *und* einzeln) zaehlt einmal.
+function collectCommands(mod) {
+  const found = [];
+  const seen = new Set();
+
+  const take = (value) => {
+    if (isCommand(value) && !seen.has(value)) {
+      seen.add(value);
+      found.push(value);
+    }
+  };
+
+  for (const value of Object.values(mod)) {
+    if (Array.isArray(value)) value.forEach(take);
+    else take(value);
+  }
+  return found;
+}
+
+// Namen und Aliase teilen sich einen Schluesselraum. Kollisionen entschied
+// bisher stillschweigend die readdirSync-Reihenfolge — also Dateisystem-Zufall.
+// Jetzt werden sie einheitlich und laut gemeldet.
+function register(commands, key, cmd, kind, file) {
+  const existing = commands.get(key);
+  if (existing && existing !== cmd) {
+    logger.warn(
+      `Command-Kollision: ${kind} "${key}" aus ${file} ueberschreibt "${existing.name}". ` +
+        'Die Ladereihenfolge entscheidet — bitte eindeutig benennen.',
+      'Loader'
+    );
+  }
+  commands.set(key, cmd);
+}
+
 export async function loadCommands(dir = path.join(process.cwd(), 'src', 'commands')) {
   const commands = new Map();
   if (!fs.existsSync(dir)) return commands;
@@ -10,57 +66,37 @@ export async function loadCommands(dir = path.join(process.cwd(), 'src', 'comman
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
+
     if (entry.isDirectory()) {
       const subCommands = await loadCommands(fullPath);
-      for (const [k, v] of subCommands) {
-        commands.set(k, v);
+      for (const [key, cmd] of subCommands) {
+        register(commands, key, cmd, 'Schluessel', `${entry.name}/`);
       }
-    } else if (entry.isFile() && (entry.name.endsWith('.js') || entry.name.endsWith('.mjs'))) {
-      try {
-        const fileUrl = pathToFileURL(fullPath).href;
-        const mod = await import(fileUrl);
-        
-        let cmds = [];
-        
-        const commandArrays = Object.values(mod).filter(
-          (v) => Array.isArray(v) && v.length > 0 && v[0]?.name
-        );
+      continue;
+    }
 
-        for (const arr of commandArrays) {
-          cmds = cmds.concat(arr);
-        }
-        
-        if (mod.default) {
-          if (Array.isArray(mod.default)) {
-            if (!commandArrays.includes(mod.default)) {
-              cmds = cmds.concat(mod.default);
-            }
-          } else if (mod.default.name) {
-            cmds.push(mod.default);
-          }
-        }
+    if (!entry.isFile() || !(entry.name.endsWith('.js') || entry.name.endsWith('.mjs'))) continue;
 
-        for (const c of cmds) {
-          if (c && c.name) {
-            c.category = c.category || c.group || path.basename(dir);
-            c.desc = c.desc || c.description || 'Keine Beschreibung';
-            c.usage = c.usage || `!${c.name}`;
+    try {
+      const mod = await import(pathToFileURL(fullPath).href);
 
-            if (commands.has(c.name)) {
-              logger.warn(`Doppelter Command-Name überschrieben: ${c.name}`, 'Loader');
-            }
-            commands.set(c.name, c);
-            if (c.aliases) {
-              for (const a of c.aliases) {
-                commands.set(a, c);
-              }
-            }
-          }
+      for (const c of collectCommands(mod)) {
+        c.category = c.category || c.group || path.basename(dir);
+        // `group` steuert die Kill-Switches in router.js und die Gruppierung im
+        // !hilfe-Menue. Fehlte es, lief der Befehl ungated und unsichtbar.
+        c.group = c.group || c.category;
+        c.desc = c.desc || c.description || 'Keine Beschreibung';
+        c.usage = c.usage || `!${c.name}`;
+
+        register(commands, c.name, c, 'Name', entry.name);
+        for (const alias of c.aliases || []) {
+          register(commands, alias, c, 'Alias', entry.name);
         }
-      } catch (err) {
-        logger.error(err, `loader:${entry.name}`);
       }
+    } catch (err) {
+      logger.error(err, `loader:${entry.name}`);
     }
   }
+
   return commands;
 }

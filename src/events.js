@@ -57,7 +57,16 @@ export function resetEventCache() { currentEvent = null; lastAutoKey = ''; }
 export async function announceToGroups(text) {
   try {
     const rows = await dbRows('SELECT jid FROM group_settings WHERE enabled = 1', []);
-    for (const r of rows) await sendText(r.jid, text);
+    // Pro Gruppe abfangen: ohne inneres try/catch brach eine einzige
+    // fehlschlagende Gruppe (z. B. Bot dort entfernt) den gesamten Broadcast
+    // ab, und alle nachfolgenden Gruppen gingen leer aus.
+    for (const r of rows) {
+      try {
+        await sendText(r.jid, text);
+      } catch (err) {
+        logError(err, `events.announce:${r.jid}`);
+      }
+    }
   } catch (err) {
     logError(err, 'events.announce');
   }

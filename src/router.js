@@ -14,38 +14,25 @@ import { xpEnabled, gamesEnabled, economyEnabled, maintenanceOn } from './global
 import { checkAutoMod, getGroupSettings } from './moderation.js';
 import { getAfk, clearAfk, fmtSince } from './commands/afk.js';
 import { resolveCustom, listCustom } from './commands/custom.js';
-import { checkGameAnswer } from './commands/games.js';
+import { checkGameAnswer } from './commands/games/index.js';
 import { checkMillionaireAnswer } from './commands/millionaer.js';
 import { unknownCommandReply, askAi } from './ai.js';
 import TTLCache from './core/cache/ttlCache.js';
 
-import { adminCommands } from './commands/admin.js';
-import { communityCommands } from './commands/community.js';
-import { levelCommands } from './commands/levels.js';
-import { afkCommands } from './commands/afk.js';
-import { customCommands } from './commands/custom.js';
-import { scheduleCommands } from './commands/schedule.js';
-import { toolCommands } from './commands/tools.js';
-import { gameCommands } from './commands/games.js';
-import { millionaireCommands } from './commands/millionaer.js';
-import { economyCommands } from './commands/economy.js';
-import { itemCommands } from './commands/items.js';
-import { questCommands } from './commands/quests.js';
-import { progressionCommands } from './commands/progression.js';
-import { eventCommands } from './commands/events.js';
-import { managementCommands, isActivationCommand, activateGroup } from './commands/management.js';
+import { isActivationCommand, activateGroup } from './commands/management.js';
 import { getBoostMult } from './boosts.js';
 import { getEventXpMult } from './events.js';
-import { funCommands } from './commands/fun.js';
-import { pollCommands } from './commands/polls.js';
-import { birthdayCommands } from './commands/birthdays.js';
-import { profileCommands } from './commands/profile.js';
-import { wordleCommands } from './commands/wordle.js';
 import { activeTitle } from './commands/economy.js';
 
 // ── Registry + Live-Toggles ────────────────────────────────────────
 
+// Einzige Registrierungsquelle ist loader.js (Autodiscovery), aufgerufen aus
+// index.js beim Start. Die frueher hier stehende statische Initial-Registry war
+// tot (setRegistry ueberschrieb sie sofort) und ausserdem unvollstaendig — sie
+// kannte rankings.js, tools/test.js und utility/status.js nicht.
 export let registry = [];
+
+const byName = new Map();
 
 export function setRegistry(commands) {
   registry = commands;
@@ -54,36 +41,6 @@ export function setRegistry(commands) {
     byName.set(cmd.name, cmd);
     for (const alias of cmd.aliases || []) byName.set(alias, cmd);
   }
-}
-
-// Initial-Registry (wird von loader.js ueberschrieben)
-registry = [
-  ...communityCommands,
-  ...profileCommands,
-  ...levelCommands,
-  ...afkCommands,
-  ...birthdayCommands,
-  ...pollCommands,
-  ...customCommands,
-  ...economyCommands,
-  ...scheduleCommands,
-  ...toolCommands,
-  ...gameCommands,
-  ...millionaireCommands,
-  ...wordleCommands,
-  ...funCommands,
-  ...itemCommands,
-  ...questCommands,
-  ...progressionCommands,
-  ...eventCommands,
-  ...managementCommands,
-  ...adminCommands,
-];
-
-const byName = new Map();
-for (const cmd of registry) {
-  byName.set(cmd.name, cmd);
-  for (const alias of cmd.aliases || []) byName.set(alias, cmd);
 }
 
 const toggles = new Map(); // name → enabled (live schaltbar übers Panel)

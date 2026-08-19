@@ -86,7 +86,28 @@ function countCall() {
   ).catch(() => {});
 }
 
+// Circuit-Breaker fuer das Primaermodell. Dessen Erreichbarkeit wurde bisher
+// nur einmal beim Start geprueft. Faellt es spaeter aus (abgekuendigt, Quota
+// erschoepft), lief jede komplexe Anfrage weiterhin zuerst dagegen, scheiterte,
+// und wurde erst danach auf das Fallback-Modell wiederholt — dauerhaft zwei
+// API-Calls pro Frage, bis der Prozess neu startete.
+const PRIMARY_COOLDOWN_MS = 10 * 60 * 1000;
+let primaryDownUntil = 0;
+
+function primaryAvailable() {
+  return Date.now() >= primaryDownUntil;
+}
+
+function markPrimaryDown(reason) {
+  primaryDownUntil = Date.now() + PRIMARY_COOLDOWN_MS;
+  logger.warn(
+    `Primaermodell ${MODEL_PRIMARY} fuer ${PRIMARY_COOLDOWN_MS / 60000} Min uebersprungen (${reason}).`,
+    'ai'
+  );
+}
+
 function pickModel(question) {
+  if (!primaryAvailable()) return MODEL_FALLBACK;
   const t = String(question || '').trim();
   const complex =
     t.length > 120 ||
@@ -131,6 +152,7 @@ async function callGemini(prompt, model = MODEL_PRIMARY, attempt = 0) {
     if (!res.ok) {
       if ((res.status === 404 || res.status >= 500) && model === MODEL_PRIMARY) {
         logger.warn(`Gemini Modell ${model} lieferte HTTP ${res.status}. Fallback auf ${MODEL_FALLBACK}`, 'ai');
+        markPrimaryDown(`HTTP ${res.status}`);
         return callGemini(prompt, MODEL_FALLBACK, attempt);
       }
       return null;
@@ -147,6 +169,7 @@ async function callGemini(prompt, model = MODEL_PRIMARY, attempt = 0) {
   } catch (err) {
     if (err?.name === 'AbortError') return null;
     if (model === MODEL_PRIMARY) {
+      markPrimaryDown(err?.message || 'Netzwerkfehler');
       return callGemini(prompt, MODEL_FALLBACK, attempt);
     }
     return null;

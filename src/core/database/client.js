@@ -1,5 +1,6 @@
 import { createClient } from '@libsql/client';
 import { config } from '../../config.js';
+import { logger } from '../../logger.js';
 import { assertNotAuthWrite } from './guard.js';
 
 let client = null;
@@ -38,7 +39,11 @@ export async function dbRows(sql, args = []) {
     const res = await dbRun(sql, args);
     return res.rows || [];
   } catch (err) {
-    console.error(`❌ [DB ERROR] dbRows Query fehlgeschlagen: ${err.message}`, { sql, args });
+    // Ueber den logger statt console.error: nur so landet der Fehler im
+    // Ring-Puffer und damit in der Log-Ansicht des Panels. Zuvor degradierte
+    // ein DB-Ausfall unsichtbar, weil dbRows() ihn zu einem leeren Ergebnis
+    // glaettete und die Meldung nirgends auftauchte.
+    logger.error(`dbRows fehlgeschlagen: ${err.message} — SQL: ${sql}`, 'DB');
     return [];
   }
 }

@@ -18,8 +18,14 @@ let flushTimer = null;
 
 export function bufferXp(chatJid, userJid, amount, name) {
   const key = `${chatJid}:${userJid}`;
-  const entry = xpBuffer.get(key) || { chatJid, userJid, amount: 0, name };
+  const entry = xpBuffer.get(key) || { chatJid, userJid, amount: 0, messages: 0, name };
   entry.amount += amount;
+  // Mitzaehlen, wie viele Nachrichten in diesen Puffereintrag eingeflossen sind.
+  // Das Flush-SQL schrieb frueher hart `messages + 1`, unabhaengig davon, wie
+  // oft bufferXp fuer denselben Nutzer aufgerufen wurde — die Nachrichten-
+  // statistik und der Wochenreport zaehlten dadurch zu niedrig.
+  entry.messages += 1;
+  entry.name = name || entry.name;
   xpBuffer.set(key, entry);
 }
 
@@ -54,9 +60,9 @@ export async function flushBuffers() {
       key,
       entry,
       promise: db.execute({
-        sql: `INSERT INTO xp (group_jid, user_jid, xp, messages, name) VALUES (?, ?, ?, 1, ?)
-              ON CONFLICT(group_jid, user_jid) DO UPDATE SET xp = xp + excluded.xp, messages = messages + 1, name = excluded.name`,
-        args: [entry.chatJid, entry.userJid, entry.amount, entry.name],
+        sql: `INSERT INTO xp (group_jid, user_jid, xp, messages, name) VALUES (?, ?, ?, ?, ?)
+              ON CONFLICT(group_jid, user_jid) DO UPDATE SET xp = xp + excluded.xp, messages = messages + excluded.messages, name = excluded.name`,
+        args: [entry.chatJid, entry.userJid, entry.amount, entry.messages || 1, entry.name],
       }),
     });
   }
