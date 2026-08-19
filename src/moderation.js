@@ -24,7 +24,20 @@ const SETTINGS_CACHE_MS = 30_000;
 export async function getGroupSettings(groupJid) {
   const cached = settingsCache.get(groupJid);
   if (cached && Date.now() - cached.at < SETTINGS_CACHE_MS) return cached.row;
-  const rows = await dbRows('SELECT * FROM group_settings WHERE jid = ?', [groupJid]);
+  // dbRowsStrict statt dbRows: dbRows glaettet jeden DB-Fehler zu [], und das
+  // ist hier nicht von "Gruppe noch nicht eingerichtet" unterscheidbar. Folge
+  // war, dass ein DB-Ausfall jede aktivierte Gruppe als deaktiviert erscheinen
+  // liess — der Bot verstummte ueberall und der Zustand wurde 30 s gecacht.
+  let rows;
+  try {
+    rows = await dbRowsStrict('SELECT * FROM group_settings WHERE jid = ?', [groupJid]);
+  } catch (err) {
+    logError(err, 'moderation.getGroupSettings');
+    // Letzten bekannten guten Stand weiterverwenden, statt auf "deaktiviert"
+    // zu verfallen. Ohne Cache-Eintrag lieber gar nichts cachen.
+    if (cached) return cached.row;
+    throw err;
+  }
   let row = rows[0];
   if (!row) {
     await dbRun('INSERT OR IGNORE INTO group_settings (jid, enabled) VALUES (?, 0)', [groupJid]).catch(() => {});
@@ -59,7 +72,17 @@ const WORDS_CACHE_MS = 5 * 60_000;
 async function getBlockedWords(groupJid) {
   const cached = wordsCache.get(groupJid);
   if (cached && Date.now() - cached.at < WORDS_CACHE_MS) return cached.words;
-  const rows = await dbRows('SELECT word FROM blocked_words WHERE group_jid = ?', [groupJid]);
+  // Auch hier waere [] bei DB-Ausfall gleichbedeutend mit "keine verbotenen
+  // Woerter" — der Wortfilter haette sich stillschweigend abgeschaltet, und
+  // das fuer bis zu 5 Minuten (Cache). Im Fehlerfall lieber den letzten
+  // bekannten Stand behalten.
+  let rows;
+  try {
+    rows = await dbRowsStrict('SELECT word FROM blocked_words WHERE group_jid = ?', [groupJid]);
+  } catch (err) {
+    logError(err, 'moderation.getBlockedWords');
+    return cached ? cached.words : [];
+  }
   const words = rows.map((r) => {
     const raw = String(r.word).toLowerCase();
     const norm = normalizeForFilter(raw);

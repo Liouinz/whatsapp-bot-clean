@@ -88,13 +88,16 @@ Insgesamt 127 Befehle, 255 Schlüssel inklusive Aliase.
 
 ## Tests
 
-`npm ci && npm test`. Stand: 78 pass / 4 fail. Die 4 Fehlschläge sind
-vorbestehende **Test**-Defekte, keine Code-Fehler:
+`npm ci && npm test`. Stand: **90 pass / 0 fail**.
 
-- 2× `runCleanup` — `test/cleanup-guard.test.mjs` importiert eine Funktion, die
-  es in `src/scheduler.js` nie gab.
-- `connection-watchdog` — Regex erwartet `startWatchdog()`, der Code ruft
-  korrekt `startWatchdog(sock)`.
-- `items` „Kaufen" — Test nimmt Startguthaben 100 an, `config.js` setzt 10000.
+Wichtig: **Test-DBs vor dem Lauf löschen** (`rm -f .test-*.db*`). Die Dateien
+sind gitignored, und ein warmer Zustand hat früher einen echten Fehler verdeckt
+— der Auth-Reconnect-Test wurde grün, weil Zeilen aus dem vorherigen Lauf
+überlebten. Ein Lauf auf kalter DB ist der einzige aussagekräftige.
+
+`test/regression-audit2.test.mjs` deckt die im zweiten Audit bestätigten
+Befunde ab (Wochenreport-Dedupe, Auth-Instanz-Stilllegung, Key-Persistenz,
+Scheduler-Claim, atomare Transfers). 8 dieser Tests schlagen gegen den Stand
+vor den Fixes fehl — das ist geprüft, nicht angenommen.
 
 Kein ESLint, kein Prettier, keine CI.

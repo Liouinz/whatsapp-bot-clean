@@ -484,7 +484,9 @@ export const adminCommands = [
     group: 'admin',
     desc: 'Startet den Bot neu (2 Min Cooldown)',
     usage: '!neustart',
-    adminOnly: true,
+    // Bot-weit wirksam: ein Neustart trifft ALLE Gruppen. Als adminOnly konnte
+    // der Admin einer beliebigen Gruppe den Bot fuer alle anderen abschiessen.
+    botOwnerOnly: true,
     async run(ctx) {
       const now = Date.now();
       const wait = config.web.restartCooldownMs - (now - lastRestartAt);
@@ -504,7 +506,9 @@ export const adminCommands = [
     group: 'admin',
     desc: 'Listet alle Gruppen, in denen der Bot ist',
     usage: '!gruppen',
-    adminOnly: true,
+    // Gibt Namen und Groesse ALLER Gruppen aus — das ist bot-weite Information
+    // und darf nicht am Admin einer einzelnen Gruppe haengen.
+    botOwnerOnly: true,
     async run(ctx) {
       try {
         const all = await state.sock.groupFetchAllParticipating();

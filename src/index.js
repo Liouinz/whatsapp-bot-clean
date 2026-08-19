@@ -11,6 +11,7 @@ import { initDb, startFlushLoop, stopFlushLoop, flushBuffers } from './db.js';
 import { useTursoAuthState, flushAuth, clearAuthSession } from './auth.js';
 import { handleUpsert, loadToggles, setRegistry } from './router.js';
 import { loadMutes, handleJoin } from './moderation.js';
+import { invalidateGroupMeta } from './permissions.js';
 import { initAiUsage } from './ai.js';
 import { state, setForceRelinkHandler, setPairingCodeRequester } from './state.js';
 import { preflight } from './preflight.js';
@@ -146,6 +147,11 @@ async function gracefulShutdown(reason) {
   try {
     await flushAuth();
     await flushBuffers();
+    // Socket-Listener abraeumen und WS schliessen, damit kein spaetes Event
+    // waehrend des Herunterfahrens noch Schreibvorgaenge anstoesst.
+    cleanupSocket(botSock);
+    botSock = null;
+    state.sock = null;
   } catch (err) {
     logger.error(err, 'Shutdown');
   }
@@ -157,24 +163,44 @@ process.on('uncaughtException', async (err) => {
   await gracefulShutdown('uncaughtException');
 });
 
-process.on('unhandledRejection', (reason) => {
+process.on('unhandledRejection', async (reason) => {
+  // Baileys' sock.ev.process() verwirft die Handler-Promise, deshalb landen
+  // Fehler aus der connection.update-Logik genau hier. Nur zu loggen liess den
+  // Bot in einem halb aufgebauten Zustand liegen, ohne dass ein Supervisor
+  // etwas davon mitbekam — gleiche Behandlung wie uncaughtException.
   logger.error(reason, 'unhandledRejection');
+  await gracefulShutdown('unhandledRejection');
 });
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
+// Alle Lifecycle-Operationen (Verbinden, Relink) laufen strikt nacheinander.
+// Ein blosses `connecting`-Flag reichte nicht: forceRelink() las es nie, konnte
+// also mitten in einen laufenden Verbindungsaufbau hineinlaufen, dort
+// authHandle/botSock unter den Fuessen wegziehen und clearAuthSession()
+// ausfuehren, waehrend die neue Instanz gerade gelesen/geschrieben hat.
+let lifecycleChain = Promise.resolve();
+
+function serializeLifecycle(label, fn) {
+  const next = lifecycleChain.then(fn, fn);
+  lifecycleChain = next.catch((err) => logger.error(err, `Lifecycle.${label}`));
+  return lifecycleChain;
+}
+
 async function startWhatsApp() {
-  if (connecting) {
-    logger.warn('startWhatsApp() laeuft bereits — doppelter Aufruf ignoriert.', 'Baileys');
-    return;
-  }
-  connecting = true;
-  try {
-    await startWhatsAppInner();
-  } finally {
-    connecting = false;
-  }
+  return serializeLifecycle('connect', async () => {
+    if (connecting) {
+      logger.warn('startWhatsApp() laeuft bereits — doppelter Aufruf ignoriert.', 'Baileys');
+      return;
+    }
+    connecting = true;
+    try {
+      await startWhatsAppInner();
+    } finally {
+      connecting = false;
+    }
+  });
 }
 
 async function startWhatsAppInner() {
@@ -213,6 +239,12 @@ async function startWhatsAppInner() {
     version,
     auth: authState,
     logger: baileysLogger,
+    // Expliziter WebSocket-Keep-Alive: Baileys sendet in diesem Intervall
+    // Pings und schliesst die Verbindung, wenn die Gegenseite ausbleibt —
+    // erst dadurch wird eine tote Leitung zu einem close-Event und loest den
+    // Reconnect aus. Der Watchdog protokolliert Zombies ohnehin nur.
+    // config.keepAlive.wsKeepAliveMs existierte, wurde aber nie uebergeben.
+    keepAliveIntervalMs: config.keepAlive.wsKeepAliveMs,
   });
 
   botSock = sock;
@@ -360,6 +392,11 @@ async function startWhatsAppInner() {
       const { id, participants, action } = events['group-participants.update'];
       if (['add', 'remove', 'promote', 'demote'].includes(action)) {
         try {
+          // Jede dieser Aenderungen macht die gecachten Gruppen-Metadaten
+          // ungueltig. Ohne Invalidierung behielt ein soeben degradierter
+          // Admin seine Rechte bis zum Cache-Ablauf (60 s) und konnte in
+          // dieser Zeit weiter kicken/bannen/muten.
+          invalidateGroupMeta(id);
           if (action === 'add') await handleJoin(id, participants);
         } catch (err) {
           logger.error(err, 'GroupParticipantsUpdate');
@@ -412,7 +449,7 @@ async function main() {
       }
     });
 
-    setForceRelinkHandler(async () => {
+    setForceRelinkHandler(async () => serializeLifecycle('relink', async () => {
       logger.info('Force-Relink: Auth-Session wird zurückgesetzt...', 'Relink');
       // Einen bereits geplanten automatischen Reconnect abbrechen, sonst
       // startet er zusaetzlich zum Relink einen zweiten Socket.
@@ -440,7 +477,7 @@ async function main() {
       state.stopped = false;
       state.stopReason = null;
       scheduleReconnect(1500);
-    });
+    }));
 
     startSelfPing();
     startDbHeartbeat();

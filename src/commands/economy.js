@@ -2,7 +2,7 @@
 // Glücksspiel (!wette, dynamisches !slots mit logarithmischer Einsatz-Skalierung, verbessertes !roulette) und Bestenliste (!reichste).
 
 import { PREFIX, config } from '../config.js';
-import { dbRun, dbRows, todayKey } from '../db.js';
+import { dbRun, dbRows, todayKey, getDb } from '../db.js';
 import { resolveLid } from '../permissions.js';
 import { audit } from '../moderation.js';
 import { getBoostMult } from '../boosts.js';
@@ -44,6 +44,43 @@ export async function addCoins(userJid, amount, name = '') {
     'UPDATE coins SET balance = balance + ?, total_earned = total_earned + ? WHERE user_jid = ?',
     [safeAmount, safeAmount, user]
   );
+}
+
+// Atomarer Transfer in EINER Transaktion. Vorher waren Abbuchung und
+// Gutschrift zwei getrennte dbRun-Aufrufe: brach der zweite ab, war beim
+// Absender abgebucht und beim Empfaenger nie gutgeschrieben — die Coins waren
+// vernichtet. Ein blosser db.batch reicht nicht, weil ein UPDATE ohne
+// getroffene Zeile kein Fehler ist und die Gutschrift trotzdem committen
+// wuerde; deshalb rowsAffected pruefen und andernfalls zurueckrollen.
+export async function transferCoins(fromJid, toJid, amount, fromName = '') {
+  const from = resolveLid(fromJid);
+  const to = resolveLid(toJid);
+  const safeAmount = Math.floor(Number(amount) || 0);
+  if (safeAmount <= 0 || from === to) return false;
+
+  await getWallet(from, fromName);
+  await getWallet(to);
+
+  const tx = await getDb().transaction('write');
+  try {
+    const debit = await tx.execute({
+      sql: 'UPDATE coins SET balance = balance - ? WHERE user_jid = ? AND balance >= ?',
+      args: [safeAmount, from, safeAmount],
+    });
+    if (Number(debit.rowsAffected || 0) === 0) {
+      await tx.rollback();
+      return false;
+    }
+    await tx.execute({
+      sql: 'UPDATE coins SET balance = balance + ?, total_earned = total_earned + ? WHERE user_jid = ?',
+      args: [safeAmount, safeAmount, to],
+    });
+    await tx.commit();
+    return true;
+  } catch (err) {
+    await tx.rollback().catch(() => {});
+    throw err;
+  }
 }
 
 export async function takeCoins(userJid, amount) {
@@ -226,13 +263,15 @@ export const economyCommands = [
         return ctx.reply(`ℹ️ Nutzung: \`!geben @person <betrag>\` (mindestens ${config.economy.giveMin})`);
       }
 
-      const ok = await takeCoins(ctx.sender, amount);
+      // Abbuchung und Gutschrift muessen zusammen gelingen. Vorher waren es
+      // zwei getrennte dbRun-Aufrufe: brach der zweite ab, war beim Absender
+      // abgebucht und beim Empfaenger nie gutgeschrieben — die Coins waren weg.
+      const ok = await transferCoins(ctx.sender, target, amount, ctx.senderName);
       if (!ok) {
         const wallet = await getWallet(ctx.sender, ctx.senderName);
         return ctx.reply(`⚠️ Dafür reicht dein Guthaben nicht (du hast ${fmtCoins(wallet.balance)}).`);
       }
 
-      await addCoins(target, amount);
       await audit('coins-transfer', ctx.chatJid, target, ctx.sender, `${amount}`);
 
       return ctx.reply(

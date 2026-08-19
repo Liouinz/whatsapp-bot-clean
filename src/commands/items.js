@@ -138,7 +138,14 @@ export const itemCommands = [
         const w = await getWallet(ctx.sender, ctx.senderName);
         return ctx.reply(`⚠️ Das kostet ${fmtCoins(total)} — du hast nur ${fmtCoins(w.balance)}.`);
       }
-      await addToInventory(user, it.id, it.category === 'titel' ? 1 : qty);
+      // Schlaegt die Einbuchung fehl, waeren die Coins sonst weg und der
+      // Gegenwert nie geliefert. Abbuchung zuruecknehmen und abbrechen.
+      try {
+        await addToInventory(user, it.id, it.category === 'titel' ? 1 : qty);
+      } catch (err) {
+        await addCoins(ctx.sender, total, ctx.senderName).catch(() => {});
+        throw err;
+      }
       if (it.category === 'titel') {
         await dbRun(
           `INSERT INTO user_titles (user_jid, title) VALUES (?, ?)

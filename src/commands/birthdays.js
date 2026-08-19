@@ -44,7 +44,10 @@ export async function congratulateBirthdays() {
   );
   for (const r of rows) {
     try {
-      await dbRun('UPDATE birthdays SET last_congratulated = ? WHERE user_jid = ?', [today, r.user_jid]);
+      // Geschenk und Glueckwunsch ZUERST, Marker danach. Umgekehrt galt der
+      // Geburtstag bereits als erledigt, wenn addCoins oder sendText
+      // scheiterte — Coins und Gratulation waren dann dauerhaft verloren,
+      // weil die WHERE-Klausel den Datensatz fuer den Rest des Tages ausschloss.
       await addCoins(r.user_jid, config.birthdays.coinsGift, r.name || '');
       if (r.group_jid) {
         const tag = `@${String(r.user_jid).split('@')[0]}`;
@@ -55,6 +58,7 @@ export async function congratulateBirthdays() {
           [r.user_jid]
         );
       }
+      await dbRun('UPDATE birthdays SET last_congratulated = ? WHERE user_jid = ?', [today, r.user_jid]);
     } catch (err) {
       logError(err, 'birthdays');
     }

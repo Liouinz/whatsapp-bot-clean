@@ -19,7 +19,7 @@ export async function initDb() {
   const db = getDb();
   
   const schemas = [
-    `CREATE TABLE IF NOT EXISTS group_settings (jid TEXT PRIMARY KEY, enabled INTEGER DEFAULT 0, antilink INTEGER DEFAULT 0, antispam INTEGER DEFAULT 0, blacklist_on INTEGER DEFAULT 1, welcome INTEGER DEFAULT 0, rules TEXT, welcome_text TEXT, levelup_announce INTEGER DEFAULT 1, slowmode_secs INTEGER DEFAULT 0, weekly_report INTEGER DEFAULT 0)`,
+    `CREATE TABLE IF NOT EXISTS group_settings (jid TEXT PRIMARY KEY, enabled INTEGER DEFAULT 0, antilink INTEGER DEFAULT 0, antispam INTEGER DEFAULT 0, blacklist_on INTEGER DEFAULT 1, welcome INTEGER DEFAULT 0, rules TEXT, welcome_text TEXT, levelup_announce INTEGER DEFAULT 1, slowmode_secs INTEGER DEFAULT 0, weekly_report INTEGER DEFAULT 0, last_weekly_report TEXT)`,
     `CREATE TABLE IF NOT EXISTS coins (user_jid TEXT PRIMARY KEY, name TEXT, balance INTEGER DEFAULT 0, last_daily TEXT, streak INTEGER DEFAULT 0, total_earned INTEGER DEFAULT 0, total_gambled INTEGER DEFAULT 0)`,
     `CREATE TABLE IF NOT EXISTS xp (group_jid TEXT, user_jid TEXT, xp INTEGER DEFAULT 0, messages INTEGER DEFAULT 0, name TEXT, PRIMARY KEY (group_jid, user_jid))`,
     `CREATE TABLE IF NOT EXISTS levels (group_jid TEXT, user_jid TEXT, level INTEGER DEFAULT 0, PRIMARY KEY (group_jid, user_jid))`,
@@ -76,6 +76,12 @@ export async function initDb() {
   const migrations = [
     { table: 'birthdays', column: 'last_congratulated', ddl: 'TEXT' },
     { table: 'player_contracts', column: 'done', ddl: 'INTEGER DEFAULT 0' },
+    // Wochenreport-Marker pro Gruppe (Tagesschluessel). Ersetzt den frueheren
+    // globalen Flag, der ueber setGlobalFlag lief und dort zu `true` gecastet
+    // wurde - der Dedupe-Guard konnte deshalb nie greifen.
+    { table: 'group_settings', column: 'last_weekly_report', ddl: 'TEXT' },
+    // Zaehler fuer fehlgeschlagene Sendeversuche geplanter Nachrichten.
+    { table: 'scheduled_messages', column: 'attempts', ddl: 'INTEGER DEFAULT 0' },
   ];
   for (const { table, column, ddl } of migrations) {
     try {
@@ -94,6 +100,22 @@ export async function initDb() {
     const defined = schemas.some((s) => s.toLowerCase().includes(`create table if not exists ${table}`));
     if (!defined) {
       throw new Error(`[SCHEMA ERROR] Tabelle '${table}' aus DATA_TABLES ist in initDb() nicht definiert!`);
+    }
+  }
+
+  // Gegenrichtung: jede tatsaechlich angelegte Tabelle muss entweder in
+  // DATA_TABLES stehen (wird gewiped) oder ausdruecklich geschuetzt sein.
+  // Ohne diese Pruefung war es genau umgekehrt moeglich, eine neue Tabelle
+  // anzulegen und in DATA_TABLES zu vergessen — sie ueberlebte dann jeden
+  // "Alle Daten loeschen"-Wipe unbemerkt, so geschehen mit user_profiles.
+  const known = new Set([...DATA_TABLES, ...PROTECTED_TABLES_SET]);
+  for (const sql of schemas) {
+    const m = /create table if not exists\s+(\w+)/i.exec(sql);
+    if (m && !known.has(m[1])) {
+      throw new Error(
+        `[SCHEMA ERROR] Tabelle '${m[1]}' wird angelegt, fehlt aber in DATA_TABLES ` +
+          '(und ist nicht geschuetzt) — sie wuerde jeden Wipe ueberleben.'
+      );
     }
   }
 }

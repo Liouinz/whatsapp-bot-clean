@@ -5,7 +5,12 @@ import { initAuthCreds, BufferJSON, proto } from '@whiskeysockets/baileys';
 import { getDb } from './db.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const FLUSH_DELAY_MS = 800;
+// Sammelfenster fuer Signal-Key-Writes. Bewusst kurz: seit keys.set() auf den
+// tatsaechlichen Write wartet (sonst gingen Keys bei einem harten Kill
+// verloren), liegt dieses Fenster als Latenz im Entschluesselungspfad JEDER
+// Nachricht. 150 ms buendeln den Schreib-Burst eines Nachrichten-Decrypts
+// weiterhin zu einem einzigen Batch, kosten aber nicht mehr die vollen 800 ms.
+const FLUSH_DELAY_MS = 150;
 
 async function withRetry(fn, tries = 4) {
   let lastErr;
@@ -21,6 +26,22 @@ async function withRetry(fn, tries = 4) {
 }
 
 const activeFlushers = new Set();
+
+// Alle auth_creds-Schreibvorgaenge laufen durch EINE modulweite Promise-Kette.
+// Baileys' sock.ev.process() verwirft die Promise seines Handlers
+// (event-buffer.js: `const listener = (map) => { handler(map); }`), sodass ein
+// spaeter creds.update eines bereits geschlossenen Sockets nebenlaeufig
+// weiterlaufen kann. Ohne Serialisierung konnte dessen INSERT OR REPLACE die
+// frischen Credentials der neuen Instanz ueberschreiben — beide schreiben
+// dieselbe Zeile id='main' ohne Versionspruefung.
+let credsWriteChain = Promise.resolve();
+
+function serializeCredsWrite(fn) {
+  const next = credsWriteChain.then(fn, fn);
+  // Kette darf nicht durch einen Fehler abreissen.
+  credsWriteChain = next.catch(() => {});
+  return next;
+}
 
 export async function flushAuth() {
   for (const flusher of activeFlushers) {
@@ -44,13 +65,17 @@ export async function useTursoAuthState(session = 'main') {
   const pendingWrites = new Map();
   let writeTimeout = null;
   let flushing = false;
+  // Sobald die Instanz stillgelegt ist, darf sie NICHTS mehr schreiben —
+  // weder Credentials noch Signal-Keys. Ohne dieses Flag konnte ein spaetes
+  // Event einer alten Socket-Generation die neue Session ueberschreiben.
+  let closed = false;
 
   const flushPendingWrites = async () => {
     if (writeTimeout) {
       clearTimeout(writeTimeout);
       writeTimeout = null;
     }
-    if (pendingWrites.size === 0 || flushing) return;
+    if (closed || pendingWrites.size === 0 || flushing) return;
     flushing = true;
 
     const currentWrites = new Map(pendingWrites);
@@ -85,13 +110,27 @@ export async function useTursoAuthState(session = 'main') {
 
   activeFlushers.add(flushPendingWrites);
 
+  // Sammelt Writes kurz und liefert eine Promise, die erst nach dem
+  // tatsaechlichen DB-Schreibvorgang aufloest. keys.set() wartet darauf —
+  // vorher kehrte es sofort zurueck, obwohl noch nichts persistiert war, und
+  // ein harter Kill innerhalb des Fensters verlor Signal-Keys (Bad MAC).
+  let flushWaiters = [];
   const scheduleFlush = () => {
+    if (closed) return Promise.resolve();
+    const waiter = new Promise((resolve) => flushWaiters.push(resolve));
     if (!writeTimeout) {
-      writeTimeout = setTimeout(() => {
+      writeTimeout = setTimeout(async () => {
         writeTimeout = null;
-        flushPendingWrites();
+        const waiters = flushWaiters;
+        flushWaiters = [];
+        try {
+          await flushPendingWrites();
+        } finally {
+          for (const resolve of waiters) resolve();
+        }
       }, FLUSH_DELAY_MS);
     }
+    return waiter;
   };
 
   const readKeys = async (fullIds) => {
@@ -183,15 +222,26 @@ export async function useTursoAuthState(session = 'main') {
             }
           }
 
-          scheduleFlush();
+          // Auf den tatsaechlichen DB-Write warten. Baileys' SignalKeyStore-
+          // Vertrag ist, dass die Daten nach dem Aufloesen persistent sind;
+          // vorher kehrte set() sofort zurueck und ein Kill innerhalb von
+          // FLUSH_DELAY_MS verlor den Key stillschweigend.
+          await scheduleFlush();
         },
       },
     },
 
     saveCreds: async () => {
-      await exec({
-        sql: 'INSERT OR REPLACE INTO auth_creds (id, data) VALUES (?, ?)',
-        args: [session, JSON.stringify(creds, BufferJSON.replacer)],
+      // Doppelt abgesichert: die stillgelegte Instanz schreibt gar nicht mehr,
+      // und alle Writes laufen serialisiert, damit die Reihenfolge zwischen
+      // Socket-Generationen feststeht.
+      if (closed) return;
+      await serializeCredsWrite(async () => {
+        if (closed) return;
+        await exec({
+          sql: 'INSERT OR REPLACE INTO auth_creds (id, data) VALUES (?, ?)',
+          args: [session, JSON.stringify(creds, BufferJSON.replacer)],
+        });
       });
     },
 
@@ -204,23 +254,30 @@ export async function useTursoAuthState(session = 'main') {
     // noch anhaengender Flusher kann nach einem Relink veraltete Keys in die
     // frisch aufgebaute Session zurueckschreiben.
     dispose: async ({ flush = true } = {}) => {
-      if (writeTimeout) {
-        clearTimeout(writeTimeout);
-        writeTimeout = null;
-      }
-      activeFlushers.delete(flushPendingWrites);
-      // Beim regulaeren Reconnect ausstehende Key-Writes noch wegschreiben,
-      // beim Relink hingegen verwerfen — dort sind sie per Definition stale.
+      // Reihenfolge ist wichtig: erst den ausstehenden Flush erledigen, DANN
+      // stilllegen — sonst wuerde der closed-Guard den letzten legitimen
+      // Schreibvorgang dieser Instanz verschlucken.
       if (flush) {
         await flushPendingWrites().catch((err) =>
           console.error('⚠️ Auth Dispose Flush Error:', err)
         );
       }
+      closed = true;
+      for (const resolve of flushWaiters) resolve();
+      flushWaiters = [];
+      if (writeTimeout) {
+        clearTimeout(writeTimeout);
+        writeTimeout = null;
+      }
+      activeFlushers.delete(flushPendingWrites);
       keyCache.clear();
       pendingWrites.clear();
     },
 
     clearSession: async () => {
+      closed = true;
+      for (const resolve of flushWaiters) resolve();
+      flushWaiters = [];
       if (writeTimeout) {
         clearTimeout(writeTimeout);
         writeTimeout = null;

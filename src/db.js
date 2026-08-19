@@ -59,6 +59,11 @@ export async function flushBuffers() {
       type: 'xp',
       key,
       entry,
+      // Wert-Snapshot: bufferXp mutiert den Eintrag in-place, ein spaeterer
+      // Objektvergleich waere also immer wahr und wuerde waehrend des Flushes
+      // eingetroffene Inkremente stillschweigend verwerfen.
+      amountAtFlush: entry.amount,
+      messagesAtFlush: entry.messages,
       promise: db.execute({
         sql: `INSERT INTO xp (group_jid, user_jid, xp, messages, name) VALUES (?, ?, ?, ?, ?)
               ON CONFLICT(group_jid, user_jid) DO UPDATE SET xp = xp + excluded.xp, messages = messages + excluded.messages, name = excluded.name`,
@@ -74,6 +79,7 @@ export async function flushBuffers() {
       type: 'stat',
       key,
       entry,
+      countAtFlush: entry.count,
       promise: db.execute({
         sql: `INSERT INTO daily_stats (day, messages, commands, ai_calls) VALUES (?, ?, ?, ?)
               ON CONFLICT(day) DO UPDATE SET ${col} = ${col} + excluded.${col}`,
@@ -92,6 +98,7 @@ export async function flushBuffers() {
       type: 'groupMsg',
       key,
       entry,
+      countAtFlush: entry.count,
       promise: db.execute({
         sql: `INSERT INTO group_daily (group_jid, day, messages) VALUES (?, ?, ?)
               ON CONFLICT(group_jid, day) DO UPDATE SET messages = messages + excluded.messages`,
@@ -109,13 +116,15 @@ export async function flushBuffers() {
     if (res.status === 'fulfilled') {
       if (task.type === 'xp') {
         const current = xpBuffer.get(task.key);
-        if (current && current.amount === task.entry.amount) xpBuffer.delete(task.key);
+        if (current && current.amount === task.amountAtFlush && current.messages === task.messagesAtFlush) {
+          xpBuffer.delete(task.key);
+        }
       } else if (task.type === 'stat') {
         const current = statBuffer.get(task.key);
-        if (current && current.count === task.entry.count) statBuffer.delete(task.key);
+        if (current && current.count === task.countAtFlush) statBuffer.delete(task.key);
       } else if (task.type === 'groupMsg') {
         const current = groupMsgBuffer.get(task.key);
-        if (current && current.count === task.entry.count) groupMsgBuffer.delete(task.key);
+        if (current && current.count === task.countAtFlush) groupMsgBuffer.delete(task.key);
       }
     } else {
       logger.warn(`Flush-Teilfehler (${task.type}): ${res.reason?.message}`, 'db.flush');

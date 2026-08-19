@@ -56,9 +56,12 @@ function rewardText(reward) {
 async function grantReward(row, contract) {
   const user = row.user_jid;
   const r = contract.reward;
-  if (r.coins) await addCoins(user, r.coins, row.name).catch(() => {});
+  // Fehler hier waren vorher komplett unsichtbar (.catch(() => {})): eine
+  // nicht ausgezahlte Belohnung fiel niemandem auf, weil der Vertrag bereits
+  // als erledigt markiert war.
+  if (r.coins) await addCoins(user, r.coins, row.name).catch((e) => logError(e, 'quests.grantReward.coins'));
   if (r.xp && row.chat_jid) bufferXp(row.chat_jid, user, r.xp, row.name);
-  if (r.item) await addToInventory(user, r.item, 1).catch(() => {});
+  if (r.item) await addToInventory(user, r.item, 1).catch((e) => logError(e, 'quests.grantReward.item'));
 }
 
 async function activeRows(user) {

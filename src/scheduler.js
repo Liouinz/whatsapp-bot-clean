@@ -12,7 +12,6 @@ import { releaseExpiredRaidLocks } from './moderation.js';
 import { congratulateBirthdays } from './commands/birthdays.js';
 import { renderPollResult, closePoll } from './commands/polls.js';
 import { sweepContracts } from './commands/quests.js';
-import { getGlobalFlag, setGlobalFlag } from './global.js';
 
 let maybeAutoEvent = async () => {};
 try {
@@ -25,21 +24,56 @@ try {
 }
 
 let tickTimer = null;
+let isTicking = false;
+
+// Nach so vielen erfolglosen Sendeversuchen wird eine geplante Nachricht
+// endgueltig aufgegeben statt endlos wiederholt.
+const MAX_SEND_ATTEMPTS = 5;
 
 async function processDueMessages() {
   const rows = await dbRows(
-    'SELECT id, chat_jid, text FROM scheduled_messages WHERE done = 0 AND send_at <= ? LIMIT 10',
+    'SELECT id, chat_jid, text, attempts FROM scheduled_messages WHERE done = 0 AND send_at <= ? LIMIT 10',
     [Date.now()]
   );
   for (const r of rows) {
+    // Die Zeile ATOMAR beanspruchen, bevor gesendet wird. Zwei Varianten waren
+    // vorher falsch: "erst abhaken, dann senden" verlor die Nachricht bei einem
+    // Sendefehler endgueltig; "erst senden, dann abhaken" sendete sie erneut,
+    // sobald das UPDATE scheiterte oder zwei Ticks sich ueberlappten.
+    // Der Claim gewinnt genau einmal — auch bei parallelen Ticks.
+    let claimed = false;
     try {
-      // Erst senden, dann abhaken. Umgekehrt war die Nachricht bereits als
-      // erledigt committed, wenn sendText scheiterte (z. B. Bot offline zur
-      // Faelligkeit) — sie ging dauerhaft verloren und wurde nie erneut versucht.
+      const res = await dbRun(
+        'UPDATE scheduled_messages SET done = 1, done_at = ? WHERE id = ? AND done = 0',
+        [Date.now(), r.id]
+      );
+      claimed = Number(res.rowsAffected || 0) > 0 || (res.changes !== undefined && res.changes > 0);
+    } catch (err) {
+      logError(err, 'scheduler.claimDueMessage');
+      continue;
+    }
+    if (!claimed) continue;
+
+    try {
       await sendText(r.chat_jid, String(r.text));
-      await dbRun('UPDATE scheduled_messages SET done = 1, done_at = ? WHERE id = ?', [Date.now(), r.id]);
     } catch (err) {
       logError(err, 'scheduler.processDueMessages');
+      // Versand fehlgeschlagen: Claim zuruecknehmen, damit erneut versucht wird
+      // — aber nur begrenzt oft, sonst haengt eine unzustellbare Nachricht
+      // dauerhaft in der Schleife.
+      const attempts = Number(r.attempts || 0) + 1;
+      if (attempts >= MAX_SEND_ATTEMPTS) {
+        logError(
+          new Error(`Geplante Nachricht ${r.id} nach ${attempts} Versuchen aufgegeben.`),
+          'scheduler.processDueMessages'
+        );
+        await dbRun('UPDATE scheduled_messages SET attempts = ? WHERE id = ?', [attempts, r.id]).catch(() => {});
+      } else {
+        await dbRun(
+          'UPDATE scheduled_messages SET done = 0, done_at = NULL, attempts = ? WHERE id = ?',
+          [attempts, r.id]
+        ).catch((e) => logError(e, 'scheduler.releaseClaim'));
+      }
     }
   }
 }
@@ -180,24 +214,43 @@ async function processWeeklyReports() {
   const now = new Date();
   if (now.getDay() !== config.weeklyReport.weekday || now.getHours() < config.weeklyReport.hour) return;
   const today = todayKey();
-  const lastWeeklySent = getGlobalFlag('last_weekly_report_sent');
-  if (lastWeeklySent === today) return;
-  
-  await setGlobalFlag('last_weekly_report_sent', today);
-  const rows = await dbRows('SELECT jid FROM group_settings WHERE weekly_report = 1 AND enabled = 1', []);
+
+  // Der Marker liegt pro Gruppe in group_settings.last_weekly_report und wird
+  // ERST nach erfolgreichem Versand gesetzt. Vorher lief er ueber
+  // setGlobalFlag(), das seinen Wert per `!!value` zu einem Boolean castet —
+  // der Vergleich `true === "2026-08-19"` war immer false, der Dedupe-Guard
+  // konnte nie greifen und der Report ging bei JEDEM Tick erneut raus.
+  // Nebeneffekt der Umstellung: eine Gruppe, deren Versand scheitert, wird im
+  // naechsten Tick erneut versucht, statt still uebersprungen zu werden.
+  const rows = await dbRows(
+    `SELECT jid FROM group_settings
+      WHERE weekly_report = 1 AND enabled = 1
+        AND (last_weekly_report IS NULL OR last_weekly_report != ?)`,
+    [today]
+  );
+
+  let sent = 0;
   for (const r of rows) {
     try {
       await sendText(r.jid, await buildWeeklyReport(r.jid));
+      await dbRun('UPDATE group_settings SET last_weekly_report = ? WHERE jid = ?', [today, r.jid]);
+      sent++;
     } catch (err) {
-      logError(err, 'scheduler.weekly');
+      logError(err, `scheduler.weekly:${r.jid}`);
     }
   }
-  if (rows.length) logInfo(`📈 Wochenreport an ${rows.length} Gruppe(n) gesendet.`);
+  if (sent) logInfo(`📈 Wochenreport an ${sent} Gruppe(n) gesendet.`);
 }
 
 export function startScheduler() {
   if (tickTimer) return;
   tickTimer = setInterval(async () => {
+    // setInterval wartet die Promise des async-Callbacks nicht ab. Ohne diesen
+    // Guard startet bei einer Job-Kette laenger als tickMs (30 s — bei vielen
+    // Sends ueber die jitterbehaftete Queue schnell erreicht) ein zweiter Tick
+    // parallel und fuehrt jeden Job doppelt aus.
+    if (isTicking) return;
+    isTicking = true;
     try {
       if (state.connection !== 'open') return;
       await processDueMessages();
@@ -210,6 +263,8 @@ export function startScheduler() {
       await maybeAutoEvent();
     } catch (err) {
       logError(err, 'scheduler.tick');
+    } finally {
+      isTicking = false;
     }
   }, config.scheduler.tickMs);
 }

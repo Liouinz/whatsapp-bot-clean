@@ -4,7 +4,7 @@
 
 import { PREFIX, config } from './config.js';
 import { state, rolloverDay, bumpActivity } from './state.js';
-import { dbRows, dbRun, bufferXp, bufferStat, bufferGroupMessage, xpToLevel } from './db.js';
+import { dbRows, dbRowsStrict, dbRun, bufferXp, bufferStat, bufferGroupMessage, xpToLevel } from './db.js';
 import { replyTo, sendText, wasSentByBot } from './queue.js';
 import { logError } from './logger.js';
 import {
@@ -46,8 +46,18 @@ export function setRegistry(commands) {
 const toggles = new Map(); // name → enabled (live schaltbar übers Panel)
 
 export async function loadToggles() {
+  // Nicht vorab leeren: dbRows glaettet DB-Fehler zu [], wodurch ein Ausfall
+  // beim Laden jeden vom Owner deaktivierten Befehl still wieder aktiviert
+  // haette (isCommandEnabled faellt ohne Eintrag auf `true` zurueck).
+  let rows;
+  try {
+    rows = await dbRowsStrict('SELECT name, enabled FROM command_toggles', []);
+  } catch (err) {
+    logError(err, 'router.loadToggles');
+    return;
+  }
   toggles.clear();
-  for (const r of await dbRows('SELECT name, enabled FROM command_toggles', [])) {
+  for (const r of rows) {
     toggles.set(r.name, Number(r.enabled) === 1);
   }
 }

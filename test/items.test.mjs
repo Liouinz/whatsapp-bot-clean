@@ -14,6 +14,7 @@ const { itemCommands, getQty } = await import('../src/commands/items.js');
 const { addCoins, earnCoins, getWallet } = await import('../src/commands/economy.js');
 const { getBoostMult, activateBoost, resetBoostCache } = await import('../src/boosts.js');
 const shop = await import('../src/data/shop-items.js');
+const { config } = await import('../src/config.js');
 
 const USER = '491711111111@s.whatsapp.net';
 const cmd = (n) => itemCommands.find((c) => c.name === n || c.aliases?.includes(n));
@@ -48,7 +49,8 @@ test('Kaufen bucht Coins ab und legt ins Inventar', async () => {
   await cmd('kaufen').run(ctx);
   assert.equal(await getQty(USER, 'boost_xp_10_1h'), 1);
   const w = await getWallet(USER);
-  assert.equal(Number(w.balance), 10_100 - 500);
+  // Nicht hart kodieren: das Startguthaben kommt aus config.economy.startBalance.
+  assert.equal(Number(w.balance), config.economy.startBalance + 10_000 - 500);
   assert.match(ctx.replies[0], /Gekauft/);
 });
 
