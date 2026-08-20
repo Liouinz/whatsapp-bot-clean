@@ -19,6 +19,7 @@ import { startScheduler, stopScheduler } from './scheduler.js';
 import { loadGlobalSettings } from './global.js';
 import { loadActiveEvent } from './events.js';
 import { loadCustomCommands } from './commands/custom.js';
+import { ingestContacts, ingestParticipants } from './identity.js';
 import { loadAfk } from './commands/afk.js';
 
 let watchdogTimer = null;
@@ -382,6 +383,15 @@ async function startWhatsAppInner() {
       }
     }
 
+    // Kontakte sind die reichste Namensquelle: `notify` ist der Name, den die
+    // Person selbst gesetzt hat, `name` der aus dem Adressbuch — und `lid` +
+    // `jid` stehen am selben Objekt, also die verlaesslichste
+    // LID/Telefonnummer-Zuordnung. Bisher wurde das komplett verworfen.
+    // Bewusst ohne await: ein Adressbuch kommt direkt nach dem Verbinden am
+    // Stueck und darf den Verbindungsaufbau nicht aufhalten.
+    if (events['contacts.upsert']) ingestContacts(events['contacts.upsert']);
+    if (events['contacts.update']) ingestContacts(events['contacts.update']);
+
     if (events['messages.upsert']) {
       const m = events['messages.upsert'];
       try {
@@ -400,7 +410,12 @@ async function startWhatsAppInner() {
           // Admin seine Rechte bis zum Cache-Ablauf (60 s) und konnte in
           // dieser Zeit weiter kicken/bannen/muten.
           invalidateGroupMeta(id);
-          if (action === 'add') await handleJoin(id, participants);
+          if (action === 'add') {
+            // Beitretende Teilnehmer tragen (als Contact-Objekte) bereits
+            // ihren Anzeigenamen — den gleich mitnehmen.
+            ingestParticipants(participants);
+            await handleJoin(id, participants);
+          }
         } catch (err) {
           logger.error(err, 'GroupParticipantsUpdate');
         }

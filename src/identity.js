@@ -13,7 +13,7 @@
 //   - `user_profiles.name` fällt in commands/profile.js auf 'Unbekannt' zurück
 // Beide Attrappen werden hier konsequent als "kein Name" behandelt.
 
-import { dbRun, dbRows } from './db.js';
+import { dbRun, dbRows, dbBatch } from './db.js';
 import TTLCache from './core/cache/ttlCache.js';
 
 // ── Nummernformatierung ────────────────────────────────────────────
@@ -113,9 +113,13 @@ export function isRealName(value) {
  * Baut die Anzeigeform. `name` ist optional — fehlt er, gibt es NUR die
  * Nummer, niemals leere Klammern.
  *
- * @returns {{id: string, jid: string, phone: string, name: string|null, displayName: string}}
+ * `nameSource` sagt, WOHER der Name stammt. Das ist kein Beiwerk: nur so
+ * laesst sich spaeter erkennen, ob gerade ein alter DB-Name einen aktuellen
+ * WhatsApp-Namen verdeckt.
+ *
+ * @returns {{id, jid, phone, name, sourceName, nameSource, displayName}}
  */
-export function formatUserIdentity(jid, { name = null } = {}) {
+export function formatUserIdentity(jid, { name = null, nameSource = null } = {}) {
   const id = String(jid || '');
   const phone = formatPhone(id);
   const clean = isRealName(name) ? String(name).trim() : null;
@@ -124,6 +128,8 @@ export function formatUserIdentity(jid, { name = null } = {}) {
     jid: id,
     phone,
     name: clean,
+    sourceName: clean,
+    nameSource: clean ? nameSource || 'unknown' : 'fallback',
     displayName: clean ? `${phone} (${clean})` : phone,
   };
 }
@@ -151,13 +157,18 @@ function placeholders(n) {
  * Löst viele JIDs auf EINMAL auf. Das ist der Grund, warum 100 angezeigte
  * Nutzer vier Abfragen kosten und nicht vierhundert.
  *
- * Priorität (wie vorgegeben):
- *   1. members.push_name der aktuellen Gruppe   (Gruppenkontext)
- *   2. members.push_name irgendeiner Gruppe     (neuester last_active)
- *   3. user_profiles.name
- *   4. xp.name der aktuellen Gruppe
- *   5. birthdays.name
- *   6. kein Name → nur die Nummer
+ * Priorität (staerkste zuletzt geschrieben, damit sie gewinnt):
+ *   1. contacts.push_name    — Contact.notify, wie die Person sich selbst nennt
+ *   2. contacts.contact_name — Adressbuchname
+ *   3. contacts.verified_name — Business-Konto
+ *   4. members.push_name der aktuellen Gruppe (Gruppenkontext)
+ *   5. members.push_name irgendeiner Gruppe
+ *   6. user_profiles.name
+ *   7. xp.name der aktuellen Gruppe / birthdays.name
+ *   8. kein Name → nur die Nummer
+ *
+ * Der aktuelle WhatsApp-Name steht bewusst VOR jedem gespeicherten Namen:
+ * ein alter DB-Eintrag darf niemals verdecken, wie die Person heute heisst.
  *
  * @param {string[]} jids
  * @param {{groupJid?: string}} opts
@@ -171,7 +182,7 @@ export async function resolveIdentities(jids, { groupJid = null } = {}) {
   const missing = [];
   for (const jid of unique) {
     const hit = nameCache.get(cacheKey(jid, groupJid));
-    if (hit !== undefined) out.set(jid, formatUserIdentity(jid, { name: hit || null }));
+    if (hit !== undefined) out.set(jid, formatUserIdentity(jid, { name: hit.name, nameSource: hit.src }));
     else missing.push(jid);
   }
   if (!missing.length) return out;
@@ -189,7 +200,15 @@ export async function resolveIdentities(jids, { groupJid = null } = {}) {
   const toInput = (dbJid) => canonical.get(String(dbJid)) || String(dbJid);
 
   const ph = placeholders(lookup.length);
-  const [inGroup, anyGroup, profiles, xpNames, bdays] = await Promise.all([
+  const [contactRows, inGroup, anyGroup, profiles, xpNames, bdays] = await Promise.all([
+    // Die reichste Quelle: Contact.notify/name/verifiedName aus contacts.*.
+    // Auch ueber die LID auffindbar, damit eine @lid nicht als zweite Person
+    // erscheint.
+    dbRows(
+      `SELECT user_jid, user_lid, push_name, contact_name, verified_name FROM contacts
+       WHERE user_jid IN (${ph}) OR user_lid IN (${ph})`,
+      [...lookup, ...lookup]
+    ),
     groupJid
       ? dbRows(
           `SELECT user_jid, push_name FROM members
@@ -217,22 +236,33 @@ export async function resolveIdentities(jids, { groupJid = null } = {}) {
   // überschreibt am Ende. ORDER BY oben sorgt dafür, dass beim
   // gruppenübergreifenden Treffer der neueste Eintrag zuletzt gewinnt.
   const byJid = new Map();
-  const take = (rows, field) => {
+  const take = (rows, field, src) => {
     for (const r of rows || []) {
-      // Zurueck auf die Schreibweise, die der Aufrufer uebergeben hat.
-      if (isRealName(r[field])) byJid.set(toInput(r.user_jid), String(r[field]).trim());
+      if (!isRealName(r[field])) continue;
+      // Zurueck auf die Schreibweise, die der Aufrufer uebergeben hat. Eine
+      // per LID gefundene Zeile muss auf die LID-Eingabe zurueckgemappt
+      // werden, sonst faellt der Treffer unter den Tisch.
+      for (const key of [r.user_jid, r.user_lid]) {
+        if (!key) continue;
+        const input = toInput(key);
+        if (missing.includes(input)) byJid.set(input, { name: String(r[field]).trim(), src });
+      }
     }
   };
-  take(bdays, 'name');
-  take(xpNames, 'name');
-  take(profiles, 'name');
-  take(anyGroup, 'push_name');
-  take(inGroup, 'push_name');
+  take(bdays, 'name', 'stored_profile');
+  take(xpNames, 'name', 'stored_profile');
+  take(profiles, 'name', 'stored_profile');
+  take(anyGroup, 'push_name', 'group_name');
+  take(inGroup, 'push_name', 'group_name');
+  take(contactRows, 'verified_name', 'verified');
+  take(contactRows, 'contact_name', 'contact');
+  take(contactRows, 'push_name', 'pushName');
 
   for (const jid of missing) {
-    const name = byJid.get(jid) || null;
-    nameCache.set(cacheKey(jid, groupJid), name || '');
-    out.set(jid, formatUserIdentity(jid, { name }));
+    const hit = byJid.get(jid) || null;
+    const name = hit ? hit.name : null;
+    nameCache.set(cacheKey(jid, groupJid), { name, src: hit ? hit.src : null });
+    out.set(jid, formatUserIdentity(jid, { name, nameSource: hit ? hit.src : null }));
   }
   return out;
 }
@@ -241,6 +271,98 @@ export async function resolveIdentities(jids, { groupJid = null } = {}) {
 export async function resolveIdentity(jid, opts) {
   const map = await resolveIdentities([jid], opts);
   return map.get(String(jid)) || formatUserIdentity(jid);
+}
+
+// ── Kontakte aus Baileys übernehmen ────────────────────────────────
+
+// Ein Adressbuch kommt direkt nach dem Verbinden auf einen Schlag. Deshalb in
+// Blöcken schreiben statt eine Abfrage je Person.
+const INGEST_CHUNK = 200;
+
+/**
+ * Nimmt `contacts.upsert` / `contacts.update` entgegen.
+ *
+ * Baileys' `Contact` ist die reichste Namensquelle des Projekts und trägt
+ * `lid` UND `jid` am selben Objekt — damit ist es zugleich die verlässlichste
+ * LID↔Telefonnummer-Zuordnung.
+ *
+ * `contacts.update` liefert `Partial<Contact>`: einzelne Felder können fehlen.
+ * Deshalb `COALESCE` je Spalte — ein Update ohne Namen darf einen bereits
+ * bekannten Namen niemals löschen.
+ *
+ * Wirft nie und wird nicht awaitet: der Verbindungsaufbau darf daran nicht
+ * hängen.
+ */
+export function ingestContacts(list, knownFrom = 'contacts') {
+  const rows = [];
+  for (const c of Array.isArray(list) ? list : []) {
+    if (!c || typeof c !== 'object') continue;
+    // Die PN-JID ist die Identität. Eine reine @lid ohne bekannte Nummer
+    // bekommt keinen eigenen Datensatz — sonst entstünde eine zweite
+    // "Person" für denselben Menschen.
+    const pn = pickPn(c);
+    if (!pn) continue;
+    const lid = normalizeLid(c.lid || (String(c.id || '').endsWith('@lid') ? c.id : null));
+    const push = cleanName(c.notify);
+    const contact = cleanName(c.name);
+    const verified = cleanName(c.verifiedName);
+    if (!lid && !push && !contact && !verified) continue; // nichts Neues
+    rows.push({ pn, lid, push, contact, verified });
+  }
+  if (!rows.length) return;
+
+  const now = Date.now();
+  for (let i = 0; i < rows.length; i += INGEST_CHUNK) {
+    const chunk = rows.slice(i, i + INGEST_CHUNK).map((r) => ({
+      sql: `INSERT INTO contacts (user_jid, user_lid, push_name, contact_name, verified_name, known_from, first_seen, last_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+            ON CONFLICT(user_jid) DO UPDATE SET
+              user_lid      = COALESCE(excluded.user_lid, contacts.user_lid),
+              push_name     = COALESCE(excluded.push_name, contacts.push_name),
+              contact_name  = COALESCE(excluded.contact_name, contacts.contact_name),
+              verified_name = COALESCE(excluded.verified_name, contacts.verified_name),
+              known_from    = COALESCE(contacts.known_from, excluded.known_from)`,
+      args: [r.pn, r.lid, r.push, r.contact, r.verified, knownFrom, now],
+    }));
+    dbBatch(chunk).catch(() => {});
+  }
+  // Namen haben sich geändert — der Anzeige-Cache ist damit veraltet.
+  nameCache.clear();
+}
+
+/** Baileys' Felder auf die kanonische PN-JID bringen. */
+function pickPn(c) {
+  // `phoneNumber` steht an einem GroupParticipant aus einer LID-adressierten
+  // Gruppe: dort ist `id` die LID und die Nummer haengt daneben. Ohne diese
+  // Quelle verlor genau diese Person ihren Namen — geprueft, nicht vermutet.
+  for (const cand of [c.jid, c.phoneNumber, c.id]) {
+    const s = String(cand || '');
+    if (!s || s.endsWith('@lid')) continue;
+    const d = digitsOfJid(s);
+    if (d.length >= 7) return `${d}@s.whatsapp.net`;
+  }
+  return null;
+}
+
+function normalizeLid(v) {
+  const s = String(v || '');
+  if (!s.endsWith('@lid')) return null;
+  return s.split(':')[0].replace(/[^0-9@a-z.]/gi, '') || null;
+}
+
+function cleanName(v) {
+  return isRealName(v) ? String(v).trim().slice(0, 120) : null;
+}
+
+/**
+ * Nimmt die Namen aus einer Gruppen-Teilnehmerliste mit.
+ *
+ * `GroupParticipant` ist in Baileys ein `Contact & { admin }` — die Felder
+ * `notify`/`name` sind also da und wurden bisher weggeworfen, obwohl das
+ * Panel die Metadaten für die Mitgliederliste ohnehin abruft.
+ */
+export function ingestParticipants(participants) {
+  ingestContacts(participants, 'group');
 }
 
 // ── Schreibpfad: pushName und echte Aktivität festhalten ───────────

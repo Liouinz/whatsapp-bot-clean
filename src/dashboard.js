@@ -9,7 +9,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { BOT_NAME, config } from './config.js';
 import { state, rolloverDay, requestPairingCode, forceRelink } from './state.js';
-import { getDb, dbRun, dbRows, flushBuffers, wipeAllData } from './db.js';
+import { getDb, dbRun, dbRows, flushBuffers, wipeAllData, xpToLevel } from './db.js';
 import { getRecentLogs, logError, logInfo, logWarn } from './logger.js';
 import { getAiQuota, initAiUsage } from './ai.js';
 import { registry, isCommandEnabled, setCommandEnabled, loadToggles, resetXpCache } from './router.js';
@@ -18,7 +18,7 @@ import { loadAfk } from './commands/afk.js';
 import { resetEventCache } from './events.js';
 import { resetGlobalCache, getGlobalFlag, setGlobalFlag } from './global.js';
 import { invalidateSettings, invalidateBlockedWords, loadMutes, unmuteUser, unbanUser, clearWarnings, kickUser, banUser, audit } from './moderation.js';
-import { botIsAdminInMeta } from './permissions.js';
+import { botIsAdminInMeta, getGroupMeta } from './permissions.js';
 import { resolveIdentities, resetIdentityCache } from './identity.js';
 import { queueLength, sendText } from './queue.js';
 import { LOGIN_HTML, APP_HTML, APP_CSS, APP_JS, THEME_INIT_JS } from './dashboard-ui.js';
@@ -304,7 +304,13 @@ export function createDashboard() {
     try {
       const jid = req.params.jid;
       if (!jid.endsWith('@g.us')) return res.status(400).json({ error: 'Ungültige Gruppe.' });
-      const meta = await state.sock.groupMetadata(jid);
+      // Ueber getGroupMeta() statt direkt am Socket: nur so werden die
+      // Teilnehmer gelernt (Namen, LID-Zuordnung, Zeilen in `members`) und die
+      // Antwort aus dem 60-Sekunden-Cache bedient. Direkt am Socket ging
+      // genau diese Ausbeute verloren, obwohl das Panel die Metadaten ohnehin
+      // abruft.
+      const meta = await getGroupMeta(jid);
+      if (!meta) return res.status(503).json({ error: 'Gruppendaten nicht verfügbar.' });
       const raw = (meta.participants || []).map((p) => ({
         id: p.id,
         pn: p.phoneNumber || p.jid || null,
@@ -331,18 +337,37 @@ export function createDashboard() {
   // im Suchfeld die Datenbank nicht flutet.
   const searchLimiter = rateLimit({ windowMs: 60_000, max: 60, standardHeaders: true, legacyHeaders: false });
 
-  api.get('/users/search', searchLimiter, async (req, res) => {
-    const q = String(req.query.q || '').trim();
-    if (q.length < 2) return res.status(400).json({ error: 'Bitte mindestens 2 Zeichen eingeben.' });
-    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 25));
-    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+  api.get('/users', searchLimiter, async (req, res) => {
+    // Ein sehr langer Suchtext ist kein Suchtext, sondern eine Last. Hart
+    // abschneiden, bevor er in ein LIKE geht.
+    const q = String(req.query.q || '').trim().slice(0, 120);
+    if (q && q.length < 2) return res.status(400).json({ error: 'Bitte mindestens 2 Zeichen eingeben.' });
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 25));
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const sort = ['name', 'activity', 'xp', 'warnings'].includes(req.query.sort) ? req.query.sort : 'name';
+    const dir = req.query.dir === 'desc' ? 'desc' : 'asc';
+    const filter = ['all', 'groups', 'warned', 'muted'].includes(req.query.filter) ? req.query.filter : 'groups';
 
     try {
-      const result = await searchUsers(q, limit, offset);
-      res.json(result);
+      res.json(await searchUsers({ q, page, limit, sort, dir, filter }));
     } catch (err) {
-      logError(err, 'panel.userSearch');
+      logError(err, 'panel.users');
       res.status(500).json({ error: 'Suche fehlgeschlagen.' });
+    }
+  });
+
+  api.get('/users/:jid', async (req, res) => {
+    // Der Pfadparameter kommt vom Client — er wird geprueft, bevor er in eine
+    // Abfrage geht. Nur echte WhatsApp-Kennungen sind zulaessig.
+    const jid = String(req.params.jid || '');
+    if (!/^[0-9]{5,20}(:[0-9]{1,3})?@(s\.whatsapp\.net|c\.us|lid)$/.test(jid)) {
+      return res.status(400).json({ error: 'Ungültige Nutzer-ID.' });
+    }
+    try {
+      res.json(await userDetail(jid));
+    } catch (err) {
+      logError(err, 'panel.userDetail');
+      res.status(500).json({ error: 'Nutzer konnte nicht geladen werden.' });
     }
   });
 
@@ -770,92 +795,195 @@ function likeTerm(q) {
   return `%${String(q).replace(/[\\%_]/g, (c) => '\\' + c)}%`;
 }
 
+/** Kandidaten-JIDs: Vereinigung aller Tabellen, in denen Personen vorkommen. */
+const PERSON_TABLES = ['contacts', 'members', 'xp', 'warnings', 'mutes', 'bans', 'birthdays', 'user_profiles'];
+
+// Sortierschluessel sind fest verdrahtet — aus einer Nutzereingabe darf
+// niemals SQL werden.
+const SORTS = {
+  name: 'ORDER BY sort_name IS NULL, LOWER(sort_name) COLLATE NOCASE',
+  activity: 'ORDER BY last_active IS NULL, last_active',
+  xp: 'ORDER BY xp',
+  warnings: 'ORDER BY warnings',
+};
+
 /**
- * Sucht Personen ueber Name, Telefonnummer und JID.
+ * Sucht und blaettert Personen.
  *
- * Der Kandidatenkreis ist die Vereinigung aller Tabellen, in denen Personen
- * vorkommen — wer nur eine Verwarnung hat, ist genauso auffindbar wie ein
- * Gruppenmitglied. Die Namenssuche laeuft ueber die drei Tabellen mit
- * Namensspalte; die Nummernsuche direkt ueber user_jid.
+ * Der Kandidatenkreis ist die Vereinigung aller Personen-Tabellen: wer nur
+ * eine Verwarnung hat, ist genauso auffindbar wie ein Gruppenmitglied oder ein
+ * reiner Adressbuchkontakt.
  *
- * Alle Werte sind gebundene ?-Parameter. Tabellennamen sind fest verdrahtet.
+ * Alle Werte sind gebundene ?-Parameter, Tabellen- und Spaltennamen stammen
+ * ausschliesslich aus den Konstanten oben.
  */
-async function searchUsers(q, limit, offset) {
-  const digits = q.replace(/[^0-9]/g, '');
+async function searchUsers({ q = '', page = 1, limit = 25, sort = 'name', dir = 'asc', filter = 'groups' } = {}) {
+  const digits = String(q).replace(/[^0-9]/g, '');
   const like = likeTerm(q);
+  const hasQuery = String(q).trim().length >= 2;
+
+  // ── Kandidaten einsammeln ──
   const clauses = [];
   const args = [];
-
-  // Namenssuche
-  for (const [table, col] of [['members', 'push_name'], ['user_profiles', 'name'], ['xp', 'name'], ['birthdays', 'name']]) {
-    clauses.push(`SELECT DISTINCT user_jid FROM ${table} WHERE ${col} LIKE ? ESCAPE '\\'`);
-    args.push(like);
-  }
-  // Nummern-/JID-Suche: erst ab 3 Ziffern, sonst trifft "49" die halbe Welt.
-  if (digits.length >= 3) {
-    for (const table of ['members', 'xp', 'warnings', 'mutes', 'bans', 'birthdays', 'user_profiles']) {
-      clauses.push(`SELECT DISTINCT user_jid FROM ${table} WHERE user_jid LIKE ? ESCAPE '\\'`);
+  if (hasQuery) {
+    for (const [table, cols] of [
+      ['contacts', ['push_name', 'contact_name', 'verified_name']],
+      ['members', ['push_name']],
+      ['user_profiles', ['name']],
+      ['xp', ['name']],
+      ['birthdays', ['name']],
+    ]) {
+      for (const col of cols) {
+        clauses.push(`SELECT DISTINCT user_jid FROM ${table} WHERE ${col} LIKE ? ESCAPE '\\'`);
+        args.push(like);
+      }
+    }
+    // Nummern-/JID-Suche erst ab 3 Ziffern — "49" traefe sonst halb Deutschland.
+    if (digits.length >= 3) {
+      for (const table of PERSON_TABLES) {
+        clauses.push(`SELECT DISTINCT user_jid FROM ${table} WHERE user_jid LIKE ? ESCAPE '\\'`);
+        args.push(`%${digits}%`);
+      }
+      // Auch ueber die LID auffindbar, damit dieselbe Person nicht zweimal
+      // existiert.
+      clauses.push(`SELECT DISTINCT user_jid FROM contacts WHERE user_lid LIKE ? ESCAPE '\\'`);
+      args.push(`%${digits}%`);
+      clauses.push(`SELECT DISTINCT user_jid FROM members WHERE user_lid LIKE ? ESCAPE '\\'`);
       args.push(`%${digits}%`);
     }
+  } else {
+    for (const table of PERSON_TABLES) clauses.push(`SELECT DISTINCT user_jid FROM ${table}`);
   }
 
-  // Ein Treffer mehr holen als angezeigt wird — daran erkennt der Client, ob
-  // sich ein "Weitere anzeigen" lohnt, ohne dass wir COUNT(*) brauchen.
-  const rows = await dbRows(
-    `SELECT user_jid FROM (${clauses.join(' UNION ')}) ORDER BY user_jid LIMIT ? OFFSET ?`,
-    [...args, limit + 1, offset]
-  );
-  const hasMore = rows.length > limit;
-  const jids = rows.slice(0, limit).map((r) => String(r.user_jid));
-  if (!jids.length) return { users: [], hasMore: false };
-
-  const ids = await resolveIdentities(jids);
-  const ph = jids.map(() => '?').join(',');
   const now = Date.now();
-  const [groupRows, xpRows, warnRows, muteRows] = await Promise.all([
+  // Anreicherung passiert in SQL, damit Sortierung und Filter ueber ALLE
+  // Treffer gelten — nicht nur ueber die gerade sichtbare Seite.
+  const base = `
+    WITH cand(user_jid) AS (${clauses.join(' UNION ')}),
+    enriched AS (
+      SELECT c.user_jid AS user_jid,
+        COALESCE(
+          (SELECT push_name     FROM contacts WHERE user_jid = c.user_jid),
+          (SELECT contact_name  FROM contacts WHERE user_jid = c.user_jid),
+          (SELECT verified_name FROM contacts WHERE user_jid = c.user_jid),
+          (SELECT push_name FROM members WHERE user_jid = c.user_jid AND push_name IS NOT NULL LIMIT 1),
+          (SELECT name FROM user_profiles WHERE user_jid = c.user_jid)
+        ) AS sort_name,
+        (SELECT COUNT(*) FROM members WHERE user_jid = c.user_jid) AS group_count,
+        (SELECT MAX(COALESCE(last_active, 0)) FROM members WHERE user_jid = c.user_jid) AS last_active,
+        (SELECT COALESCE(SUM(xp), 0) FROM xp WHERE user_jid = c.user_jid) AS xp,
+        (SELECT COUNT(*) FROM warnings WHERE user_jid = c.user_jid AND expires_at > ?) AS warnings,
+        (SELECT COUNT(*) FROM mutes WHERE user_jid = c.user_jid AND until > ?) AS muted
+      FROM cand c
+    )
+    SELECT * FROM enriched`;
+  const enrichArgs = [...args, now, now];
+
+  const where =
+    filter === 'groups' ? ' WHERE group_count > 0'
+    : filter === 'warned' ? ' WHERE warnings > 0'
+    : filter === 'muted' ? ' WHERE muted > 0'
+    : '';
+
+  const totalRow = await dbRows(`SELECT COUNT(*) AS c FROM (${base}${where})`, enrichArgs);
+  const total = totalRow.length ? Number(totalRow[0].c) : 0;
+  const pages = Math.max(1, Math.ceil(total / limit));
+  const safePage = Math.min(Math.max(1, page), pages);
+  const offset = (safePage - 1) * limit;
+
+  // Wer eine vollstaendige Nummer oder JID einfuegt, meint genau diese Person.
+  // Ohne Vorrang landete der exakte Treffer irgendwo zwischen den
+  // Teilzeichenketten-Treffern — bei "491700000002" auch hinter "4917000000020".
+  const exactJid = digits.length >= 7 ? `${digits}@s.whatsapp.net` : null;
+  const order = (SORTS[sort] || SORTS.name) + (dir === 'desc' ? ' DESC' : ' ASC');
+  const orderSql = exactJid
+    ? order.replace('ORDER BY ', 'ORDER BY CASE WHEN user_jid = ? THEN 0 ELSE 1 END, ')
+    : order;
+  const orderArgs = exactJid ? [exactJid] : [];
+  const rows = await dbRows(`${base}${where} ${orderSql}, user_jid LIMIT ? OFFSET ?`, [...enrichArgs, ...orderArgs, limit, offset]);
+
+  const jids = rows.map((r) => String(r.user_jid));
+  const pagination = { page: safePage, limit, total, pages };
+  if (!jids.length) return { users: [], pagination };
+
+  // Anzeige-Namen und Gruppenzugehoerigkeit in je EINEM Durchgang — keine
+  // Abfrage pro Person, und keine Baileys-Aufrufe.
+  const ph = jids.map(() => '?').join(',');
+  const [ids, groupRows] = await Promise.all([
+    resolveIdentities(jids),
     dbRows(
-      `SELECT m.user_jid, m.group_jid, m.last_active, COALESCE(g.name, m.group_jid) AS group_name
+      `SELECT m.user_jid, m.group_jid, g.name AS group_name
        FROM members m LEFT JOIN groups g ON g.jid = m.group_jid
        WHERE m.user_jid IN (${ph})`,
       jids
     ),
-    dbRows(`SELECT user_jid, SUM(xp) AS xp, SUM(messages) AS messages FROM xp WHERE user_jid IN (${ph}) GROUP BY user_jid`, jids),
-    dbRows(`SELECT user_jid, COUNT(*) AS c FROM warnings WHERE user_jid IN (${ph}) AND expires_at > ? GROUP BY user_jid`, [...jids, now]),
-    dbRows(`SELECT user_jid, MAX(until) AS until FROM mutes WHERE user_jid IN (${ph}) AND until > ? GROUP BY user_jid`, [...jids, now]),
   ]);
-
-  const byJid = (rows) => {
-    const m = new Map();
-    for (const r of rows || []) m.set(String(r.user_jid), r);
-    return m;
-  };
-  const xpMap = byJid(xpRows);
-  const warnMap = byJid(warnRows);
-  const muteMap = byJid(muteRows);
   const groupMap = new Map();
   for (const r of groupRows || []) {
     const key = String(r.user_jid);
     if (!groupMap.has(key)) groupMap.set(key, []);
-    groupMap.get(key).push(r);
+    groupMap.get(key).push({ jid: r.group_jid, name: r.group_name });
   }
 
-  const users = jids.map((jid) => {
-    const groups = groupMap.get(jid) || [];
-    const xp = xpMap.get(jid);
-    const lastActive = groups.reduce((max, g) => Math.max(max, Number(g.last_active) || 0), 0);
+  const users = rows.map((r) => {
+    const jid = String(r.user_jid);
     return {
       // Die technische Identitaet — jede Aktion laeuft weiterhin hierueber.
       jid,
       user: ids.get(jid) || null,
-      groups: groups.map((g) => ({ jid: g.group_jid, name: g.group_name })),
-      xp: xp ? Number(xp.xp) : 0,
-      messages: xp ? Number(xp.messages) : 0,
-      warnings: warnMap.get(jid) ? Number(warnMap.get(jid).c) : 0,
-      mutedUntil: muteMap.get(jid) ? Number(muteMap.get(jid).until) : null,
-      lastActive: lastActive || null,
+      groups: groupMap.get(jid) || [],
+      xp: Number(r.xp) || 0,
+      warnings: Number(r.warnings) || 0,
+      muted: Number(r.muted) > 0,
+      lastActive: Number(r.last_active) || null,
+      // Woher wir die Person kennen — trennt Gruppenmitglieder von reinen
+      // Adressbuchkontakten.
+      inGroups: Number(r.group_count) > 0,
     };
   });
-  return { users, hasMore };
+  return { users, pagination };
+}
+
+/** Detailansicht einer Person. Nur Daten, die das Projekt wirklich hat. */
+async function userDetail(jid) {
+  const now = Date.now();
+  const [ids, groups, xpRows, warns, mutes, bans, contact] = await Promise.all([
+    resolveIdentities([jid]),
+    dbRows(
+      `SELECT m.group_jid, g.name AS group_name, m.last_active, m.last_seen
+       FROM members m LEFT JOIN groups g ON g.jid = m.group_jid WHERE m.user_jid = ?`,
+      [jid]
+    ),
+    dbRows('SELECT group_jid, xp, messages FROM xp WHERE user_jid = ?', [jid]),
+    dbRows('SELECT group_jid, reason, created_at, expires_at FROM warnings WHERE user_jid = ? AND expires_at > ? ORDER BY created_at DESC LIMIT 20', [jid, now]),
+    dbRows('SELECT group_jid, until, reason FROM mutes WHERE user_jid = ? AND until > ?', [jid, now]),
+    dbRows('SELECT group_jid, reason, created_at FROM bans WHERE user_jid = ?', [jid]),
+    dbRows('SELECT user_lid, push_name, contact_name, verified_name, known_from, first_seen FROM contacts WHERE user_jid = ?', [jid]),
+  ]);
+
+  const totalXp = xpRows.reduce((a, r) => a + (Number(r.xp) || 0), 0);
+  return {
+    jid,
+    user: ids.get(String(jid)) || null,
+    lid: contact.length ? contact[0].user_lid : null,
+    knownFrom: contact.length ? contact[0].known_from : null,
+    firstSeen: contact.length ? Number(contact[0].first_seen) || null : null,
+    names: contact.length
+      ? { pushName: contact[0].push_name, contactName: contact[0].contact_name, verifiedName: contact[0].verified_name }
+      : { pushName: null, contactName: null, verifiedName: null },
+    groups: groups.map((g) => ({
+      jid: g.group_jid, name: g.group_name,
+      lastActive: Number(g.last_active) || null,
+      xp: Number((xpRows.find((x) => x.group_jid === g.group_jid) || {}).xp) || 0,
+    })),
+    xp: totalXp,
+    level: xpToLevel(totalXp),
+    messages: xpRows.reduce((a, r) => a + (Number(r.messages) || 0), 0),
+    lastActive: groups.reduce((max, g) => Math.max(max, Number(g.last_active) || 0), 0) || null,
+    warnings: warns,
+    mutes: mutes.map((m) => ({ ...m, until: Number(m.until) })),
+    bans,
+  };
 }
 
 const groupCache = { at: 0, list: [] };
