@@ -5,6 +5,11 @@ dotenv.config();
 
 if (!process.env.TZ) process.env.TZ = 'Europe/Berlin';
 
+// Die Zeitzone gehoert genau einmal hierher. Vorher lasen scheduler.js und
+// commands/schedule.js process.env.TZ selbst, und die Tagesschluessel in db.js
+// und state.js ignorierten sie komplett (toISOString() ist UTC).
+export const TIMEZONE = process.env.TZ;
+
 export const BOT_NAME = (process.env.BOT_NAME || 'CommunityBot').trim();
 export const PREFIX = '!';
 
@@ -26,6 +31,7 @@ export function hasValidOwners() {
 
 export const config = {
   botName: BOT_NAME,
+  timezone: TIMEZONE,
   ownerNumbers: OWNER_NUMBERS,
   botOwnerNumbers: BOT_OWNER_NUMBERS,
 

@@ -17,7 +17,7 @@ src/router.js       Dispatch: fester Befehl → Custom/FAQ → KI-Fallback. Perm
 src/loader.js       rekursive Command-Autodiscovery (einzige Registrierungsquelle)
 src/config.js       alle Env-Zugriffe; sonst nirgends process.env lesen
 src/preflight.js    Env- und DB-Check vor dem Start, Klartext-Fehler
-src/db.js           Re-Export von core/database/* plus XP-/Stat-Schreibpuffer
+src/db.js           Re-Export von core/database/* plus XP-/Stat-Schreibpuffer, Tagesschluessel
 src/core/database/  client (dbRun/dbRows/dbBatch) · schema (initDb, DATA_TABLES) · guard · wipe
 src/core/cache/     TTLCache
 src/auth.js         Baileys-Auth-State in Turso (useMultiFileAuthState wird bewusst nicht benutzt)
@@ -80,14 +80,23 @@ Insgesamt 75 Befehle (126 Schlüssel inkl. Aliassen).
 - **`auth_creds` und `auth_keys` sind unantastbar.** `core/database/guard.js`
   parst jedes Statement in `dbRun` und blockt Schreibzugriffe darauf. Cleanup
   und Wipe filtern sie heraus.
-- Stapelschreiben nur ueber `dbBatch()`. `getDb().batch()` direkt aufzurufen
-  umgeht den Guard — die Zusage oben gilt sonst nur fuer `dbRun`.
+- Stapelschreiben nur ueber `dbBatch()`, Einzelschreiben nur ueber `dbRun()`.
+  `getDb().batch()` oder `getDb().execute()` direkt aufzurufen umgeht den Guard
+  — die Zusage oben gilt sonst nur fuer `dbRun`. Einzige legitime Ausnahmen:
+  `auth.js` und `schema.js`, die die Auth-Tabellen absichtlich schreiben.
+- **Tagesschluessel immer ueber `dayKey()`/`todayKey()`** aus `db.js`, nie ueber
+  `toISOString().slice(0, 10)`. Letzteres ist UTC; der Bot laeuft auf
+  `config.timezone` (Europe/Berlin). Wer beides mischt, bucht zwischen 00:00 und
+  02:00 lokaler Zeit auf den Vortag. Betrifft `daily_stats`, `group_daily`,
+  `ai_usage` und die Wochenreport-Marke — Schreib- und Leseseite muessen
+  denselben Tagesbegriff benutzen, auch der Chart im Panel (`/api/stats`
+  liefert die Tagesliste deshalb mit).
 - Neue Tabelle angelegt? Dann auch in `DATA_TABLES` (`schema.js`) eintragen,
   sonst überlebt sie jeden Panel-Wipe.
 
 ## Tests
 
-`npm ci && npm test`. Stand: **112 pass / 0 fail** (kalte DB).
+`npm ci && npm test`. Stand: **126 pass / 0 fail** (kalte DB).
 
 Wichtig: **Test-DBs vor dem Lauf löschen** (`rm -f .test-*.db*`). Die Dateien
 sind gitignored, und ein warmer Zustand hat früher einen echten Fehler verdeckt
@@ -105,6 +114,17 @@ Event-Wiederherstellung beim Start, Guard gegen SQL-Kommentare, Laden der
 Custom-Befehle beim Start, Invalidierung des Gruppen-Caches. Auch hier gilt:
 gegen den Stand vor den Fixes schlagen sie fehl, geprüft per `git stash`.
 
+`test/regression-audit4.test.mjs` deckt den vierten Audit ab: abgelehnte
+Promises in Panel-Routen werden zu HTTP 500 statt zum Prozessende, Panel-
+Neustart ueber den gemeinsamen Shutdown-Pfad, lebende Tippfehler-Vorschlaege,
+verlustfreier Config-Import, Single-Flight beim Puffer-Flush, Guard auf dem
+Stapel-Schreibweg, sichtbare KI-Zusammenfassung, kostenloser
+KI-Erreichbarkeitstest, volle Ringgroesse im Log, Rueckgabewert von
+`wipeAllData()` und Tagesschluessel in der konfigurierten Zeitzone. 11 der 14
+Tests schlagen gegen den Stand vor den Fixes fehl — per `git stash` geprueft,
+nicht angenommen. Die drei uebrigen sichern ab, dass dabei nichts kaputtgeht
+(Guard, Auth-Tabellen ueberleben den Wipe, Datumsformat).
+
 `test/contacts.test.mjs` deckt die Kontaktaufnahme und die Nutzersuche ab
 (28 Tests): Einspielen von `Contact`-Objekten, LID+Nummer als *eine* Person,
 Prioritaet der Namensquellen, und die Suche auf HTTP-Ebene gegen ein echtes
@@ -119,6 +139,16 @@ beendet den String — beides hat hier schon echte Fehler erzeugt, die
 `node --check` auf der Datei selbst *nicht* sieht.
 
 Kein ESLint, kein Prettier, keine CI.
+
+## Panel-API
+
+**Async-Handler duerfen nie ungeschuetzt bleiben.** Express 4 leitet die
+abgelehnte Promise eines `async`-Handlers *nicht* an die Error-Middleware —
+sie wird zur `unhandledRejection`. Der `api`-Router laeuft deshalb durch
+`asyncSafe()` (`dashboard.js`), das jedem Handler ein `.catch(next)` anhaengt;
+Arity 4 (Error-Middleware) bleibt unangetastet. Neue Endpunkte an diesem
+Router sind damit automatisch abgedeckt — Routen direkt an `app` sind es
+nicht, die muessen synchron bleiben oder selbst fangen.
 
 ## Panel-UI
 

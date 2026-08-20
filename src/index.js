@@ -13,7 +13,7 @@ import { handleUpsert, loadToggles, setRegistry } from './router.js';
 import { loadMutes, handleJoin } from './moderation.js';
 import { invalidateGroupMeta } from './permissions.js';
 import { initAiUsage } from './ai.js';
-import { state, setForceRelinkHandler, setPairingCodeRequester } from './state.js';
+import { state, setForceRelinkHandler, setPairingCodeRequester, setShutdownHandler } from './state.js';
 import { preflight } from './preflight.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
 import { loadGlobalSettings } from './global.js';
@@ -140,26 +140,54 @@ function cleanupSocket(sock) {
   }
 }
 
-async function gracefulShutdown(reason) {
-  logger.info(`${reason} empfangen — fahre sauber herunter...`, 'Shutdown');
-  cancelPendingReconnect();
-  stopWatchdog();
-  stopSelfPing();
-  stopDbHeartbeat();
-  stopScheduler();
-  stopFlushLoop();
-  try {
-    await flushAuth();
-    await flushBuffers();
-    // Socket-Listener abraeumen und WS schliessen, damit kein spaetes Event
-    // waehrend des Herunterfahrens noch Schreibvorgaenge anstoesst.
-    cleanupSocket(botSock);
-    botSock = null;
-    state.sock = null;
-  } catch (err) {
-    logger.error(err, 'Shutdown');
-  }
-  process.exit(0);
+// Laeuft bereits ein Shutdown? Dann dieselbe Promise zurueckgeben. SIGTERM und
+// eine Exception koennen gleichzeitig hereinkommen; ohne diesen Guard liefen
+// flushAuth() und flushBuffers() doppelt und gleichzeitig.
+let shuttingDown = null;
+
+/**
+ * Der EINZIGE Weg, diesen Prozess zu beenden.
+ *
+ * Auch die beiden Neustart-Pfade (Panel und !neustart) gehen hier durch. Das
+ * Panel hatte vorher einen eigenen, kuerzeren Weg: flushBuffers() und dann
+ * process.exit(0) — ohne flushAuth(). Genau die ausstehenden Signal-Key-Writes
+ * aus dem 150-ms-Fenster in auth.js gingen dabei verloren, und nach dem
+ * Neustart standen "Bad MAC"-Fehler im Log.
+ */
+function gracefulShutdown(reason) {
+  if (shuttingDown) return shuttingDown;
+  // try/finally statt try/catch um den Flush-Teil: der Exit muss auch dann
+  // kommen, wenn schon einer der stop*-Aufrufe darueber wirft. Sonst haengt der
+  // Prozess nach einem SIGTERM fuer immer.
+  shuttingDown = (async () => {
+    try {
+      logger.info(`${reason} empfangen — fahre sauber herunter...`, 'Shutdown');
+      cancelPendingReconnect();
+      stopWatchdog();
+      stopSelfPing();
+      stopDbHeartbeat();
+      stopScheduler();
+      stopFlushLoop();
+      await flushAuth();
+      // Zweimal, und das mit Absicht: flushBuffers() ist Single-Flight. Der
+      // erste Aufruf kann sich an einen bereits laufenden Flush anhaengen und
+      // deckt dann nur dessen Schnappschuss ab — was waehrend dieses Laufs noch
+      // in den Puffer kam, waere beim Exit verloren. Der zweite Aufruf nimmt
+      // den Rest mit und ist bei leerem Puffer praktisch kostenlos.
+      await flushBuffers();
+      await flushBuffers();
+      // Socket-Listener abraeumen und WS schliessen, damit kein spaetes Event
+      // waehrend des Herunterfahrens noch Schreibvorgaenge anstoesst.
+      cleanupSocket(botSock);
+      botSock = null;
+      state.sock = null;
+    } catch (err) {
+      logger.error(err, 'Shutdown');
+    } finally {
+      process.exit(0);
+    }
+  })();
+  return shuttingDown;
 }
 
 process.on('uncaughtException', async (err) => {
@@ -167,13 +195,23 @@ process.on('uncaughtException', async (err) => {
   await gracefulShutdown('uncaughtException');
 });
 
-process.on('unhandledRejection', async (reason) => {
+process.on('unhandledRejection', (reason) => {
   // Baileys' sock.ev.process() verwirft die Handler-Promise, deshalb landen
-  // Fehler aus der connection.update-Logik genau hier. Nur zu loggen liess den
-  // Bot in einem halb aufgebauten Zustand liegen, ohne dass ein Supervisor
-  // etwas davon mitbekam — gleiche Behandlung wie uncaughtException.
+  // Fehler aus der connection.update-Logik hier.
+  //
+  // Hier stand ein gracefulShutdown(). Das war zu scharf, und zwar aus einem
+  // Grund, der erst im Zusammenspiel sichtbar wird: Express 4 leitet die
+  // abgelehnte Promise eines async-Handlers NICHT an seine Error-Middleware —
+  // sie landet als unhandledRejection genau hier. Damit beendete jeder DB- oder
+  // Sendefehler einer Panel-Route den kompletten Bot. Ein Klick auf "Senden"
+  // waehrend eines Reconnects reichte.
+  //
+  // Die Panel-Routen fangen ihre Fehler jetzt selbst ab (asyncSafe in
+  // dashboard.js). Was hier noch ankommt, wird protokolliert — eine laufende
+  // WhatsApp-Session dafuer wegzuwerfen waere schlimmer als das Symptom.
+  // uncaughtException bleibt bewusst fatal: dort ist der Prozesszustand
+  // tatsaechlich unbekannt.
   logger.error(reason, 'unhandledRejection');
-  await gracefulShutdown('unhandledRejection');
 });
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
@@ -460,6 +498,10 @@ async function main() {
     const uniqueCommands = Array.from(commandsMap.values()).filter((v, i, a) => a.findIndex(c => c.name === v.name) === i);
     setRegistry(uniqueCommands);
     logger.success(`${uniqueCommands.length} Befehle erfolgreich geladen.`, 'Bootstrap');
+
+    // Vor app.listen(): sonst gibt es ein Fenster, in dem das Panel schon
+    // Anfragen annimmt, /api/restart aber noch keinen Shutdown-Pfad findet.
+    setShutdownHandler((reason) => gracefulShutdown(reason));
 
     const app = createDashboard();
     const port = process.env.PORT || 3000;

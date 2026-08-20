@@ -1,8 +1,11 @@
 // Zentrales Logger-System
 // Kompatibel mit alten und neuen Modulen
 
+import { config } from './config.js';
+
 const ring = [];
-const maxRingSize = 500;
+// Aus der Konfiguration statt hart kodiert — der Wert stand doppelt im Projekt.
+const maxRingSize = config.log?.ringSize || 500;
 
 let errorSummarizer = null;
 
@@ -42,9 +45,24 @@ export const logger = {
 
     if (errorSummarizer) {
       try {
-        Promise.resolve(errorSummarizer(text, ctx)).catch((sumErr) => {
-          console.error('⚠️ ErrorSummarizer fehlgeschlagen:', sumErr);
-        });
+        Promise.resolve(errorSummarizer(text, ctx))
+          .then((summary) => {
+            // Das Ergebnis wurde bisher verworfen: die Gemini-Aufrufe liefen
+            // (bis zu 10 pro Tag), aber niemand hat die Zusammenfassung je
+            // gesehen — getErrorSummarizer() hat im ganzen Projekt keinen
+            // Aufrufer. Sie landet jetzt als eigene Zeile im Ring-Puffer und
+            // damit in der Log-Ansicht des Panels.
+            //
+            // Bewusst ueber pushRing und nicht ueber logger.info: der Weg
+            // ueber den Logger waere ein Ruecksprung in genau diese Funktion.
+            const line = String(summary || '').trim();
+            if (!line) return;
+            console.log(`🤖 [KI] ${ctx ? `[${ctx}] ` : ''}${line}`);
+            pushRing('info', `🤖 ${line}`, ctx ? `ai-summary:${ctx}` : 'ai-summary');
+          })
+          .catch((sumErr) => {
+            console.error('⚠️ ErrorSummarizer fehlgeschlagen:', sumErr);
+          });
       } catch (sumErr) {
         console.error('⚠️ ErrorSummarizer synchron fehlgeschlagen:', sumErr);
       }
@@ -91,7 +109,12 @@ export function getLogs() {
   return [...ring];
 }
 
-export function getRecentLogs(n = 50) {
+/**
+ * Die letzten `n` Zeilen. Der Standard ist die volle Ringgroesse und nicht mehr
+ * 50: die Panel-Route rief ohne Argument auf und schnitt das Ergebnis danach
+ * auf config.log.ringSize — was an 50 Zeilen nichts mehr aendern konnte.
+ */
+export function getRecentLogs(n = maxRingSize) {
   return ring.slice(-n);
 }
 

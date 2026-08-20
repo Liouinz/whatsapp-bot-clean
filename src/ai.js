@@ -47,19 +47,35 @@ export async function initAiUsage() {
   state.aiCallsToday = dailyCalls;
 }
 
+/**
+ * Prueft Schluessel UND Modellverfuegbarkeit — ohne Tokens zu verbrauchen.
+ *
+ * Vorher lief hier ein echtes `generateContent` mit dem Text "ping". Das kostete
+ * bei JEDEM Start ein bis zwei abrechenbare Aufrufe, die zudem nirgends
+ * mitgezaehlt wurden (dailyCalls sah sie nie) — und noch einmal bei jedem
+ * Panel-Wipe, weil der initAiUsage() erneut ruft. Ein GET auf die
+ * Modellbeschreibung beantwortet dieselbe Frage kostenlos.
+ *
+ * Der Schluessel geht als Header statt als Query-Parameter: eine URL landet
+ * schneller in einer Fehlermeldung als ein Header, und die Fehlermeldungen
+ * dieses Moduls sind ueber die Log-Ansicht des Panels sichtbar.
+ */
 async function testModel(model, key) {
+  // Ohne Timeout haengt ein stiller Netzwerkfehler den kompletten Bootvorgang:
+  // initAiUsage() wird in main() awaitet.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), config.ai.timeoutMs);
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] }),
-      }
-    );
-    return res.ok || res.status === 400;
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}`, {
+      method: 'GET',
+      headers: { 'x-goog-api-key': key },
+      signal: controller.signal,
+    });
+    return res.ok;
   } catch {
     return false;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
