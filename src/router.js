@@ -19,6 +19,7 @@ import TTLCache from './core/cache/ttlCache.js';
 
 import { isActivationCommand, activateGroup } from './commands/management.js';
 import { getEventXpMult } from './events.js';
+import { touchMember } from './identity.js';
 
 // ── Registry + Live-Toggles ────────────────────────────────────────
 
@@ -364,6 +365,10 @@ async function handleMessage(msg) {
     bumpActivity();
     bufferStat('messages'); // Edits sind keine neuen Nachrichten — nicht doppelt zählen
     if (isGroup) bufferGroupMessage(chatJid);
+    // pushName und echte Aktivität festhalten. Gedrosselt (5 Min. pro Person
+    // und Gruppe) und bewusst nicht awaitet — die Anzeige darf die
+    // Nachrichtenverarbeitung nicht aufhalten.
+    if (isGroup) touchMember(chatJid, resolveLid(sender), msg.pushName);
   }
 
   // DMs: nur Owner ODER die Nummer, auf der der Bot selbst läuft — die Person

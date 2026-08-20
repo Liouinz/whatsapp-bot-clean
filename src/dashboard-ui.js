@@ -621,6 +621,16 @@ a.list-item { text-decoration: none; color: inherit; cursor: pointer; }
 .lb-tags { display: flex; gap: var(--s2); flex-wrap: wrap; flex: none; }
 .lb-chev { flex: none; color: var(--text-faint); font-size: var(--fs-lg); line-height: 1; }
 .list-btn:hover .lb-chev { color: var(--text-dim); }
+
+/* Anklickbarer Text in einer Tabellenzelle. Ein <span onclick> waere hier
+   weder fokussierbar noch per Tastatur ausloesbar. */
+.link-btn {
+  background: none; border: 0; box-shadow: none;
+  padding: 2px 0; min-height: 24px; text-align: left;
+  color: var(--accent); font-size: var(--fs-sm); font-weight: 560;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.link-btn:hover { filter: none; color: var(--text); }
 .detail-head { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s4); flex-wrap: wrap; }
 
 /* ── Tabellen ──────────────────────────────────────────────── */
@@ -879,6 +889,7 @@ var IC = {
   qr:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14h1M14 20h1M20 20h1"/></svg>',
   groups:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
   cmd:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>',
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><line x1="15.5" y1="15.5" x2="21" y2="21"/></svg>',
   shield:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
   cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
   logs:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>',
@@ -896,6 +907,7 @@ var NAV_GROUPS = [
   ]},
   { label:'Community', items:[
     { id:'groups', label:'Gruppen', ico:IC.groups, primary:true },
+    { id:'users', label:'Nutzer', ico:IC.search },
     { id:'commands', label:'Befehle', ico:IC.cmd, primary:true },
     { id:'mod', label:'Moderation', ico:IC.shield },
     { id:'agenda', label:'Planung', ico:IC.cal }
@@ -953,7 +965,18 @@ function fmtRel(ts){
   var v = m < 60 ? Math.max(1, m) + ' Min' : hh < 48 ? hh + ' Std' : d + ' T';
   return (past ? 'vor ' : 'in ') + v;
 }
-function shortJid(jid){ return '+' + String(jid || '').split('@')[0]; }
+// Anzeige einer Person. Die Aufloesung passiert serverseitig in identity.js;
+// hier wird nur ausgepackt. Faellt der Server aus, bleibt die nackte Nummer —
+// nie eine leere Klammer und nie ein sichtbares @-Suffix.
+function userLabel(user, jid){
+  if (user && user.displayName) return user.displayName;
+  if (user && user.phone) return user.phone;
+  return shortJid(jid);
+}
+function shortJid(jid){
+  var local = String(jid || '').split('@')[0].split(':')[0];
+  return local ? '+' + local.replace(/^\\+/, '') : '—';
+}
 // Gruppennamen aus /api/groups merken, damit Listen mit reiner JID
 // nicht als Zahlenkolonne enden.
 var groupNames = {};
@@ -1165,7 +1188,7 @@ function render(){
   content.focus({ preventScroll:true });
   var pages = {
     home:renderHome, stats:renderStats, qr:renderQr, groups:renderGroups,
-    commands:renderCommands, mod:renderMod, agenda:renderAgenda,
+    users:renderUsers, commands:renderCommands, mod:renderMod, agenda:renderAgenda,
     logs:renderLogs, settings:renderSettings
   };
   (pages[current] || renderHome)();
@@ -1591,15 +1614,15 @@ function renderGroupDetail(gr){
     var tblBox = h('div', { style:'margin-top:var(--s3)' });
     mBox.appendChild(tblBox);
 
-    // pn kommt je nach Baileys-Version mit oder ohne fuehrendes Plus.
-    function label(m){ var s = String(m.pn || m.id).split('@')[0]; return '+' + (s.charAt(0) === '+' ? s.slice(1) : s); }
+    // Anzeige kommt aus identity.js; die Suche greift auf Nummer UND Name.
+    function label(m){ return userLabel(m.user, m.pn || m.id); }
     function draw(){
       var hits = all.filter(function(m){ return !term || label(m).toLowerCase().indexOf(term) !== -1; });
       tblBox.innerHTML = '';
       if (!hits.length) { tblBox.appendChild(h('p', { class:'muted sm' }, ['Kein Mitglied passt zur Suche.'])); return; }
       var slice = hits.slice(0, shown);
       tblBox.appendChild(h('div', { class:'card', style:'padding:var(--s2) var(--s3)' }, [
-        dataTable(['Nummer', 'Rolle'], slice, function(m){
+        dataTable(['Mitglied', 'Rolle'], slice, function(m){
           return [
             label(m),
             m.admin ? h('span', { class:'badge ok' }, [m.admin === 'superadmin' ? 'Inhaber' : 'Admin']) : h('span', { class:'muted' }, ['Mitglied'])
@@ -1623,12 +1646,140 @@ function renderGroupDetail(gr){
   }).catch(function(e){ mBox.innerHTML = ''; mBox.appendChild(h('p', { class:'muted' }, [e.message])); });
 }
 function memberAction(jid, member, action){
-  var raw = String(member.pn || member.id).split('@')[0];
-  var label = raw.charAt(0) === '+' ? raw.slice(1) : raw;
-  if (!confirm((action === 'kick' ? 'Wirklich entfernen: +' : 'Wirklich BANNEN: +') + label + '?')) return;
+  // Die Rueckfrage nennt Nummer UND Name, damit niemand die falsche Person
+  // entfernt. Gesendet wird weiterhin ausschliesslich die technische ID.
+  var label = userLabel(member.user, member.pn || member.id);
+  if (!confirm((action === 'kick' ? 'Wirklich entfernen: ' : 'Wirklich BANNEN: ') + label + '?')) return;
   api('/groups/' + encodeURIComponent(jid) + '/' + action, { method:'POST', body:{ user: member.pn || member.id } })
     .then(function(res){ toast(res.ok ? '✅ Erledigt' : '⚠️ Hat nicht geklappt (bin ich Admin?)'); })
     .catch(function(e){ toast('⚠️ ' + e.message); });
+}
+
+// ── Nutzersuche ────────────────────────────────────────────────────
+// Gefiltert wird serverseitig. Der Client tippt nicht bei jedem Anschlag
+// gegen die Datenbank: 300 ms Debounce, und eine noch laufende Anfrage wird
+// beim naechsten Anschlag abgebrochen.
+var USER_PAGE = 25;
+
+function renderUsers(){
+  content.appendChild(h('h2', { class:'page-title' }, ['Nutzer']));
+  content.appendChild(h('p', { class:'muted sm', style:'margin-bottom:var(--s4)' }, [
+    'Suche nach Name, Telefonnummer oder JID. Die Nummer bleibt die eindeutige Identität — der Name ist nur Anzeige.'
+  ]));
+
+  var input = h('input', { type:'search', class:'search', placeholder:'Name, Nummer oder JID eingeben …',
+    autocomplete:'off', spellcheck:'false' });
+  content.appendChild(field('Nutzer suchen', input, { hideLabel:true }));
+
+  var box = h('div', { id:'userResults', style:'margin-top:var(--s4)' }, [
+    h('p', { class:'muted sm' }, ['Mindestens 2 Zeichen eingeben.'])
+  ]);
+  content.appendChild(box);
+
+  var timer = null, ctrl = null, term = '', offset = 0, rows = [];
+
+  function show(nodes){ box.innerHTML = ''; nodes.forEach(function(n){ box.appendChild(n); }); }
+
+  function run(append){
+    if (ctrl) ctrl.abort();
+    ctrl = new AbortController();
+    var mine = ctrl;
+    var q = term;
+    api('/users/search?q=' + encodeURIComponent(q) + '&limit=' + USER_PAGE + '&offset=' + offset,
+        { signal: mine.signal })
+      .then(function(res){
+        // Antwort einer inzwischen verworfenen Eingabe nicht anzeigen.
+        if (mine !== ctrl || q !== term) return;
+        rows = append ? rows.concat(res.users) : res.users;
+        draw(res.hasMore);
+      })
+      .catch(function(e){
+        if (e.name === 'AbortError' || e.message === 'auth') return;
+        show([h('p', { class:'muted sm' }, [e.message])]);
+      });
+  }
+
+  function draw(hasMore){
+    if (!rows.length) { show([h('p', { class:'muted sm' }, ['Niemand gefunden.'])]); return; }
+    var nodes = [
+      h('div', { class:'card', style:'padding:var(--s2) var(--s3)' }, [
+        dataTable(['Nutzer', 'Gruppen', 'XP', 'Warnungen', 'Zuletzt aktiv'], rows, function(u){
+          return [
+            h('button', { class:'link-btn', type:'button', onclick:function(){ openUser(u); } },
+              [userLabel(u.user, u.jid)]),
+            h('span', { class:'muted' }, [u.groups.length ? String(u.groups.length) : '—']),
+            h('span', { class:'num-cell' }, [u.xp ? nfmt(u.xp) : '—']),
+            u.warnings
+              ? h('span', { class:'badge warn' }, [String(u.warnings)])
+              : h('span', { class:'muted' }, ['—']),
+            h('span', { class:'muted' }, [u.lastActive ? fmtRel(u.lastActive) : 'unbekannt'])
+          ];
+        })
+      ])
+    ];
+    if (hasMore) {
+      nodes.push(h('button', { class:'ghost small', style:'margin-top:var(--s3)', onclick:function(){
+        offset += USER_PAGE; run(true);
+      } }, ['Weitere ' + USER_PAGE + ' anzeigen']));
+    }
+    show(nodes);
+  }
+
+  input.addEventListener('input', function(e){
+    term = e.target.value.trim();
+    offset = 0; rows = [];
+    if (timer) clearTimeout(timer);
+    if (term.length < 2) {
+      if (ctrl) { ctrl.abort(); ctrl = null; }
+      show([h('p', { class:'muted sm' }, ['Mindestens 2 Zeichen eingeben.'])]);
+      return;
+    }
+    show([skel(48), skel(48)]);
+    timer = setTimeout(function(){ run(false); }, 300);
+  });
+}
+
+// Detailkarte: zeigt ausschliesslich, was ohnehin schon in der Datenbank
+// steht. Keine erfundenen Felder, keine Nachladeschleife pro Person.
+function openUser(u){
+  content.innerHTML = '';
+  content.appendChild(h('div', { class:'detail-head' }, [
+    h('button', { class:'ghost small', onclick:function(){ render(); } }, ['← Zurück']),
+    h('h2', { class:'page-title', style:'margin:0' }, [userLabel(u.user, u.jid)])
+  ]));
+
+  var facts = [
+    ['Telefonnummer', (u.user && u.user.phone) || shortJid(u.jid)],
+    ['Anzeigename', (u.user && u.user.name) || 'nicht bekannt'],
+    ['Technische ID', u.jid],
+    ['Gesammelte XP', u.xp ? nfmt(u.xp) : '0'],
+    ['Gezählte Nachrichten', u.messages ? nfmt(u.messages) : '0'],
+    ['Aktive Verwarnungen', String(u.warnings)],
+    ['Stummgeschaltet', u.mutedUntil ? 'bis ' + new Date(u.mutedUntil).toLocaleString('de-DE') : 'nein'],
+    ['Zuletzt aktiv', u.lastActive ? fmtRel(u.lastActive) + ' (' + new Date(u.lastActive).toLocaleString('de-DE') + ')' : 'unbekannt']
+  ];
+  content.appendChild(h('div', { class:'card' }, [
+    h('h3', {}, ['Übersicht']),
+    h('div', { class:'tbl-wrap' }, [
+      h('table', { class:'tbl' }, [
+        h('tbody', {}, facts.map(function(f){
+          return h('tr', {}, [
+            h('td', { class:'muted', style:'width:42%' }, [f[0]]),
+            h('td', {}, [f[1]])
+          ]);
+        }))
+      ])
+    ])
+  ]));
+
+  content.appendChild(h('div', { class:'section-h' }, ['Gruppen (' + u.groups.length + ')']));
+  if (!u.groups.length) {
+    content.appendChild(h('p', { class:'muted sm' }, ['In keiner vom Bot betreuten Gruppe gesehen.']));
+  } else {
+    u.groups.forEach(function(g){
+      content.appendChild(h('div', { class:'list-item' }, [h('span', {}, [g.name])]));
+    });
+  }
 }
 
 function renderCommands(){
@@ -1741,13 +1892,13 @@ function renderMod(){
       ]));
     }
     section('Aktive Verwarnungen', res.warns, ['Nutzer', 'Gruppe', 'Grund', 'Seit'],
-      function(r){ return [shortJid(r.user_jid), gName(r.group_jid), r.reason || '—', fmtRel(r.created_at)]; },
+      function(r){ return [userLabel(r.user, r.user_jid), gName(r.group_jid), r.reason || '—', fmtRel(r.created_at)]; },
       'warn', 'Keine offenen Verwarnungen.');
     section('Aktive Stummschaltungen', res.mutes, ['Nutzer', 'Gruppe', 'Läuft ab'],
-      function(r){ return [shortJid(r.user_jid), gName(r.group_jid), fmtRel(r.until) + ' (' + new Date(Number(r.until)).toLocaleString('de-DE') + ')']; },
+      function(r){ return [userLabel(r.user, r.user_jid), gName(r.group_jid), fmtRel(r.until) + ' (' + new Date(Number(r.until)).toLocaleString('de-DE') + ')']; },
       'mute', 'Niemand ist stummgeschaltet.');
     section('Sperren', res.bans, ['Nutzer', 'Gruppe', 'Grund'],
-      function(r){ return [shortJid(r.user_jid), gName(r.group_jid), r.reason || '—']; },
+      function(r){ return [userLabel(r.user, r.user_jid), gName(r.group_jid), r.reason || '—']; },
       'ban', 'Keine Sperren aktiv.');
 
     box.appendChild(h('div', { class:'section-h' }, ['Audit-Log']));
@@ -1757,7 +1908,9 @@ function renderMod(){
       res.audit.forEach(function(a){
         box.appendChild(h('div', { class:'log-line info' }, [
           new Date(Number(a.created_at)).toLocaleString('de-DE') + ' · ' + a.action +
-          (a.target ? ' → ' + shortJid(a.target) : '') + (a.detail ? ' · ' + a.detail : '')
+          (a.target ? ' → ' + userLabel(a.targetUser, a.target) : '') +
+          (a.by_jid ? ' · durch ' + userLabel(a.byUser, a.by_jid) : '') +
+          (a.detail ? ' · ' + a.detail : '')
         ]));
       });
     }
@@ -1801,7 +1954,7 @@ function renderAgenda(){
       box.appendChild(wrap(dataTable(['Name', 'Datum', 'Wann'], res.birthdays, function(b){
         var when = b.days === 0 ? 'Heute' : b.days === 1 ? 'Morgen' : 'in ' + b.days + ' Tagen';
         return [
-          b.name || shortJid(b.user_jid),
+          userLabel(b.user, b.user_jid),
           b.day + '.' + b.month + '.',
           h('span', { class:'badge ' + (b.days === 0 ? 'accent' : b.days <= 7 ? 'warn' : '') }, [when])
         ];

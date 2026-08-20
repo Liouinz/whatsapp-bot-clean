@@ -19,6 +19,7 @@ import { resetEventCache } from './events.js';
 import { resetGlobalCache, getGlobalFlag, setGlobalFlag } from './global.js';
 import { invalidateSettings, invalidateBlockedWords, loadMutes, unmuteUser, unbanUser, clearWarnings, kickUser, banUser, audit } from './moderation.js';
 import { botIsAdminInMeta } from './permissions.js';
+import { resolveIdentities, resetIdentityCache } from './identity.js';
 import { queueLength, sendText } from './queue.js';
 import { LOGIN_HTML, APP_HTML, APP_CSS, APP_JS, THEME_INIT_JS } from './dashboard-ui.js';
 
@@ -304,15 +305,44 @@ export function createDashboard() {
       const jid = req.params.jid;
       if (!jid.endsWith('@g.us')) return res.status(400).json({ error: 'Ungültige Gruppe.' });
       const meta = await state.sock.groupMetadata(jid);
-      const members = (meta.participants || []).map((p) => ({
+      const raw = (meta.participants || []).map((p) => ({
         id: p.id,
         pn: p.phoneNumber || p.jid || null,
         admin: p.admin || null,
+      }));
+      // Namen fuer ALLE Teilnehmer in einem Rutsch aufloesen — bei 1024
+      // Mitgliedern waeren Einzelabfragen 1024 Roundtrips.
+      const ids = await resolveIdentities(raw.map((m) => m.pn || m.id), { groupJid: jid });
+      const members = raw.map((m) => ({
+        ...m,
+        // Die technische ID bleibt unveraendert; `user` ist reine Anzeige.
+        user: ids.get(String(m.pn || m.id)) || null,
       }));
       res.json({ name: meta.subject, members });
     } catch (err) {
       logError(err, 'panel.members');
       res.status(500).json({ error: 'Mitglieder konnten nicht geladen werden.' });
+    }
+  });
+
+  // ── Nutzersuche ──
+  // Liegt unter `api`, also automatisch hinter requireAuth (siehe app.use
+  // weiter oben). Zusaetzlich ein eigener Zaehler, damit ein Tippfehler-Sturm
+  // im Suchfeld die Datenbank nicht flutet.
+  const searchLimiter = rateLimit({ windowMs: 60_000, max: 60, standardHeaders: true, legacyHeaders: false });
+
+  api.get('/users/search', searchLimiter, async (req, res) => {
+    const q = String(req.query.q || '').trim();
+    if (q.length < 2) return res.status(400).json({ error: 'Bitte mindestens 2 Zeichen eingeben.' });
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 25));
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+
+    try {
+      const result = await searchUsers(q, limit, offset);
+      res.json(result);
+    } catch (err) {
+      logError(err, 'panel.userSearch');
+      res.status(500).json({ error: 'Suche fehlgeschlagen.' });
     }
   });
 
@@ -471,7 +501,29 @@ export function createDashboard() {
       dbRows('SELECT group_jid, user_jid, reason, created_at FROM bans ORDER BY created_at DESC LIMIT 50', []),
       dbRows('SELECT action, group_jid, target, by_jid, detail, created_at FROM audit_log ORDER BY created_at DESC LIMIT 30', []),
     ]);
-    res.json({ warns, mutes, bans, audit: auditRows });
+
+    // Anzeigenamen fuer alle beteiligten Personen in EINEM Durchgang. Die
+    // rohen user_jid/target/by_jid bleiben erhalten — die Aktionen im Panel
+    // (Verwarnung aufheben usw.) laufen weiterhin ueber sie.
+    const ids = await resolveIdentities([
+      ...warns.map((r) => r.user_jid),
+      ...mutes.map((r) => r.user_jid),
+      ...bans.map((r) => r.user_jid),
+      ...auditRows.map((r) => r.target),
+      ...auditRows.map((r) => r.by_jid),
+    ]);
+    const withUser = (rows) => rows.map((r) => ({ ...r, user: ids.get(String(r.user_jid)) || null }));
+
+    res.json({
+      warns: withUser(warns),
+      mutes: withUser(mutes),
+      bans: withUser(bans),
+      audit: auditRows.map((r) => ({
+        ...r,
+        targetUser: r.target ? ids.get(String(r.target)) || null : null,
+        byUser: r.by_jid ? ids.get(String(r.by_jid)) || null : null,
+      })),
+    });
   });
 
   api.post('/moderation/clear', async (req, res) => {
@@ -575,7 +627,14 @@ export function createDashboard() {
           : Math.round((new Date(now.getFullYear() + 1, Number(b.month) - 1, Number(b.day)) - today) / 86_400_000);
         return { ...b, days };
       }).sort((a, b) => a.days - b.days).slice(0, 15);
-      res.json({ schedules, birthdays: withDays, polls });
+      // birthdays.name ist ein selbst gesetzter Name; die Identitaetsaufloesung
+      // kennt ihn als eine ihrer Quellen und liefert die einheitliche Anzeige.
+      const bIds = await resolveIdentities(withDays.map((b) => b.user_jid));
+      res.json({
+        schedules,
+        birthdays: withDays.map((b) => ({ ...b, user: bIds.get(String(b.user_jid)) || null })),
+        polls,
+      });
     } catch (err) {
       logError(err, 'panel.agenda');
       res.status(500).json({ error: 'Planung konnte nicht geladen werden.' });
@@ -620,6 +679,9 @@ export function createDashboard() {
       resetXpCache();
       resetEventCache();
       resetGlobalCache();
+      // Sonst zeigt das Panel nach dem Wipe bis zu 60 s lang noch die Namen
+      // von Personen, deren Zeilen gerade geloescht wurden.
+      resetIdentityCache();
       groupCache.at = 0;
       groupCache.list = [];
       statsCache = { at: 0, data: null };
@@ -701,6 +763,100 @@ export function createDashboard() {
 }
 
 // ── Hilfen ─────────────────────────────────────────────────────────
+
+// LIKE-Sonderzeichen entschaerfen: ohne das waere ein eingetipptes '%' eine
+// Wildcard und '_' ein Platzhalter — die Suche wuerde alles zurueckgeben.
+function likeTerm(q) {
+  return `%${String(q).replace(/[\\%_]/g, (c) => '\\' + c)}%`;
+}
+
+/**
+ * Sucht Personen ueber Name, Telefonnummer und JID.
+ *
+ * Der Kandidatenkreis ist die Vereinigung aller Tabellen, in denen Personen
+ * vorkommen — wer nur eine Verwarnung hat, ist genauso auffindbar wie ein
+ * Gruppenmitglied. Die Namenssuche laeuft ueber die drei Tabellen mit
+ * Namensspalte; die Nummernsuche direkt ueber user_jid.
+ *
+ * Alle Werte sind gebundene ?-Parameter. Tabellennamen sind fest verdrahtet.
+ */
+async function searchUsers(q, limit, offset) {
+  const digits = q.replace(/[^0-9]/g, '');
+  const like = likeTerm(q);
+  const clauses = [];
+  const args = [];
+
+  // Namenssuche
+  for (const [table, col] of [['members', 'push_name'], ['user_profiles', 'name'], ['xp', 'name'], ['birthdays', 'name']]) {
+    clauses.push(`SELECT DISTINCT user_jid FROM ${table} WHERE ${col} LIKE ? ESCAPE '\\'`);
+    args.push(like);
+  }
+  // Nummern-/JID-Suche: erst ab 3 Ziffern, sonst trifft "49" die halbe Welt.
+  if (digits.length >= 3) {
+    for (const table of ['members', 'xp', 'warnings', 'mutes', 'bans', 'birthdays', 'user_profiles']) {
+      clauses.push(`SELECT DISTINCT user_jid FROM ${table} WHERE user_jid LIKE ? ESCAPE '\\'`);
+      args.push(`%${digits}%`);
+    }
+  }
+
+  // Ein Treffer mehr holen als angezeigt wird — daran erkennt der Client, ob
+  // sich ein "Weitere anzeigen" lohnt, ohne dass wir COUNT(*) brauchen.
+  const rows = await dbRows(
+    `SELECT user_jid FROM (${clauses.join(' UNION ')}) ORDER BY user_jid LIMIT ? OFFSET ?`,
+    [...args, limit + 1, offset]
+  );
+  const hasMore = rows.length > limit;
+  const jids = rows.slice(0, limit).map((r) => String(r.user_jid));
+  if (!jids.length) return { users: [], hasMore: false };
+
+  const ids = await resolveIdentities(jids);
+  const ph = jids.map(() => '?').join(',');
+  const now = Date.now();
+  const [groupRows, xpRows, warnRows, muteRows] = await Promise.all([
+    dbRows(
+      `SELECT m.user_jid, m.group_jid, m.last_active, COALESCE(g.name, m.group_jid) AS group_name
+       FROM members m LEFT JOIN groups g ON g.jid = m.group_jid
+       WHERE m.user_jid IN (${ph})`,
+      jids
+    ),
+    dbRows(`SELECT user_jid, SUM(xp) AS xp, SUM(messages) AS messages FROM xp WHERE user_jid IN (${ph}) GROUP BY user_jid`, jids),
+    dbRows(`SELECT user_jid, COUNT(*) AS c FROM warnings WHERE user_jid IN (${ph}) AND expires_at > ? GROUP BY user_jid`, [...jids, now]),
+    dbRows(`SELECT user_jid, MAX(until) AS until FROM mutes WHERE user_jid IN (${ph}) AND until > ? GROUP BY user_jid`, [...jids, now]),
+  ]);
+
+  const byJid = (rows) => {
+    const m = new Map();
+    for (const r of rows || []) m.set(String(r.user_jid), r);
+    return m;
+  };
+  const xpMap = byJid(xpRows);
+  const warnMap = byJid(warnRows);
+  const muteMap = byJid(muteRows);
+  const groupMap = new Map();
+  for (const r of groupRows || []) {
+    const key = String(r.user_jid);
+    if (!groupMap.has(key)) groupMap.set(key, []);
+    groupMap.get(key).push(r);
+  }
+
+  const users = jids.map((jid) => {
+    const groups = groupMap.get(jid) || [];
+    const xp = xpMap.get(jid);
+    const lastActive = groups.reduce((max, g) => Math.max(max, Number(g.last_active) || 0), 0);
+    return {
+      // Die technische Identitaet — jede Aktion laeuft weiterhin hierueber.
+      jid,
+      user: ids.get(jid) || null,
+      groups: groups.map((g) => ({ jid: g.group_jid, name: g.group_name })),
+      xp: xp ? Number(xp.xp) : 0,
+      messages: xp ? Number(xp.messages) : 0,
+      warnings: warnMap.get(jid) ? Number(warnMap.get(jid).c) : 0,
+      mutedUntil: muteMap.get(jid) ? Number(muteMap.get(jid).until) : null,
+      lastActive: lastActive || null,
+    };
+  });
+  return { users, hasMore };
+}
 
 const groupCache = { at: 0, list: [] };
 
