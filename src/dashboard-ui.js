@@ -8,25 +8,25 @@ export const LOGIN_HTML = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
-<meta name="theme-color" content="#0a0b10">
+<meta name="theme-color" content="#131519">
 <title>${BOT_NAME} — Login</title>
 <script src="/theme-init.js"></script>
 <link rel="stylesheet" href="/app.css">
 <script src="/app.js" defer></script>
 </head>
 <body class="login-body">
-<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
-<div class="flora" aria-hidden="true"></div>
-<canvas id="fx" aria-hidden="true"></canvas>
 <main class="login-wrap">
-  <form class="glass login-card" id="loginForm" autocomplete="off">
-    <div class="login-ring" aria-hidden="true"><i class="ring r1"></i><i class="ring r2"></i><span class="logo-dot"></span></div>
+  <form class="login-card" id="loginForm" autocomplete="off">
+    <div class="brand" style="margin-bottom:var(--s5)">
+      <span class="logo-dot" aria-hidden="true"></span>
+      <span class="brand-name">Control Center</span>
+    </div>
     <h1>${BOT_NAME}</h1>
-    <p class="sub">Control Center</p>
-    <label for="pw" class="visually-hidden">Passwort</label>
-    <input id="pw" type="password" placeholder="Passwort" autocomplete="current-password" required autofocus>
-    <button type="submit" id="loginBtn">Anmelden <span class="btn-arrow">→</span></button>
-    <p class="err" id="loginErr" role="alert"></p>
+    <p class="sub">Betriebskonsole — Anmeldung erforderlich</p>
+    <label for="pw">Passwort</label>
+    <input id="pw" type="password" autocomplete="current-password" required autofocus>
+    <button type="submit" id="loginBtn">Anmelden</button>
+    <p class="err" id="loginErr" role="alert" hidden></p>
   </form>
   <p class="login-foot">Geschützter Bereich · ${BOT_NAME}</p>
 </main>
@@ -39,7 +39,7 @@ export const APP_HTML = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
-<meta name="theme-color" content="#0a0b10">
+<meta name="theme-color" content="#131519">
 <title>${BOT_NAME} — Control Center</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
@@ -49,32 +49,41 @@ export const APP_HTML = `<!doctype html>
 <script src="/app.js" defer></script>
 </head>
 <body>
-<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
-<div class="flora" aria-hidden="true"></div>
-<canvas id="fx" aria-hidden="true"></canvas>
+<a class="skip-link" href="#content">Zum Inhalt springen</a>
 
 <div class="layout">
-  <aside class="sidebar glass">
+  <aside class="sidebar">
     <div class="brand">
       <span class="logo-dot" aria-hidden="true"></span>
       <span class="brand-name">${BOT_NAME}</span>
     </div>
-    <nav id="nav" class="nav"></nav>
-    <div class="accent-row" id="accentRow" title="Akzentfarbe"></div>
-    <button class="ghost small" id="logoutBtn">Abmelden</button>
+    <nav id="nav" class="nav" aria-label="Hauptnavigation"></nav>
+    <div class="sidebar-foot">
+      <div class="accent-row" id="accentRow" role="group" aria-label="Akzentfarbe"></div>
+      <button class="ghost small" id="logoutBtn">Abmelden</button>
+    </div>
   </aside>
+
+  <div class="mobile-head">
+    <span class="logo-dot" aria-hidden="true"></span>
+    <span class="brand-name">${BOT_NAME}</span>
+  </div>
 
   <main class="content" id="content" tabindex="-1"></main>
 </div>
 
-<nav class="tabbar glass" id="tabbar" aria-label="Navigation"></nav>
-<div class="toast" id="toast" role="status"></div>
+<nav class="tabbar" id="tabbar" aria-label="Hauptnavigation (mobil)"></nav>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>`;
 
 export const THEME_INIT_JS =
   "(function(){try{var d=document.documentElement;" +
-  "var t=localStorage.getItem('theme');if(t&&t!=='dark')d.setAttribute('data-theme',t);" +
+  // Ohne eigene Wahl folgt das Panel der Systemeinstellung; eine getroffene
+  // Wahl hat immer Vorrang.
+  "var t=localStorage.getItem('theme');" +
+  "if(!t&&window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches)t='nature';" +
+  "if(t&&t!=='dark')d.setAttribute('data-theme',t);" +
   "var a=localStorage.getItem('accent');if(a&&a!=='amber')d.setAttribute('data-accent',a);" +
   "var f=localStorage.getItem('fx');" +
   "var low=(navigator.hardwareConcurrency||8)<=4||(navigator.deviceMemory||8)<=4;" +
@@ -83,380 +92,681 @@ export const THEME_INIT_JS =
 
 export const APP_CSS = `
 /* ============================================================
-   SIGNAL DECK — Control-Center Designsystem
-   Bernstein/Kupfer-Signal auf tiefem Tinten-Schwarz. Radar-Sweep
-   statt Aurora-Blobs, Monospace fuer Kennzahlen & Titel (Konsolen-
-   Charakter), kein externer Font-Load (CSP-safe, System-Stacks).
+   INSTRUMENT — Control-Center Designsystem
+
+   Leitgedanke: Dies ist eine Betriebskonsole, kein Analytics-
+   Produkt. Die Flaeche ist monochrom (Graphit / Knochenweiss).
+   FARBE BEDEUTET ZUSTAND: gruen, bernstein und rot erscheinen
+   ausschliesslich als Statusaussage, nie dekorativ. Der waehlbare
+   Akzent ist auf Interaktion beschraenkt (Fokus, aktive Navigation,
+   primaere Aktion).
+
+   Kein externer Font-Load (CSP-safe, kein FOUT, offline nutzbar).
+   Charakter entsteht ueber Skala, Gewichtskontrast, engeres
+   Tracking und tabellarische Ziffern statt ueber einen Zierfont.
    ============================================================ */
-:root{
-  --ink:#0a0b10; --ink-2:#12141c;
-  --glass:rgba(17,19,28,.64); --glass2:rgba(26,28,40,.6);
-  --surface:rgba(15,17,25,.88);
-  --line:rgba(220,205,175,.11); --line2:rgba(230,210,175,.24);
-  --text:#f2eee3; --muted:#98937f;
-  --accent:#f0a93b; --accent2:#ff7a45;
-  --accent-dim:rgba(240,169,59,.14); --accent-glow:rgba(240,169,59,.45);
-  --warn:#ff8a3d; --bad:#ff5d7a; --ok:#38d68a;
-  --radius:16px; --radius-s:11px;
-  --ease:cubic-bezier(.2,.8,.25,1);
-  --sans:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  --mono:ui-monospace,"SF Mono","Cascadia Code","Roboto Mono",Menlo,Consolas,monospace;
-}
-[data-accent="violet"]{ --accent:#8b6bff; --accent2:#d06bff; --accent-dim:rgba(139,107,255,.15); --accent-glow:rgba(139,107,255,.42); }
-[data-accent="mint"]{ --accent:#39d98a; --accent2:#20b8b0; --accent-dim:rgba(57,217,138,.14); --accent-glow:rgba(57,217,138,.42); }
 
-*{box-sizing:border-box;margin:0;padding:0}
-html{-webkit-text-size-adjust:100%}
-body{
-  font-family:var(--sans);
-  background:var(--ink); color:var(--text); min-height:100dvh; line-height:1.5;
-  overflow-x:hidden;
-}
-body:before{
-  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
-  background:
-    radial-gradient(1200px 760px at 82% -8%, rgba(240,169,59,.08), transparent 60%),
-    radial-gradient(1000px 780px at -12% 108%, rgba(255,122,69,.05), transparent 58%);
-}
-/* feine Scanlines — Konsolen-Signatur, sehr dezent */
-body:after{
-  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.5;
-  background:repeating-linear-gradient(to bottom, rgba(255,235,205,.012) 0px, rgba(255,235,205,.012) 1px, transparent 1px, transparent 3px);
-}
-#fx{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.4}
-.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
-[tabindex="-1"]:focus-visible{outline:none}
+:root {
+  /* ── Flaechen & Linien ── */
+  --bg: #131519;
+  --bg-2: #0f1114;
+  --surface: #1a1d22;
+  --surface-2: #21252b;
+  --surface-3: #282d34;
+  --line: #2b3038;
+  --line-strong: #3b424c;
+  /* Grenze von Bedienelementen: WCAG 1.4.11 verlangt >= 3:1 (gemessen 3.03:1). */
+  --line-ui: #656870;
 
-/* ── Signature: Radar-Sweep statt Aurora-Blobs ─────────────── */
-.aurora{position:fixed;inset:-15%;z-index:0;pointer-events:none;opacity:.6}
-.aurora i{position:absolute;border-radius:50%;will-change:transform}
-.aurora i:nth-child(1){
-  width:52vw;height:52vw;right:-14vw;top:-16vh;
-  background:radial-gradient(circle,var(--accent) 0%,transparent 62%);
-  opacity:.16;filter:blur(70px);animation:pulseSlow 9s ease-in-out infinite;
-}
-.aurora i:nth-child(2){
-  width:64vmax;height:64vmax;left:50%;top:8vh;margin-left:-32vmax;
-  border-radius:50%;
-  background:conic-gradient(from 0deg,transparent 0deg,var(--accent-dim) 10deg,transparent 46deg,transparent 360deg);
-  filter:blur(1px);animation:sweep 16s linear infinite;transform-origin:50% 50%;
-}
-.aurora i:nth-child(3){
-  width:120vmax;height:120vmax;left:50%;top:8vh;margin-left:-60vmax;margin-top:-60vmax;
-  border-radius:50%;border:1px solid var(--line);opacity:.3;
-  background:
-    radial-gradient(circle, transparent 0 33.2%, var(--line) 33.2% 33.4%, transparent 33.4% 66.5%, var(--line) 66.5% 66.7%, transparent 66.7%);
-}
-@keyframes sweep{to{transform:rotate(360deg)}}
-@keyframes pulseSlow{0%,100%{opacity:.12}50%{opacity:.22}}
-@media(max-width:899px){
-  .aurora{opacity:.4}
-  .aurora i:nth-child(3){display:none}
+  /* ── Text ── */
+  --text: #e9e7e2;
+  --text-dim: #a3a9b2;
+  --text-faint: #838994;
+
+  /* ── Akzent: NUR Interaktion ── */
+  --accent: #e0a33c;
+  --accent-ink: #14161a;
+  --accent-dim: rgba(224, 163, 60, .13);
+  --accent-line: rgba(224, 163, 60, .38);
+
+  /* ── Zustand: NUR Status ── */
+  --ok: #4cb782;
+  --ok-dim: rgba(76, 183, 130, .14);
+  --warn: #d9a441;
+  --warn-dim: rgba(217, 164, 65, .14);
+  --bad: #ea7a72;
+  --bad-dim: rgba(229, 106, 99, .14);
+  --bad-solid: #c8473f;
+
+  /* ── Spacing: 4px-Basis ── */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
+
+  /* ── Typo-Skala ── */
+  --fs-xs: .75rem;
+  --fs-sm: .8125rem;
+  --fs-md: .9375rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.5rem;
+  --fs-2xl: 2.25rem;
+  --lh-tight: 1.2;
+  --lh-normal: 1.55;
+
+  /* ── Radius ── */
+  --r1: 3px; --r2: 6px; --r3: 10px;
+
+  /* ── Schatten: drei Stufen, mehr braucht es nicht ── */
+  --sh1: 0 1px 2px rgba(0, 0, 0, .30);
+  --sh2: 0 4px 14px rgba(0, 0, 0, .34);
+  --sh3: 0 18px 44px rgba(0, 0, 0, .46);
+
+  --ease: cubic-bezier(.22, .68, .36, 1);
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
 
-.glass{
-  background:var(--glass);
-  border:1px solid var(--line);
-  border-radius:var(--radius);
-  backdrop-filter:blur(16px) saturate(1.15); -webkit-backdrop-filter:blur(16px) saturate(1.15);
-  box-shadow:0 12px 40px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,240,220,.05);
+[data-accent="violet"] {
+  --accent: #9b8cf0; --accent-ink: #14161a;
+  --accent-dim: rgba(155, 140, 240, .14); --accent-line: rgba(155, 140, 240, .40);
 }
-.list-item.glass,.member-row.glass{
-  backdrop-filter:none;-webkit-backdrop-filter:none;
-  background:var(--surface);
-  box-shadow:0 2px 10px rgba(0,0,0,.28);
-  border-radius:var(--radius-s);
-}
-.list-item.glass:hover,.member-row.glass:hover{border-color:var(--line2)}
-
-[data-fx="lite"] .glass{backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--surface)}
-[data-fx="lite"] .aurora{opacity:.22}
-[data-fx="lite"] .aurora i{animation:none!important}
-[data-fx="lite"] body:after{display:none}
-[data-fx="lite"] .logo-dot{animation:none;box-shadow:0 0 10px var(--accent)}
-[data-fx="lite"] .login-ring .ring{animation:none}
-
-/* ── Login ──────────────────────────────────────────────────── */
-.login-wrap{min-height:100dvh;display:grid;place-items:center;padding:24px;position:relative;z-index:1;perspective:900px}
-.login-card{width:min(390px,100%);padding:44px 32px 34px;text-align:center;animation:rise3d .4s var(--ease) both}
-.login-ring{
-  width:88px;height:88px;margin:0 auto;border-radius:50%;display:grid;place-items:center;
-  position:relative;
-  background:radial-gradient(circle at 50% 30%,var(--accent-dim),transparent 70%);
-}
-.login-ring .ring{position:absolute;inset:6px;border-radius:50%;border:1px solid var(--accent-glow);opacity:.5}
-.login-ring .r1{animation:spin 6s linear infinite;border-style:dashed}
-.login-ring .r2{inset:16px;border-color:var(--accent2);opacity:.4;animation:spin 9s linear infinite reverse}
-@keyframes spin{to{transform:rotate(360deg)}}
-.login-card h1{font-family:var(--mono);font-size:1.5rem;letter-spacing:.02em;margin-top:18px}
-.login-card .sub{color:var(--muted);margin-bottom:26px;font-size:.82rem;letter-spacing:.2em;text-transform:uppercase;font-family:var(--mono)}
-.login-card input{
-  width:100%;padding:14px 16px;border-radius:12px;border:1px solid var(--line);
-  background:rgba(6,7,11,.7);color:var(--text);font-size:1rem;outline:none;
-  transition:border-color .2s, box-shadow .2s;
-}
-.login-card input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
-.login-card button{margin-top:14px;width:100%}
-.btn-arrow{display:inline-block;transition:transform .2s}
-button:hover .btn-arrow{transform:translateX(4px)}
-.err{color:var(--bad);min-height:1.4em;margin-top:12px;font-size:.9rem}
-.login-foot{position:fixed;bottom:18px;left:0;right:0;text-align:center;color:var(--muted);font-size:.72rem;opacity:.7;font-family:var(--mono)}
-
-.logo-dot{
-  display:inline-block;width:15px;height:15px;border-radius:50%;
-  background:var(--accent);box-shadow:0 0 16px var(--accent),0 0 46px var(--accent-glow);
-  animation:pulse 2.6s ease-in-out infinite;
+[data-accent="mint"] {
+  --accent: #58cfa6; --accent-ink: #101714;
+  --accent-dim: rgba(88, 207, 166, .14); --accent-line: rgba(88, 207, 166, .40);
 }
 
-/* ── Layout ─────────────────────────────────────────────────── */
-.layout{position:relative;z-index:1;display:flex;min-height:100dvh}
-.sidebar{
-  display:none;flex-direction:column;gap:8px;width:240px;margin:16px;padding:20px 14px 16px;
-  position:sticky;top:16px;height:calc(100dvh - 32px);
+/* ============================================================
+   Alternativ-Theme "nature" — helles Papier-Theme.
+   Alle Kombinationen auf >= 4.5:1 fuer Text ausgelegt; das alte
+   Theme lag bei 4.33:1 und fiel damit unter WCAG AA.
+   ============================================================ */
+[data-theme="nature"] {
+  --bg: #f4f2ed;
+  --bg-2: #ebe8e1;
+  --surface: #fbfaf7;
+  --surface-2: #f1efe9;
+  --surface-3: #e7e4dc;
+  --line: #d9d5cb;
+  --line-strong: #bdb8ab;
+  --line-ui: #807b6e;
+  --text: #1e2126;
+  --text-dim: #575d66;
+  --text-faint: #5f666f;
+  --accent: #8a5a06;
+  --accent-ink: #ffffff;
+  --accent-dim: rgba(138, 90, 6, .10);
+  --accent-line: rgba(138, 90, 6, .34);
+  --ok: #1c6b45;
+  --ok-dim: rgba(28, 107, 69, .11);
+  --warn: #7a5406;
+  --warn-dim: rgba(122, 84, 6, .11);
+  --bad: #a3271f;
+  --bad-dim: rgba(163, 39, 31, .10);
+  --bad-solid: #a3271f;
+  --sh1: 0 1px 2px rgba(28, 25, 20, .10);
+  --sh2: 0 4px 14px rgba(28, 25, 20, .12);
+  --sh3: 0 18px 44px rgba(28, 25, 20, .16);
 }
-.brand{display:flex;align-items:center;gap:11px;padding:6px 10px 18px;border-bottom:1px solid var(--line);margin-bottom:10px}
-.brand-name{font-family:var(--mono);font-weight:600;letter-spacing:.01em;font-size:1rem}
-.nav{display:flex;flex-direction:column;gap:2px;flex:1}
-.nav a{
-  display:flex;gap:11px;align-items:center;padding:10px 13px;border-radius:var(--radius-s);
-  color:var(--muted);text-decoration:none;font-size:.92rem;position:relative;
-  transition:background .15s,color .15s;
+[data-theme="nature"][data-accent="violet"] {
+  --accent: #574099; --accent-dim: rgba(87, 64, 153, .10); --accent-line: rgba(87, 64, 153, .34);
 }
-.nav a:before{
-  content:"";position:absolute;left:-14px;top:50%;width:3px;height:0;border-radius:2px;
-  background:var(--accent);transform:translateY(-50%);transition:height .18s var(--ease);
-}
-.nav a:hover{background:var(--glass2);color:var(--text)}
-.nav a:hover svg{transform:scale(1.1)}
-.nav a svg{width:18px;height:18px;flex:none;transition:transform .15s var(--ease)}
-.nav a.active{background:var(--accent-dim);color:var(--accent);font-weight:600}
-.nav a.active:before{height:18px}
-.accent-row{display:flex;gap:9px;padding:8px 12px 12px}
-.accent-dot{width:19px;height:19px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .15s,border-color .15s}
-.accent-dot:hover{transform:scale(1.15)}
-.accent-dot.sel{border-color:#fff}
-
-.content{flex:1;padding:18px 16px 116px;max-width:1320px;margin:0 auto;width:100%}
-@media(min-width:900px){
-  .sidebar{display:flex}
-  .tabbar{display:none}
-  .content{padding:30px 36px 52px}
-}
-
-.tabbar{
-  position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:5;
-  display:flex;padding:6px;overflow-x:auto;scrollbar-width:none;gap:2px;
-}
-.tabbar::-webkit-scrollbar{display:none}
-.tabbar a{
-  flex:1 0 66px;text-align:center;padding:9px 3px;border-radius:var(--radius-s);color:var(--muted);
-  text-decoration:none;font-size:.66rem;transition:background .15s,color .15s;white-space:nowrap;
-}
-.tabbar a svg{display:block;width:21px;height:21px;margin:0 auto 3px}
-.tabbar a.active{color:var(--accent);background:var(--accent-dim)}
-@media(min-width:900px){.tabbar{display:none}}
-
-h2.page-title{
-  font-family:var(--mono);font-size:1.05rem;font-weight:600;margin:8px 0 20px;
-  letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
-}
-h2.page-title:before{content:"// ";color:var(--accent)}
-.grid{display:grid;gap:12px;perspective:1100px}
-@media(min-width:700px){.grid.cols4{grid-template-columns:repeat(4,1fr)}.grid.cols2{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:699px){.grid.cols4{grid-template-columns:repeat(2,1fr)}.grid.cols2{grid-template-columns:1fr}}
-
-.card{padding:18px;animation:rise .35s var(--ease) both}
-.grid .card:nth-child(2){animation-delay:.04s}
-.grid .card:nth-child(3){animation-delay:.08s}
-.grid .card:nth-child(4){animation-delay:.12s}
-.grid .card.hover{
-  position:relative;transform-style:preserve-3d;
-  transform:rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translateY(var(--ty,0px));
-  transition:transform .18s var(--ease),box-shadow .18s,border-color .18s;
-}
-.grid .card.hover:hover{--ty:-3px;border-color:var(--line2);box-shadow:0 16px 48px rgba(0,0,0,.55),0 0 0 1px var(--accent-dim)}
-.grid .card.hover:after{
-  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
-  background:radial-gradient(240px circle at var(--mx,50%) var(--my,50%),rgba(255,235,205,.08),transparent 60%);
-  opacity:0;transition:opacity .2s;
-}
-.grid .card.hover:hover:after{opacity:1}
-.card.hover:hover{transform:translateY(-2px)}
-.card h3{font-family:var(--mono);font-size:.68rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px}
-.stat{font-family:var(--mono);font-size:1.85rem;font-weight:700;font-variant-numeric:tabular-nums;transition:opacity .3s;line-height:1.15}
-.stat small{font-size:.8rem;color:var(--muted);font-weight:500;font-family:var(--sans)}
-
-.hero{display:flex;align-items:center;gap:16px;padding:24px;margin-bottom:14px;position:relative;overflow:hidden}
-.hero:before{
-  content:"";position:absolute;inset:-40% -20% auto auto;width:55%;height:180%;
-  background:radial-gradient(circle,var(--accent-dim),transparent 70%);pointer-events:none;
-}
-.status-dot{width:14px;height:14px;border-radius:50%;flex:none;background:var(--bad);transition:background .4s;box-shadow:0 0 10px currentColor}
-.status-dot.open{background:var(--ok);box-shadow:0 0 14px rgba(56,214,138,.85);animation:pulse 2.4s ease-in-out infinite}
-.status-dot.connecting{background:var(--warn);animation:pulse 1.2s ease-in-out infinite}
-.hero .h-title{font-weight:700;font-size:1.15rem}
-.hero .h-sub{color:var(--muted);font-size:.85rem;font-family:var(--mono)}
-
-button,.btn{
-  border:1px solid var(--line);
-  background:linear-gradient(180deg,var(--accent-dim),rgba(0,0,0,.15));
-  color:var(--accent);padding:11px 18px;border-radius:var(--radius-s);font-size:.94rem;font-weight:600;
-  cursor:pointer;transition:transform .12s var(--ease),box-shadow .2s,background .2s;font-family:var(--sans);
-}
-button:hover{box-shadow:0 0 18px var(--accent-dim)}
-button:active{transform:translateY(1px) scale(.98)}
-button.ghost{background:transparent;color:var(--muted)}
-button.ghost:hover{color:var(--text);box-shadow:none}
-button.danger{color:var(--bad);background:rgba(255,93,122,.09)}
-button.danger:hover{box-shadow:0 0 18px rgba(255,93,122,.16)}
-.danger-zone{border-color:rgba(255,93,122,.35)}
-.danger-zone h3{color:var(--bad)}
-button.small{padding:7px 12px;font-size:.8rem;border-radius:9px}
-button:disabled{opacity:.45;cursor:not-allowed;transform:none}
-
-input[type=text],input[type=password],input[type=time],textarea,select{
-  background:rgba(6,7,11,.7);border:1px solid var(--line);color:var(--text);
-  border-radius:10px;padding:10px 13px;font-size:.95rem;outline:none;font-family:var(--sans);
-  transition:border-color .2s,box-shadow .2s;
-}
-input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
-
-.switch{position:relative;display:inline-block;width:44px;height:25px;flex:none}
-.switch input{opacity:0;width:0;height:0}
-.switch .sl{position:absolute;inset:0;border-radius:26px;background:rgba(220,205,175,.16);transition:background .2s;cursor:pointer}
-.switch .sl:before{content:"";position:absolute;width:19px;height:19px;border-radius:50%;left:3px;top:3px;background:#d8d0bd;transition:transform .2s var(--ease),background .2s}
-.switch input:checked + .sl{background:var(--accent-dim)}
-.switch input:checked + .sl:before{transform:translateX(19px);background:var(--accent);box-shadow:0 0 10px var(--accent)}
-.switch input:focus-visible + .sl{outline:2px solid var(--accent);outline-offset:2px}
-
-.row{display:flex;align-items:center;gap:12px}
-.row.between{justify-content:space-between}
-.row.wrap{flex-wrap:wrap}
-.list-item{padding:13px 16px;margin-bottom:9px}
-.badge{font-size:.66rem;padding:3px 9px;border-radius:99px;font-weight:700;letter-spacing:.05em;font-family:var(--mono)}
-.badge.ok{color:var(--ok);background:rgba(56,214,138,.13)}
-.badge.bad{color:var(--bad);background:rgba(255,93,122,.13)}
-.badge.warn{color:var(--warn);background:rgba(255,138,61,.13)}
-.badge.accent{color:var(--accent);background:var(--accent-dim)}
-.muted{color:var(--muted)} .sm{font-size:.85rem}
-.search{width:100%;margin-bottom:12px}
-
-.qr-box{display:grid;place-items:center;padding:32px;text-align:center;min-height:300px}
-.qr-box img{width:min(320px,80vw);border-radius:14px;background:#fff;padding:12px;box-shadow:0 0 44px var(--accent-dim),0 0 0 1px var(--line2);display:block;margin:0 auto}
-
-.pair-code{margin-top:14px;text-align:center;animation:rise .3s var(--ease) both}
-.pair-code b{
-  display:inline-block;font-family:var(--mono);font-size:1.85rem;font-weight:700;letter-spacing:.12em;
-  font-variant-numeric:tabular-nums;color:var(--accent);
-  padding:12px 24px;border:1px dashed var(--accent-glow);border-radius:12px;
-  background:var(--accent-dim);text-shadow:0 0 18px var(--accent-glow);
+[data-theme="nature"][data-accent="mint"] {
+  --accent: #12674c; --accent-dim: rgba(18, 103, 76, .10); --accent-line: rgba(18, 103, 76, .34);
 }
 
-.log-line{font-family:var(--mono);font-size:.76rem;padding:7px 10px;border-radius:8px;margin-bottom:5px;word-break:break-word}
-.log-line.error{background:rgba(255,93,122,.09);color:#ffb3c2}
-.log-line.warn{background:rgba(255,138,61,.09);color:#ffcda3}
-.log-line.info{background:rgba(220,205,175,.06);color:var(--muted)}
-
-.spark{width:100%;height:58px;display:block}
-.spark polyline{fill:none;stroke:var(--accent);stroke-width:2;stroke-linecap:round}
-.spark .fill{fill:color-mix(in srgb,var(--accent) 20%,transparent);stroke:none}
-.chart{width:100%;height:150px;display:block}
-.chart .cbar{fill:var(--accent);opacity:.78;transition:opacity .15s}
-.chart .cbar:hover{opacity:1}
-.chart text{fill:var(--muted);font-size:10px;font-family:var(--mono)}
-.hbar{height:9px;border-radius:6px;background:linear-gradient(90deg,var(--accent),var(--accent2));box-shadow:0 0 8px var(--accent-dim)}
-.hbar-track{background:rgba(220,205,175,.08);border-radius:6px;overflow:hidden;flex:1}
-
-.skel{border-radius:11px;background:linear-gradient(100deg,rgba(220,205,175,.05) 40%,rgba(220,205,175,.12) 50%,rgba(220,205,175,.05) 60%);background-size:200% 100%;animation:shimmer 1.4s infinite}
-@keyframes shimmer{to{background-position:-200% 0}}
-
-.toast{
-  position:fixed;bottom:96px;left:50%;transform:translate(-50%,20px);z-index:20;
-  background:var(--glass2);border:1px solid var(--accent-dim);border-radius:12px;
-  padding:11px 20px;font-size:.9rem;opacity:0;pointer-events:none;
-  transition:opacity .25s,transform .25s var(--ease);backdrop-filter:blur(12px);max-width:88vw;
+/* ── Reset ─────────────────────────────────────────────────── */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: var(--fs-md);
+  line-height: var(--lh-normal);
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
 }
-.toast.show{opacity:1;transform:translate(-50%,0)}
-@media(min-width:900px){.toast{bottom:26px}}
-
-.detail-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
-.member-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;margin-bottom:7px}
-.section-h{color:var(--muted);margin:16px 0 9px;font-size:.72rem;text-transform:uppercase;letter-spacing:.12em;font-weight:600;font-family:var(--mono)}
-
-@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
-@keyframes rise3d{from{opacity:0;transform:translateY(16px) rotateX(5deg)}to{opacity:1;transform:none}}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-
-/* ── Alternativ-Theme "nature" (heller, gruener Akzent) ────── */
-.flora{display:none;position:fixed;inset:0;z-index:0;pointer-events:none;
-  background:
-    radial-gradient(closest-side at 100% 2%, rgba(38,120,58,.14), transparent 70%),
-    radial-gradient(closest-side at 2% 98%, rgba(46,150,110,.12), transparent 70%),
-    radial-gradient(closest-side at 88% 96%, rgba(150,190,70,.1), transparent 72%);
+/* Feines Raster statt Verlaufsflaechen — Werkstattpapier, kein Nebel. */
+body:before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image: linear-gradient(var(--line) 1px, transparent 1px),
+                    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 64px 64px;
+  opacity: .30;
+  mask-image: radial-gradient(ellipse 120% 90% at 50% 0%, #000 20%, transparent 78%);
 }
-[data-theme="nature"]{
-  --ink:#e4f0e2;
-  --glass:rgba(255,255,255,.6); --glass2:rgba(255,255,255,.78);
-  --surface:rgba(255,255,255,.86);
-  --line:rgba(28,74,42,.16); --line2:rgba(28,74,42,.3);
-  --text:#16301f; --muted:#4c6353;
-  --accent:#1f7a43; --accent2:#3fa35c;
-  --accent-dim:rgba(31,122,67,.14); --accent-glow:rgba(31,122,67,.34);
-  --warn:#9a6206; --bad:#c62a48; --ok:#1f8a4c;
+.visually-hidden {
+  position: absolute !important; width: 1px; height: 1px;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
 }
-[data-theme="nature"][data-accent="violet"]{ --accent:#7c3aed; --accent2:#9d5cf5; --accent-dim:rgba(124,58,237,.13); --accent-glow:rgba(124,58,237,.32); }
-[data-theme="nature"][data-accent="mint"]{ --accent:#0f9d76; --accent2:#2bb389; --accent-dim:rgba(15,157,118,.14); --accent-glow:rgba(15,157,118,.32); }
+/* Der Sprunglink war dauerhaft versteckt — dann sieht eine Person, die sich
+   mit Tab bewegt, ihren eigenen Fokus nicht. Beim Fokus wird er sichtbar. */
+.skip-link {
+  position: absolute; left: -9999px; top: 0; z-index: 100;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--line-ui); border-radius: var(--r2);
+  padding: var(--s3) var(--s4); font-size: var(--fs-sm); text-decoration: none;
+}
+.skip-link:focus { left: var(--s3); top: var(--s3); }
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r1);
+}
+[tabindex="-1"]:focus-visible { outline: none; }
 
-[data-theme="nature"] body:before{
-  background:
-    radial-gradient(1100px 720px at 78% -12%, rgba(120,205,120,.3), transparent 60%),
-    radial-gradient(900px 720px at -12% 108%, rgba(80,180,150,.24), transparent 58%),
-    radial-gradient(760px 620px at 52% 122%, rgba(205,220,120,.18), transparent 62%);
+/* Alle Messwerte laufen tabellarisch — Zahlen stehen in Spalten. */
+.stat, .chart text, .log-line time, td.num, .num-cell {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--mono);
 }
-[data-theme="nature"] body:after{display:none}
-[data-theme="nature"] .flora{display:block}
-[data-theme="nature"] #fx{display:none}
-[data-theme="nature"] .aurora{opacity:.4}
-[data-theme="nature"] .aurora i:nth-child(1){background:radial-gradient(circle,#4cc768 0%,transparent 66%);opacity:.16}
-[data-theme="nature"] .aurora i:nth-child(2){display:none}
-[data-theme="nature"] .aurora i:nth-child(3){border-color:var(--line)}
 
-[data-theme="nature"] input[type=text],[data-theme="nature"] input[type=password],
-[data-theme="nature"] input[type=time],[data-theme="nature"] textarea,
-[data-theme="nature"] select,[data-theme="nature"] .login-card input{
-  background:rgba(255,255,255,.72);color:var(--text);
+/* ── Login ─────────────────────────────────────────────────── */
+.login-wrap {
+  min-height: 100dvh; display: grid; place-items: center;
+  padding: var(--s5); position: relative; z-index: 1;
 }
-[data-theme="nature"] .switch .sl{background:rgba(28,74,42,.2)}
-[data-theme="nature"] .switch .sl:before{background:#fff}
-[data-theme="nature"] .log-line.error{background:rgba(198,42,72,.1);color:#8f1d33}
-[data-theme="nature"] .log-line.warn{background:rgba(154,98,6,.12);color:#6f4705}
-[data-theme="nature"] .log-line.info{background:rgba(28,74,42,.07);color:var(--muted)}
-[data-theme="nature"] .badge.ok{color:#1f7a43;background:rgba(31,138,76,.15)}
-[data-theme="nature"] .badge.bad{color:#c62a48;background:rgba(198,42,72,.12)}
-[data-theme="nature"] .badge.warn{color:#8a5806;background:rgba(154,98,6,.15)}
-[data-theme="nature"] h2.page-title:before{color:var(--accent)}
-[data-theme="nature"] .grid .card.hover:after{background:radial-gradient(240px circle at var(--mx,50%) var(--my,50%),rgba(31,122,67,.12),transparent 60%)}
-[data-theme="nature"] .card.hover:hover,[data-theme="nature"] .grid .card.hover:hover{box-shadow:0 16px 44px rgba(24,60,36,.16),0 0 0 1px var(--accent-dim)}
-[data-theme="nature"] .glass{box-shadow:0 10px 34px rgba(24,60,36,.12), inset 0 1px 0 rgba(255,255,255,.5)}
+.login-card {
+  width: min(100%, 380px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  box-shadow: var(--sh3);
+  padding: var(--s6) var(--s5) var(--s5);
+  position: relative;
+}
+/* Signaturkante oben: das einzige Akzentelement auf der Loginseite. */
+.login-card:before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  border-radius: var(--r3) var(--r3) 0 0;
+}
+.login-card h1 {
+  font-size: var(--fs-xl); line-height: var(--lh-tight);
+  letter-spacing: -.02em; font-weight: 620; margin-bottom: var(--s1);
+}
+.login-card .sub { color: var(--text-dim); font-size: var(--fs-sm); margin-bottom: var(--s5); }
+.login-card label { display: block; font-size: var(--fs-xs); color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: .08em; margin-bottom: var(--s2); }
+.login-card input { width: 100%; margin-bottom: var(--s3); }
+.login-card button { width: 100%; }
+.login-foot { margin-top: var(--s4); font-size: var(--fs-xs); color: var(--text-faint); text-align: center; }
+.err {
+  background: var(--bad-dim); border: 1px solid var(--bad);
+  color: var(--text); border-radius: var(--r2);
+  padding: var(--s2) var(--s3); font-size: var(--fs-sm); margin-bottom: var(--s3);
+}
+.logo-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--accent); display: inline-block; flex: none;
+}
 
-@media(prefers-reduced-motion:reduce){
-  *,*:before,*:after{animation:none!important;transition:none!important}
-  .aurora{display:none}
-  .login-ring .ring{display:none}
-  .grid .card.hover{transform:none}
+/* ── Layout ────────────────────────────────────────────────── */
+.layout { display: flex; min-height: 100dvh; position: relative; z-index: 1; }
+.sidebar {
+  width: 232px; flex: none; padding: var(--s5) var(--s3);
+  border-right: 1px solid var(--line);
+  background: var(--bg-2);
+  display: flex; flex-direction: column; gap: var(--s5);
+  position: sticky; top: 0; height: 100dvh; overflow-y: auto;
 }
+.brand {
+  display: flex; align-items: center; gap: var(--s2);
+  padding: 0 var(--s2); font-family: var(--mono);
+  font-size: var(--fs-sm); letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text);
+}
+.brand-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.nav { display: flex; flex-direction: column; gap: var(--s5); }
+.nav-group { display: flex; flex-direction: column; gap: 2px; }
+.nav-label {
+  font-size: var(--fs-xs); color: var(--text-faint);
+  text-transform: uppercase; letter-spacing: .10em;
+  padding: 0 var(--s2) var(--s2);
+}
+.nav a {
+  display: flex; align-items: center; gap: var(--s3);
+  padding: var(--s2) var(--s2); border-radius: var(--r2);
+  color: var(--text-dim); text-decoration: none;
+  font-size: var(--fs-sm); position: relative;
+  transition: background .14s var(--ease), color .14s var(--ease);
+}
+.nav a svg { width: 17px; height: 17px; flex: none; }
+.nav a:hover { background: var(--surface-2); color: var(--text); }
+.nav a[aria-current="page"] { background: var(--accent-dim); color: var(--text); font-weight: 560; }
+.nav a[aria-current="page"]:before {
+  content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 2px; height: 18px; background: var(--accent); border-radius: 0 2px 2px 0;
+}
+.nav a[aria-current="page"] svg { color: var(--accent); }
+
+.sidebar-foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--s3); }
+.accent-row { display: flex; gap: var(--s2); padding: 0 var(--s2); }
+
+.content {
+  flex: 1; min-width: 0;
+  padding: var(--s6) var(--s6) var(--s8);
+  max-width: 1240px;
+}
+
+/* ── Mobile-Navigation ─────────────────────────────────────── */
+.tabbar { display: none; }
+@media (max-width: 899px) {
+  .layout { flex-direction: column; }
+  .sidebar { display: none; }
+  .content { padding: var(--s4) var(--s4) 92px; }
+  .tabbar {
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    position: fixed; inset: auto 0 0 0; z-index: 40;
+    background: var(--bg-2); border-top: 1px solid var(--line);
+    padding: var(--s1) var(--s1) calc(var(--s1) + env(safe-area-inset-bottom));
+    box-shadow: var(--sh2);
+  }
+  .tabbar a, .tabbar button {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; min-height: 52px; padding: var(--s1);
+    background: none; border: 0; border-radius: var(--r2);
+    color: var(--text-dim); text-decoration: none;
+    font-size: 10px; letter-spacing: .02em; font-family: var(--sans);
+    cursor: pointer;
+  }
+  .tabbar svg { width: 20px; height: 20px; }
+  .tabbar a[aria-current="page"] { color: var(--accent); background: var(--accent-dim); }
+  /* Mobiler Kopf: nur auf schmalen Screens sichtbar. */
+  .mobile-head {
+    display: flex; align-items: center; gap: var(--s2);
+    padding: var(--s4) var(--s4) 0;
+    font-family: var(--mono); font-size: var(--fs-sm);
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+}
+@media (min-width: 900px) { .mobile-head { display: none; } }
+
+/* „Mehr"-Blatt: die Ziele, die nicht in die Tabbar passen. */
+.sheet {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(0, 0, 0, .55);
+  display: grid; align-items: end;
+}
+.sheet-panel {
+  background: var(--surface); border-top: 1px solid var(--line);
+  border-radius: var(--r3) var(--r3) 0 0;
+  padding: var(--s4) var(--s4) calc(var(--s5) + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; gap: var(--s1);
+  box-shadow: var(--sh3);
+  animation: sheetUp .22s var(--ease);
+}
+.sheet-panel a {
+  display: flex; align-items: center; gap: var(--s3);
+  min-height: 48px; padding: 0 var(--s2); border-radius: var(--r2);
+  color: var(--text); text-decoration: none; font-size: var(--fs-md);
+}
+.sheet-panel a svg { width: 18px; height: 18px; color: var(--text-dim); }
+.sheet-panel a[aria-current="page"] { background: var(--accent-dim); }
+.sheet-grip { width: 34px; height: 3px; border-radius: 3px; background: var(--line-strong);
+  margin: 0 auto var(--s3); }
+@keyframes sheetUp { from { transform: translateY(14px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ── Seitenkopf ────────────────────────────────────────────── */
+h2.page-title {
+  font-size: var(--fs-xl); line-height: var(--lh-tight);
+  letter-spacing: -.02em; font-weight: 620;
+  margin-bottom: var(--s5);
+  display: flex; align-items: center; gap: var(--s3);
+}
+.section-h {
+  font-size: var(--fs-xs); color: var(--text-faint);
+  text-transform: uppercase; letter-spacing: .10em;
+  margin: var(--s6) 0 var(--s3);
+  display: flex; align-items: center; gap: var(--s3);
+}
+.section-h:after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+/* ── Flaechen ──────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  box-shadow: var(--sh1);
+}
+.card { padding: var(--s4); }
+.card h3 {
+  font-size: var(--fs-xs); color: var(--text-dim); font-weight: 560;
+  text-transform: uppercase; letter-spacing: .08em; margin-bottom: var(--s3);
+}
+.card.hover { transition: border-color .14s var(--ease), box-shadow .14s var(--ease); }
+.card.hover:hover { border-color: var(--line-strong); box-shadow: var(--sh2); }
+
+.grid { display: grid; gap: var(--s3); }
+.grid.cols2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid.cols4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1099px) { .grid.cols4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 599px) {
+  .grid.cols4, .grid.cols2 { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── Statuszeile: das dominante Element der Uebersicht ─────── */
+.hero {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  border-radius: var(--r3);
+  padding: var(--s5);
+  display: flex; align-items: flex-start; gap: var(--s4);
+  flex-wrap: wrap;
+  box-shadow: var(--sh1);
+}
+.hero.is-open { border-left-color: var(--ok); }
+.hero.is-connecting { border-left-color: var(--warn); }
+.hero.is-down { border-left-color: var(--bad); }
+.hero .h-title {
+  font-size: var(--fs-2xl); line-height: 1.05; letter-spacing: -.03em;
+  font-weight: 640; margin-bottom: var(--s2);
+}
+.hero .h-sub { color: var(--text-dim); font-size: var(--fs-sm); }
+.hero-main { flex: 1 1 260px; min-width: 0; }
+
+/* ── Betriebshinweise: Abweichungen stehen ueber den Kennzahlen ─ */
+.alerts { display: flex; flex-direction: column; gap: var(--s2); margin-top: var(--s3); }
+.alert {
+  display: flex; align-items: baseline; gap: var(--s3); flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--line);
+  border-left: 3px solid var(--line-ui);
+  border-radius: var(--r2); padding: var(--s3) var(--s4);
+  font-size: var(--fs-sm);
+}
+.alert.bad { border-left-color: var(--bad); }
+.alert.warn { border-left-color: var(--warn); }
+/* Unter ~520px bekommt der Text die volle Zeile, der Link rutscht darunter —
+   sonst quetscht sich die Meldung in eine schmale Spalte neben den Link. */
+.alert .a-text { flex: 1 1 260px; min-width: 0; }
+.alert .a-go {
+  flex: none; background: none; border: 0; box-shadow: none;
+  padding: 0 2px; min-height: 24px;
+  color: var(--accent); font-size: var(--fs-sm); font-weight: 560;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.alert .a-go:hover { filter: none; color: var(--text); }
+.alert-none {
+  display: flex; align-items: center; gap: var(--s3); margin-top: var(--s3);
+  color: var(--text-dim); font-size: var(--fs-sm);
+}
+
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex: none;
+  background: var(--text-faint); display: inline-block;
+}
+.status-dot.open { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-dim); }
+.status-dot.connecting { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-dim); animation: pulse 1.9s var(--ease) infinite; }
+@keyframes pulse { 50% { opacity: .45; } }
+
+.stat {
+  display: block; font-size: var(--fs-xl); line-height: 1.1;
+  letter-spacing: -.02em; font-weight: 600;
+}
+.stat small { display: block; color: var(--text-faint); font-size: var(--fs-xs);
+  text-transform: uppercase; letter-spacing: .08em; margin-top: var(--s1); }
+
+/* ── Buttons ───────────────────────────────────────────────── */
+button, .btn {
+  font: inherit; font-size: var(--fs-sm); font-weight: 560;
+  background: var(--accent); color: var(--accent-ink);
+  border: 1px solid transparent; border-radius: var(--r2);
+  padding: 9px var(--s4); min-height: 38px;
+  cursor: pointer;
+  transition: filter .14s var(--ease), background .14s var(--ease);
+}
+button:hover { filter: brightness(1.08); }
+button:active { filter: brightness(.94); }
+button:disabled { opacity: .5; cursor: not-allowed; filter: none; }
+button.ghost {
+  background: var(--surface-2); color: var(--text); border-color: var(--line-ui);
+}
+button.ghost:hover { background: var(--surface-3); border-color: var(--line-strong); filter: none; }
+button.danger { background: var(--bad-solid); color: #fff; }
+button.small { min-height: 32px; padding: 5px var(--s3); font-size: var(--fs-xs); }
+
+.danger-zone {
+  border: 1px solid var(--bad); border-radius: var(--r3);
+  background: var(--bad-dim); padding: var(--s4);
+}
+.danger-zone h3 { color: var(--bad); }
+
+/* ── Formulare ─────────────────────────────────────────────── */
+label.field { display: block; margin-bottom: var(--s3); }
+label.field > span {
+  display: block; font-size: var(--fs-xs); color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: .08em; margin-bottom: var(--s2);
+}
+input[type=text], input[type=password], input[type=time], input[type=tel],
+input[type=search], input[type=number], input[type=email], textarea, select {
+  font: inherit; font-size: var(--fs-sm); width: 100%;
+  background: var(--bg-2); color: var(--text);
+  border: 1px solid var(--line-ui); border-radius: var(--r2);
+  padding: 9px var(--s3); min-height: 38px;
+  transition: border-color .14s var(--ease);
+}
+input::placeholder, textarea::placeholder { color: var(--text-faint); }
+input:focus, textarea:focus, select:focus { border-color: var(--accent-line); }
+textarea { resize: vertical; min-height: 84px; line-height: var(--lh-normal); }
+.search { max-width: 340px; }
+/* Safari/Chrome geben type=search eine eigene Optik — zuruecksetzen. */
+input[type=search] { -webkit-appearance: none; appearance: none; }
+input[type=search]::-webkit-search-decoration,
+input[type=search]::-webkit-search-cancel-button { -webkit-appearance: none; }
+
+/* ── Schalter ──────────────────────────────────────────────── */
+.switch { position: relative; display: inline-flex; flex: none; width: 42px; height: 24px; }
+.switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.switch .sl {
+  position: absolute; inset: 0; border-radius: 99px;
+  background: var(--surface-3); border: 1px solid var(--line-ui);
+  transition: background .16s var(--ease), border-color .16s var(--ease);
+}
+.switch .sl:before {
+  content: ""; position: absolute; left: 3px; top: 50%; transform: translateY(-50%);
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--text-dim);
+  transition: transform .16s var(--ease), background .16s var(--ease);
+}
+.switch input:checked + .sl { background: var(--accent-dim); border-color: var(--accent); }
+.switch input:checked + .sl:before { transform: translate(18px, -50%); background: var(--accent); }
+.switch input:focus-visible + .sl { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Auswahl-Buttons (Theme, Akzent, Leistung) — echte Buttons, >= 44px. */
+.choice {
+  min-height: 44px; min-width: 44px;
+  background: var(--surface-2); border: 1px solid var(--line-ui); color: var(--text);
+}
+.choice[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-dim); }
+.accent-dot {
+  width: 44px; height: 44px; border-radius: var(--r2);
+  border: 1px solid var(--line-ui); background: var(--surface-2);
+  display: inline-grid; place-items: center; cursor: pointer; padding: 0;
+}
+.accent-dot i {
+  width: 16px; height: 16px; border-radius: 50%; display: block;
+  border: 1px solid rgba(0, 0, 0, .25);
+}
+.accent-dot[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-dim); }
+
+/* ── Zeilen & Listen ───────────────────────────────────────── */
+.row { display: flex; align-items: center; gap: var(--s3); }
+.row.between { justify-content: space-between; flex-wrap: wrap; }
+.row.wrap { flex-wrap: wrap; }
+.list-item {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s3); flex-wrap: wrap;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line); border-radius: var(--r2);
+  background: var(--surface);
+  margin-bottom: var(--s2);
+}
+.list-item.hover:hover { border-color: var(--line-strong); }
+a.list-item { text-decoration: none; color: inherit; cursor: pointer; }
+
+/* Anklickbare Listenzeile als echter Button — ein <div onclick> waere
+   weder fokussierbar noch mit der Tastatur bedienbar. */
+.list-btn {
+  display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap;
+  width: 100%; text-align: left; font-weight: 400;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--r2);
+  padding: var(--s3) var(--s4); margin-bottom: var(--s2); min-height: 56px;
+  transition: border-color .14s var(--ease), background .14s var(--ease);
+}
+.list-btn:hover { background: var(--surface-2); border-color: var(--line-strong); filter: none; }
+.lb-main { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.lb-title { font-size: var(--fs-base); font-weight: 560; }
+.lb-tags { display: flex; gap: var(--s2); flex-wrap: wrap; flex: none; }
+.lb-chev { flex: none; color: var(--text-faint); font-size: var(--fs-lg); line-height: 1; }
+.list-btn:hover .lb-chev { color: var(--text-dim); }
+.detail-head { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s4); flex-wrap: wrap; }
+
+/* ── Tabellen ──────────────────────────────────────────────── */
+.tbl { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.tbl caption { text-align: left; color: var(--text-faint); font-size: var(--fs-xs);
+  text-transform: uppercase; letter-spacing: .08em; padding-bottom: var(--s2); }
+.tbl th {
+  text-align: left; font-size: var(--fs-xs); font-weight: 560; color: var(--text-faint);
+  text-transform: uppercase; letter-spacing: .07em;
+  padding: var(--s2) var(--s3); border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.tbl td { padding: var(--s3); border-bottom: 1px solid var(--line); vertical-align: middle; }
+.tbl tr:last-child td { border-bottom: 0; }
+.tbl td.num { text-align: right; }
+.tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* ── Badges ────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: var(--fs-xs); font-weight: 560; letter-spacing: .04em;
+  padding: 3px var(--s2); border-radius: var(--r1);
+  background: var(--surface-3); color: var(--text-dim);
+  border: 1px solid var(--line);
+  text-transform: uppercase; white-space: nowrap;
+}
+.badge.ok { background: var(--ok-dim); color: var(--ok); border-color: transparent; }
+.badge.bad { background: var(--bad-dim); color: var(--bad); border-color: transparent; }
+.badge.warn { background: var(--warn-dim); color: var(--warn); border-color: transparent; }
+.badge.accent { background: var(--accent-dim); color: var(--accent); border-color: transparent; }
+
+.muted { color: var(--text-dim); }
+.small, .sm { font-size: var(--fs-sm); }
+.info { color: var(--text-dim); font-size: var(--fs-sm); }
+
+/* ── QR & Pairing ──────────────────────────────────────────── */
+.qr-box {
+  display: grid; place-items: center; gap: var(--s3);
+  padding: var(--s5); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: var(--r3);
+}
+.qr-box img {
+  width: min(280px, 74vw); height: auto; display: block;
+  background: #fff; padding: var(--s3); border-radius: var(--r2);
+}
+.pair-code {
+  font-family: var(--mono); font-size: var(--fs-xl); letter-spacing: .22em;
+  background: var(--surface-2); border: 1px dashed var(--line-strong);
+  border-radius: var(--r2); padding: var(--s3) var(--s4); text-align: center;
+}
+
+/* ── Logs ──────────────────────────────────────────────────── */
+.log-line {
+  font-family: var(--mono); font-size: var(--fs-xs); line-height: 1.65;
+  padding: 5px var(--s3); border-left: 2px solid var(--line);
+  color: var(--text-dim); word-break: break-word;
+  border-bottom: 1px solid var(--line);
+}
+.log-line:last-child { border-bottom: 0; }
+.log-line.info { border-left-color: var(--line-strong); }
+.log-line.warn { border-left-color: var(--warn); color: var(--text); background: var(--warn-dim); }
+.log-line.error { border-left-color: var(--bad); color: var(--text); background: var(--bad-dim); }
+
+/* ── Diagramme ─────────────────────────────────────────────── */
+.spark { display: block; width: 100%; height: 46px; overflow: visible; }
+.spark polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linejoin: round; }
+.spark .fill { fill: var(--accent-dim); stroke: none; }
+.chart { display: block; width: 100%; height: 168px; }
+/* Balken sind Daten, keine Flaeche — sie muessen sich klar vom Grund
+   abheben (>= 3:1 nach WCAG 1.4.11 fuer grafische Objekte). */
+.chart .cbar { fill: var(--line-ui); transition: fill .14s var(--ease); }
+.chart .cbar:hover { fill: var(--accent); }
+.chart text { fill: var(--text-faint); font-size: 10px; }
+.hbar-track {
+  flex: 1 1 auto; min-width: 60px; height: 8px;
+  border-radius: 99px; background: var(--surface-3); overflow: hidden;
+}
+.hbar { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+
+/* ── Skeleton & Toast ──────────────────────────────────────── */
+.skel {
+  height: 14px; border-radius: var(--r1); margin-bottom: var(--s2);
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 37%, var(--surface-2) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+
+.toast {
+  position: fixed; left: 50%; bottom: var(--s5); z-index: 90;
+  transform: translate(-50%, 12px); opacity: 0; pointer-events: none;
+  background: var(--surface-3); color: var(--text);
+  border: 1px solid var(--line-strong); border-radius: var(--r2);
+  padding: var(--s3) var(--s4); font-size: var(--fs-sm);
+  box-shadow: var(--sh2); max-width: min(92vw, 460px);
+  transition: opacity .18s var(--ease), transform .18s var(--ease);
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+@media (max-width: 899px) { .toast { bottom: 96px; } }
+
+/* ── Eintritt: EIN orchestrierter Aufbau, gestaffelt ───────── */
+.content > * { animation: rise .34s var(--ease) both; }
+.content > *:nth-child(2) { animation-delay: .04s; }
+.content > *:nth-child(3) { animation-delay: .08s; }
+.content > *:nth-child(4) { animation-delay: .12s; }
+.content > *:nth-child(n+5) { animation-delay: .16s; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ── Reduzierte Bewegung ───────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *:before, *:after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Sparsamer Modus: Raster und Schatten weg ──────────────── */
+[data-fx="lite"] body:before { display: none; }
+[data-fx="lite"] .card, [data-fx="lite"] .list-item, [data-fx="lite"] .hero { box-shadow: none; }
+
 `;
 
 export const APP_JS = `
 (function(){
 'use strict';
 
+// Die Farbwerte selbst stehen im CSS. Hier steht nur, welche Akzente es gibt;
+// die Vorschau liest den tatsaechlichen Token-Wert, damit es keine zweite,
+// stets nachzupflegende Quelle gibt.
 var ACCENTS = [
-  { id:'amber', color:'#f0a93b' },
-  { id:'violet', color:'#8b6bff' },
-  { id:'mint', color:'#39d98a' }
+  { id:'amber', label:'Bernstein' },
+  { id:'violet', label:'Violett' },
+  { id:'mint', label:'Minze' }
 ];
+(function readAccentColors(){
+  var probe = document.createElement('div');
+  probe.style.display = 'none';
+  document.body.appendChild(probe);
+  ACCENTS.forEach(function(a){
+    if (a.id === 'amber') probe.removeAttribute('data-accent');
+    else probe.setAttribute('data-accent', a.id);
+    a.color = getComputedStyle(probe).getPropertyValue('--accent').trim() || '#888';
+  });
+  probe.remove();
+})();
 function applyAccent(id){
   if (id === 'amber') document.documentElement.removeAttribute('data-accent');
   else document.documentElement.setAttribute('data-accent', id);
@@ -575,17 +885,27 @@ var IC = {
   gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'
 };
 
-var TABS = [
-  { id:'home', label:'Übersicht', ico:IC.home },
-  { id:'stats', label:'Statistik', ico:IC.stats },
-  { id:'qr', label:'QR', ico:IC.qr },
-  { id:'groups', label:'Gruppen', ico:IC.groups },
-  { id:'commands', label:'Befehle', ico:IC.cmd },
-  { id:'mod', label:'Moderation', ico:IC.shield },
-  { id:'agenda', label:'Planung', ico:IC.cal },
-  { id:'logs', label:'Logs', ico:IC.logs },
-  { id:'settings', label:'Extras', ico:IC.gear }
+// Navigation in drei Sinnabschnitte gebuendelt statt neun gleichrangiger
+// Eintraege. Mobil zeigt die Tabbar die vier haeufigsten Ziele plus "Mehr" —
+// vorher scrollten neun Eintraege bei 320px ohne sichtbaren Hinweis.
+var NAV_GROUPS = [
+  { label:'Betrieb', items:[
+    { id:'home', label:'Übersicht', ico:IC.home, primary:true },
+    { id:'qr', label:'Verbindung', ico:IC.qr, primary:true },
+    { id:'logs', label:'Logs', ico:IC.logs }
+  ]},
+  { label:'Community', items:[
+    { id:'groups', label:'Gruppen', ico:IC.groups, primary:true },
+    { id:'commands', label:'Befehle', ico:IC.cmd, primary:true },
+    { id:'mod', label:'Moderation', ico:IC.shield },
+    { id:'agenda', label:'Planung', ico:IC.cal }
+  ]},
+  { label:'System', items:[
+    { id:'stats', label:'Statistik', ico:IC.stats },
+    { id:'settings', label:'Extras', ico:IC.gear }
+  ]}
 ];
+var TABS = NAV_GROUPS.reduce(function(all, g){ return all.concat(g.items); }, []);
 var current = location.pathname === '/qr' ? 'qr' : (location.hash.replace('#','') || 'home');
 var status = null;
 var qrPollTimer = null;
@@ -626,6 +946,40 @@ function fmtUptime(ms){
   return d > 0 ? d + ' T ' + hh + ' Std' : hh > 0 ? hh + ' Std ' + m + ' Min' : m + ' Min';
 }
 function nfmt(n){ return Number(n || 0).toLocaleString('de-DE'); }
+// Relative Zeit in beide Richtungen: "vor 2 Std" / "in 3 T".
+function fmtRel(ts){
+  var diff = Number(ts) - Date.now(), past = diff < 0, a = Math.abs(diff);
+  var m = Math.round(a/60000), hh = Math.round(a/3600000), d = Math.round(a/86400000);
+  var v = m < 60 ? Math.max(1, m) + ' Min' : hh < 48 ? hh + ' Std' : d + ' T';
+  return (past ? 'vor ' : 'in ') + v;
+}
+function shortJid(jid){ return '+' + String(jid || '').split('@')[0]; }
+// Gruppennamen aus /api/groups merken, damit Listen mit reiner JID
+// nicht als Zahlenkolonne enden.
+var groupNames = {};
+function rememberGroups(list){
+  (list || []).forEach(function(g){ groupNames[g.jid] = g.name; });
+  return list || [];
+}
+function gName(jid){
+  return groupNames[jid] || ('Gruppe …' + String(jid || '').split('@')[0].slice(-4));
+}
+// Tabelle mit Kopfzeile; die letzte Spalte bleibt fuer Aktionen frei.
+function dataTable(cols, rows, cellsFn, actionFn){
+  var headCells = cols.map(function(c){ return h('th', {}, [c]); });
+  if (actionFn) headCells.push(h('th', { class:'num' }, [h('span', { class:'visually-hidden' }, ['Aktion'])]));
+  var body = h('tbody');
+  rows.forEach(function(r){
+    var tds = cellsFn(r).map(function(c){
+      return h('td', {}, [typeof c === 'string' ? document.createTextNode(c) : c]);
+    });
+    if (actionFn) tds.push(h('td', { class:'num' }, [actionFn(r)]));
+    body.appendChild(h('tr', {}, tds));
+  });
+  return h('div', { class:'tbl-wrap' }, [
+    h('table', { class:'tbl' }, [h('thead', {}, [h('tr', {}, headCells)]), body])
+  ]);
+}
 function connLabel(st){
   if (!st) return ['connecting','Verbinde …'];
   if (st.stopped) return ['bad','Gestoppt: ' + (st.stopReason || 'manuell')];
@@ -649,32 +1003,117 @@ function tween(el, target){
 }
 
 function renderNav(){
-  ['nav','tabbar'].forEach(function(id){
-    var box = document.getElementById(id);
-    if (!box) return;
-    box.innerHTML = '';
-    TABS.forEach(function(t){
-      var a = h('a', { href:'#' + t.id, class: t.id === current ? 'active' : '' });
-      a.appendChild(h('span', { html:t.ico }));
-      a.appendChild(document.createTextNode(id === 'tabbar' ? t.label : ' ' + t.label));
-      box.appendChild(a);
-    });
-  });
-  var row = document.getElementById('accentRow');
-  if (row) {
-    row.innerHTML = '';
-    ACCENTS.forEach(function(acc){
-      var cur = 'cyan';
-      try { cur = localStorage.getItem('accent') || 'cyan'; } catch(e){}
-      row.appendChild(h('span', {
-        class:'accent-dot' + (cur === acc.id ? ' sel' : ''),
-        style:'background:' + acc.color,
-        title:acc.id,
-        onclick:function(){ applyAccent(acc.id); renderNav(); }
-      }));
+  // Desktop: gruppierte Sidebar mit Abschnittslabels.
+  var nav = document.getElementById('nav');
+  if (nav) {
+    nav.innerHTML = '';
+    NAV_GROUPS.forEach(function(g){
+      var grp = h('div', { class:'nav-group' });
+      grp.appendChild(h('div', { class:'nav-label' }, [g.label]));
+      g.items.forEach(function(t){ grp.appendChild(navLink(t)); });
+      nav.appendChild(grp);
     });
   }
+
+  // Mobil: vier primaere Ziele plus "Mehr"-Blatt fuer den Rest.
+  var bar = document.getElementById('tabbar');
+  if (bar) {
+    bar.innerHTML = '';
+    var primary = TABS.filter(function(t){ return t.primary; });
+    primary.forEach(function(t){ bar.appendChild(navLink(t)); });
+    var restActive = TABS.some(function(t){ return !t.primary && t.id === current; });
+    var more = h('button', {
+      type:'button',
+      'aria-haspopup':'dialog',
+      'aria-expanded':'false',
+      class: restActive ? 'more-active' : '',
+      onclick: openMoreSheet
+    });
+    more.appendChild(h('span', { html:IC.gear }));
+    more.appendChild(document.createTextNode('Mehr'));
+    if (restActive) more.style.color = 'var(--accent)';
+    bar.appendChild(more);
+  }
+
+  renderAccentRow();
 }
+
+// Feld mit echtem <label for>. placeholder allein ist KEIN zugaenglicher Name:
+// er verschwindet beim Tippen und wird nicht zuverlaessig angesagt.
+var fieldSeq = 0;
+function field(labelText, el, opts){
+  opts = opts || {};
+  var id = el.id || ('f' + (++fieldSeq));
+  el.id = id;
+  var lab = h('label', { class:'field', for:id });
+  lab.appendChild(h('span', opts.hideLabel ? { class:'visually-hidden' } : {}, [labelText]));
+  lab.appendChild(el);
+  return lab;
+}
+
+function navLink(t){
+  var attrs = { href:'#' + t.id };
+  // aria-current statt einer reinen Klasse: Screenreader sagen jetzt an,
+  // welche Seite die aktuelle ist.
+  if (t.id === current) attrs['aria-current'] = 'page';
+  var a = h('a', attrs);
+  a.appendChild(h('span', { html:t.ico }));
+  a.appendChild(document.createTextNode(t.label));
+  return a;
+}
+
+function openMoreSheet(){
+  var rest = TABS.filter(function(t){ return !t.primary; });
+  var panel = h('div', { class:'sheet-panel', role:'dialog', 'aria-modal':'true', 'aria-label':'Weitere Bereiche' });
+  panel.appendChild(h('div', { class:'sheet-grip', 'aria-hidden':'true' }));
+  rest.forEach(function(t){
+    var a = navLink(t);
+    a.addEventListener('click', close);
+    panel.appendChild(a);
+  });
+  var sheet = h('div', { class:'sheet', onclick:function(e){ if (e.target === sheet) close(); } }, [panel]);
+  function close(){
+    sheet.remove();
+    document.removeEventListener('keydown', onKey);
+    var btn = document.querySelector('.tabbar button');
+    if (btn) { btn.setAttribute('aria-expanded','false'); btn.focus(); }
+  }
+  function onKey(e){ if (e.key === 'Escape') close(); }
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(sheet);
+  var btn = document.querySelector('.tabbar button');
+  if (btn) btn.setAttribute('aria-expanded','true');
+  var first = panel.querySelector('a');
+  if (first) first.focus();
+}
+
+function renderAccentRow(){
+  var row = document.getElementById('accentRow');
+  if (!row) return;
+  row.innerHTML = '';
+  ACCENTS.forEach(function(acc){
+    // Echte Buttons mit aria-pressed und 44px Trefferflaeche. Vorher waren das
+    // 19px grosse <span onclick> — nicht per Tastatur erreichbar.
+    var b = h('button', {
+      type:'button',
+      class:'accent-dot',
+      'aria-pressed': currentAccent() === acc.id ? 'true' : 'false',
+      'aria-label':'Akzentfarbe ' + acc.label,
+      title:acc.label,
+      onclick:function(){ applyAccent(acc.id); renderAccentRow(); renderSettingsChoices(); }
+    });
+    b.appendChild(h('i', { style:'background:' + acc.color }));
+    row.appendChild(b);
+  });
+}
+
+function currentAccent(){
+  try { return localStorage.getItem('accent') || 'amber'; } catch(e){ return 'amber'; }
+}
+
+// Wird von der Extras-Seite ueberschrieben, wenn sie gerade sichtbar ist.
+var renderSettingsChoices = function(){};
+
 addEventListener('hashchange', function(){
   current = location.hash.replace('#','') || 'home';
   render();
@@ -734,27 +1173,85 @@ function render(){
 
 function renderHome(){
   content.appendChild(h('h2', { class:'page-title' }, ['Übersicht']));
-  content.appendChild(h('div', { class:'glass hero' }, [
+  content.appendChild(h('div', { class:'hero', id:'sHero' }, [
     h('span', { class:'status-dot', id:'sDot' }),
-    h('div', {}, [
+    h('div', { class:'hero-main' }, [
       h('div', { class:'h-title', id:'sTitle' }, ['Verbinde …']),
       h('div', { class:'h-sub', id:'sSub' }, ['—'])
     ])
   ]));
+  content.appendChild(h('div', { class:'alerts', id:'sAlerts' }));
+  content.appendChild(h('div', { class:'section-h' }, ['Kennzahlen']));
   content.appendChild(h('div', { class:'grid cols4' }, [
     statCard('Gruppen', 'stGroups'),
     statCard('Gesendet heute', 'stSent'),
     statCard('Befehle heute', 'stCmds'),
     statCard('KI heute', 'stAi')
   ]));
-  content.appendChild(h('div', { class:'glass card', style:'margin-top:12px' }, [
+  content.appendChild(h('div', { class:'section-h' }, ['Verlauf']));
+  content.appendChild(h('div', { class:'card' }, [
     h('h3', {}, ['Aktivität (letzte 4 Std)']),
     h('div', { id:'sparkBox' })
   ]));
   updateHome();
+  // Der Admin-Status je Gruppe steht nur in /api/groups — einmal pro
+  // Seitenaufbau nachladen, der Rest der Hinweise kommt aus dem Status.
+  api('/groups').then(function(res){ homeGroups = res.groups || []; renderAlerts(); })
+    .catch(function(){ homeGroups = []; });
+}
+
+var homeGroups = null;
+
+// Alle Hinweise leiten sich aus bereits geladenen Daten ab — kein neuer
+// Endpunkt, keine Logik, die es nur im Client gibt.
+function buildAlerts(st){
+  var out = [];
+  if (st.stopped) out.push(['bad', 'Bot gestoppt' + (st.stopReason ? ' — ' + st.stopReason : '') + '.', 'settings', 'Extras']);
+  if (st.global && st.global.maintenance) out.push(['warn', 'Wartungsmodus aktiv — der Bot antwortet nur dem Owner.', 'settings', 'Extras']);
+  var cl = connLabel(st);
+  if (!st.stopped && cl[0] !== 'open') {
+    out.push([cl[0] === 'bad' ? 'bad' : 'warn',
+      st.qrAvailable ? 'Nicht verbunden — ein QR-Code wartet auf den Scan.' : 'Nicht verbunden — der Bot versucht sich neu anzumelden.',
+      'qr', 'Verbindung']);
+  }
+  if (st.queue > 20) out.push(['warn', st.queue + ' Nachrichten stauen sich in der Warteschlange.', null, null]);
+  if (st.ai && st.ai.limit && st.ai.used / st.ai.limit >= 0.8) {
+    out.push(['warn', 'KI-Kontingent zu ' + Math.round(st.ai.used / st.ai.limit * 100) + ' % ausgeschöpft (' +
+      nfmt(st.ai.used) + ' / ' + nfmt(st.ai.limit) + ').', null, null]);
+  }
+  var noAdmin = (homeGroups || []).filter(function(g){ return g.enabled && !g.botAdmin; });
+  noAdmin.slice(0, 3).forEach(function(g){
+    out.push(['warn', 'In „' + g.name + '“ ist der Bot kein Admin — Moderation greift dort nicht.', 'groups', 'Gruppen']);
+  });
+  if (noAdmin.length > 3) {
+    out.push(['warn', 'In ' + (noAdmin.length - 3) + ' weiteren Gruppen fehlen dem Bot Adminrechte.', 'groups', 'Gruppen']);
+  }
+  return out;
+}
+
+function renderAlerts(){
+  var box = document.getElementById('sAlerts');
+  if (!box || !status) return;
+  var list = buildAlerts(status);
+  var sig = JSON.stringify(list);
+  if (box._sig === sig) return;
+  box._sig = sig;
+  box.innerHTML = '';
+  if (!list.length) {
+    box.className = 'alert-none';
+    box.appendChild(h('span', { class:'status-dot open' }));
+    box.appendChild(h('span', {}, ['Keine Auffälligkeiten — alle Gruppen aktiv, keine Rückstände.']));
+    return;
+  }
+  box.className = 'alerts';
+  list.forEach(function(a){
+    var kids = [h('span', { class:'a-text' }, [a[1]])];
+    if (a[2]) kids.push(h('button', { class:'a-go', type:'button', onclick:function(){ location.hash = '#' + a[2]; } }, [a[3] + ' öffnen']));
+    box.appendChild(h('div', { class:'alert ' + a[0] }, kids));
+  });
 }
 function statCard(title, id){
-  return h('div', { class:'glass card hover' }, [ h('h3', {}, [title]), h('div', { class:'stat', id:id }, ['0']) ]);
+  return h('div', { class:'card hover' }, [ h('h3', {}, [title]), h('div', { class:'stat', id:id }, ['0']) ]);
 }
 function updateHome(changed){
   if (!status) return;
@@ -762,11 +1259,17 @@ function updateHome(changed){
   if (!dot) return;
   var cl = connLabel(status);
   dot.className = 'status-dot ' + (cl[0] === 'open' ? 'open' : cl[0] === 'bad' ? '' : 'connecting');
+  // Die farbige Kante links am Statusblock traegt dieselbe Aussage wie der
+  // Punkt — Farbe bedeutet hier Zustand, nicht Dekoration.
+  var hero = document.getElementById('sHero');
+  if (hero) hero.className = 'hero ' +
+    (cl[0] === 'open' ? 'is-open' : cl[0] === 'bad' ? 'is-down' : 'is-connecting');
   document.getElementById('sTitle').textContent = cl[1];
   var maint = status.global && status.global.maintenance;
   document.getElementById('sSub').textContent =
     'Uptime ' + fmtUptime(status.uptimeMs) + ' · Warteschlange ' + status.queue +
     (maint ? ' · 🔧 Wartungsmodus aktiv' : '');
+  renderAlerts();
   if (changed === false) return;
   tween(document.getElementById('stGroups'), status.groups == null ? 0 : status.groups);
   tween(document.getElementById('stSent'), status.sentToday);
@@ -781,6 +1284,14 @@ function drawSpark(data){
   var sig = data.join(',');
   if (box._sig === sig) return;
   box._sig = sig;
+  var peak = Math.max.apply(null, data.concat([0]));
+  if (!peak) {
+    // Eine Nulllinie sieht aus wie ein Renderfehler — lieber sagen, dass
+    // schlicht noch nichts gemessen wurde.
+    box.innerHTML = '';
+    box.appendChild(h('p', { class:'muted sm' }, ['In den letzten 4 Stunden wurde nichts gesendet.']));
+    return;
+  }
   var w = 600, hh = 58, max = Math.max.apply(null, data.concat([1]));
   var pts = data.map(function(v, i){
     return (i * (w / (data.length - 1 || 1))).toFixed(1) + ',' + (hh - 4 - (v / max) * (hh - 12)).toFixed(1);
@@ -797,7 +1308,7 @@ function renderStats(){
   content.appendChild(box);
   api('/stats').then(function(res){
     box.innerHTML = '';
-    box.appendChild(h('div', { class:'glass card' }, [ h('h3', {}, ['Nachrichten — letzte 14 Tage']), barChart(res.daily) ]));
+    box.appendChild(h('div', { class:'card' }, [ h('h3', {}, ['Nachrichten — letzte 14 Tage']), barChart(res.daily) ]));
     box.appendChild(h('div', { class:'grid cols4', style:'margin-top:12px' }, [
       miniStat('Aktive Warns', res.counts.warns),
       miniStat('Custom-Befehle', res.counts.custom),
@@ -806,12 +1317,12 @@ function renderStats(){
     ]));
     if (res.topGroups.length) {
       var maxG = Math.max.apply(null, res.topGroups.map(function(r){ return Number(r.msgs); }).concat([1]));
-      var gEl = h('div', { class:'glass card', style:'margin-top:12px' }, [h('h3', {}, ['Aktivste Gruppen (7 Tage)'])]);
+      var gEl = h('div', { class:'card', style:'margin-top:12px' }, [h('h3', {}, ['Aktivste Gruppen (7 Tage)'])]);
       res.topGroups.forEach(function(r){
         gEl.appendChild(h('div', { class:'row', style:'margin-top:9px;gap:10px' }, [
           h('span', { class:'sm', style:'flex:0 0 38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, [r.name]),
           h('div', { class:'hbar-track' }, [h('div', { class:'hbar', style:'width:' + Math.round(Number(r.msgs)/maxG*100) + '%' })]),
-          h('span', { class:'sm muted', style:'flex:none;min-width:44px;text-align:right' }, [nfmt(r.msgs)])
+          h('span', { class:'sm muted num-cell', style:'flex:none;min-width:52px;text-align:right' }, [nfmt(r.msgs)])
         ]));
       });
       box.appendChild(gEl);
@@ -821,10 +1332,10 @@ function renderStats(){
   }).catch(function(e){ box.innerHTML = ''; box.appendChild(h('p', { class:'muted' }, [e.message])); });
 }
 function miniStat(label, value){
-  return h('div', { class:'glass card hover' }, [h('h3', {}, [label]), h('div', { class:'stat' }, [nfmt(value)])]);
+  return h('div', { class:'card hover' }, [h('h3', {}, [label]), h('div', { class:'stat' }, [nfmt(value)])]);
 }
 function topList(title, rows, valueFn){
-  var el = h('div', { class:'glass card' }, [h('h3', {}, [title])]);
+  var el = h('div', { class:'card' }, [h('h3', {}, [title])]);
   if (!rows || !rows.length) { el.appendChild(h('p', { class:'muted sm' }, ['Noch keine Daten.'])); return el; }
   var medals = ['🥇','🥈','🥉'];
   rows.forEach(function(r, i){
@@ -857,7 +1368,7 @@ function barChart(daily){
 
 function renderQr(){
   content.appendChild(h('h2', { class:'page-title' }, ['Verbindung / QR']));
-  content.appendChild(h('div', { class:'glass qr-box', id:'qrBox' }, [
+  content.appendChild(h('div', { class:'qr-box', id:'qrBox' }, [
     h('div', {}, [
       h('div', { class:'status-dot connecting', style:'margin:0 auto 12px;width:24px;height:24px' }),
       h('p', { class:'muted' }, ['Initialisiere QR-Verbindung …'])
@@ -871,23 +1382,24 @@ function renderQr(){
       .catch(function(e){ toast('⚠️ ' + e.message); })
       .then(function(){ relinkBtn.disabled = false; });
   } }, ['🔁 Sitzung zurücksetzen']);
-  content.appendChild(h('div', { class:'glass card', style:'margin-top:12px' }, [
+  content.appendChild(h('div', { class:'card', style:'margin-top:12px' }, [
     h('h3', {}, ['🆘 Verbindung hängt fest?']),
     h('p', { class:'muted sm', style:'margin-bottom:10px' }, [
       'Wenn hier dauerhaft „verbindet sich gerade" steht und nie ein QR-/Pairing-Code erscheint, ist die gespeicherte Sitzung vermutlich kaputt. Dieser Knopf löscht sie und startet sofort frisch.'
     ]),
     relinkBtn
   ]));
-  var pairBox = h('div', { class:'glass card', id:'pairBox', style:'margin-top:12px;display:none' }, [
+  var pairBox = h('div', { class:'card', id:'pairBox', style:'margin-top:12px;display:none' }, [
     h('h3', {}, ['🔢 Oder per Code verbinden']),
     h('p', { class:'muted sm', style:'margin-bottom:10px' }, [
       'Nummer mit Ländervorwahl eingeben (nur Ziffern) statt QR zu scannen: WhatsApp → Einstellungen → Verknüpfte Geräte → Mit Telefonnummer verbinden. ',
       h('b', {}, ['Wichtig: exakt die Nummer dieses WhatsApp-Kontos.'])
     ])
   ]);
-  var input = h('input', { type:'text', id:'pairPhone', placeholder:'z.B. 4915112345678', inputmode:'numeric' });
+  var input = h('input', { type:'tel', id:'pairPhone', placeholder:'4915112345678', inputmode:'numeric', autocomplete:'tel' });
+  var pairField = field('Telefonnummer mit Ländervorwahl', input);
   var btn = h('button', { class:'small', onclick:function(){
-    var phone = input.value.replace(/\D/g, '');
+    var phone = input.value.replace(/[^0-9]/g, '');
     if (!phone) return toast('⚠️ Bitte Nummer eingeben.');
     btn.disabled = true;
     api('/pairing-code', { method:'POST', body:{ phoneNumber:phone } })
@@ -895,7 +1407,7 @@ function renderQr(){
       .catch(function(e){ toast('⚠️ ' + e.message); })
       .then(function(){ btn.disabled = false; });
   } }, ['Code anfordern']);
-  pairBox.appendChild(h('div', { class:'row wrap' }, [input, btn]));
+  pairBox.appendChild(h('div', { class:'row wrap', style:'align-items:flex-end' }, [pairField, btn]));
   pairBox.appendChild(h('div', { id:'pairCodeDisplay' }));
   pairBox.appendChild(h('p', { class:'muted sm', style:'margin-top:10px' }, [
     '💡 Klappt der Code nicht („Gerät konnte nicht hinzugefügt werden"), nutze oben den ',
@@ -982,8 +1494,9 @@ function loadQr(){
 
 function renderGroups(){
   content.appendChild(h('h2', { class:'page-title' }, ['Gruppen']));
-  var search = h('input', { type:'text', class:'search', placeholder:'Gruppe suchen …', oninput: function(e){ drawGroupList(e.target.value); } });
-  content.appendChild(search);
+  var search = h('input', { type:'search', class:'search', placeholder:'Gruppe suchen …', oninput: function(e){ drawGroupList(e.target.value); } });
+  var searchField = field('Gruppe suchen', search, { hideLabel:true });
+  content.appendChild(searchField);
   content.appendChild(h('div', { id:'groupList' }, [skel(64), skel(64), skel(64)]));
   api('/groups').then(function(res){ window._groups = res.groups; drawGroupList(''); })
     .catch(function(e){ document.getElementById('groupList').textContent = e.message; });
@@ -995,11 +1508,23 @@ function drawGroupList(filter){
   box.innerHTML = '';
   if (!groups.length) return box.appendChild(h('p', { class:'muted' }, ['Keine Gruppen gefunden.']));
   groups.forEach(function(gr){
-    box.appendChild(h('div', { class:'glass list-item card hover', style:'padding:13px 16px' }, [
-      h('div', { class:'row between', style:'cursor:pointer', onclick:function(){ renderGroupDetail(gr); } }, [
-        h('div', {}, [ h('div', {}, [gr.name]), h('div', { class:'muted sm' }, [gr.members + ' Mitglieder']) ]),
-        h('span', { class:'badge ' + (gr.botAdmin ? 'ok' : 'bad') }, [gr.botAdmin ? 'BOT ADMIN' : 'KEIN ADMIN'])
-      ])
+    var flags = [];
+    if (gr.antilink) flags.push('Anti-Link');
+    if (gr.antispam) flags.push('Anti-Spam');
+    if (gr.antiraid) flags.push('Anti-Raid');
+    if (gr.nightmode && gr.nightmode.enabled) flags.push('Nachtmodus');
+    if (gr.welcome) flags.push('Begrüßung');
+    var sub = gr.members + ' Mitglieder · ' + (flags.length ? flags.join(' · ') : 'kein Schutz aktiv');
+    box.appendChild(h('button', { class:'list-btn', type:'button', onclick:function(){ renderGroupDetail(gr); } }, [
+      h('span', { class:'lb-main' }, [
+        h('span', { class:'lb-title' }, [gr.name]),
+        h('span', { class:'muted sm' }, [sub])
+      ]),
+      h('span', { class:'lb-tags' }, [
+        gr.enabled ? null : h('span', { class:'badge warn' }, ['Pausiert']),
+        h('span', { class:'badge ' + (gr.botAdmin ? 'ok' : 'bad') }, [gr.botAdmin ? 'Bot-Admin' : 'Kein Admin'])
+      ]),
+      h('span', { class:'lb-chev', 'aria-hidden':'true' }, ['›'])
     ]));
   });
 }
@@ -1016,7 +1541,7 @@ function renderGroupDetail(gr){
         .then(function(){ toast('✅ Gespeichert'); gr[field] = input.checked; })
         .catch(function(e){ toast('⚠️ ' + e.message); input.checked = !input.checked; });
     });
-    return h('div', { class:'glass list-item row between' }, [ h('span', {}, [label]), h('label', { class:'switch' }, [input, h('span', { class:'sl' })]) ]);
+    return h('div', { class:'list-item row between' }, [ h('span', {}, [label]), h('label', { class:'switch' }, [input, h('span', { class:'sl' })]) ]);
   }
   content.appendChild(toggleRow('Bot in dieser Gruppe aktiv', 'enabled', gr.enabled));
   content.appendChild(toggleRow('Anti-Link', 'antilink', gr.antilink));
@@ -1025,18 +1550,21 @@ function renderGroupDetail(gr){
   content.appendChild(toggleRow('Neue Mitglieder begrüßen', 'welcome', gr.welcome));
   content.appendChild(toggleRow('Level-Up-Nachrichten', 'levelup_announce', gr.levelup_announce));
   var nmEnabled = h('input', { type:'checkbox' }); nmEnabled.checked = gr.nightmode.enabled;
-  var nmStart = h('input', { type:'time', value:gr.nightmode.start });
-  var nmEnd = h('input', { type:'time', value:gr.nightmode.end });
+  var nmStart = h('input', { type:'time', value:gr.nightmode.start, style:'width:auto' });
+  var nmEnd = h('input', { type:'time', value:gr.nightmode.end, style:'width:auto' });
+  var nmStartField = field('Beginn', nmStart);
+  var nmEndField = field('Ende', nmEnd);
   var nmSave = h('button', { class:'small', onclick:function(){
     api('/groups/' + encodeURIComponent(gr.jid) + '/settings', { method:'POST', body:{ field:'nightmode', value:{ enabled:nmEnabled.checked, start:nmStart.value, end:nmEnd.value } } })
       .then(function(){ toast('✅ Nachtmodus gespeichert'); })
       .catch(function(e){ toast('⚠️ ' + e.message); });
   } }, ['Speichern']);
-  content.appendChild(h('div', { class:'glass card', style:'margin-top:12px' }, [
+  content.appendChild(h('div', { class:'card', style:'margin-top:12px' }, [
     h('h3', {}, ['🌙 Nachtmodus']),
-    h('div', { class:'row wrap', style:'margin-top:8px' }, [ h('label', { class:'switch' }, [nmEnabled, h('span', { class:'sl' })]), nmStart, h('span', { class:'muted' }, ['bis']), nmEnd, nmSave ])
+    h('div', { class:'row wrap', style:'margin-top:var(--s2);align-items:flex-end' }, [ h('label', { class:'switch' }, [nmEnabled, h('span', { class:'sl' })]), nmStartField, nmEndField, nmSave ])
   ]));
-  var msgInput = h('textarea', { placeholder:'Nachricht an die Gruppe …', rows:'2', style:'width:100%;resize:vertical' });
+  var msgInput = h('textarea', { placeholder:'Nachricht an die Gruppe …', rows:'2' });
+  var msgField = field('Nachricht an die Gruppe', msgInput, { hideLabel:true });
   var msgBtn = h('button', { class:'small', style:'margin-top:8px', onclick:function(){
     var text = msgInput.value.trim();
     if (!text) return toast('⚠️ Erst Text eingeben.');
@@ -1046,23 +1574,57 @@ function renderGroupDetail(gr){
       .catch(function(e){ toast('⚠️ ' + e.message); })
       .then(function(){ msgBtn.disabled = false; });
   } }, ['📨 Senden']);
-  content.appendChild(h('div', { class:'glass card', style:'margin-top:12px' }, [ h('h3', {}, ['📨 Nachricht senden']), msgInput, msgBtn ]));
+  content.appendChild(h('div', { class:'card', style:'margin-top:var(--s3)' }, [ h('h3', {}, ['Nachricht senden']), msgField, msgBtn ]));
   var mBox = h('div', { style:'margin-top:14px' }, [skel(46), skel(46), skel(46)]);
   content.appendChild(mBox);
   api('/groups/' + encodeURIComponent(gr.jid) + '/members').then(function(res){
     mBox.innerHTML = '';
-    mBox.appendChild(h('div', { class:'section-h' }, ['👥 Mitglieder (' + res.members.length + ')']));
-    res.members.forEach(function(m){
-      var label = (m.pn || m.id).split('@')[0];
-      mBox.appendChild(h('div', { class:'glass member-row' }, [
-        h('div', {}, [ h('span', {}, ['+' + label + ' ']), m.admin ? h('span', { class:'badge ok' }, [m.admin === 'superadmin' ? 'INHABER' : 'ADMIN']) : null ]),
-        m.admin ? h('span') : h('div', { class:'row' }, [ h('button', { class:'small ghost', onclick:function(){ memberAction(gr.jid, m, 'kick'); } }, ['👢 Kick']), h('button', { class:'small danger', onclick:function(){ memberAction(gr.jid, m, 'ban'); } }, ['⛔ Ban']) ])
+    var all = res.members || [];
+    mBox.appendChild(h('div', { class:'section-h' }, ['Mitglieder (' + all.length + ')']));
+    // WhatsApp-Gruppen fassen bis zu 1024 Personen. Alles auf einmal zu
+    // rendern ergab eine 10.000 px lange Seite ohne jede Orientierung —
+    // deshalb Suche und schrittweises Nachladen.
+    var PAGE = 50, shown = PAGE, term = '';
+    var search = h('input', { type:'search', class:'search', placeholder:'Nummer suchen …',
+      oninput:function(e){ term = e.target.value.trim().toLowerCase(); shown = PAGE; draw(); } });
+    mBox.appendChild(field('Mitglied suchen', search, { hideLabel:true }));
+    var tblBox = h('div', { style:'margin-top:var(--s3)' });
+    mBox.appendChild(tblBox);
+
+    // pn kommt je nach Baileys-Version mit oder ohne fuehrendes Plus.
+    function label(m){ var s = String(m.pn || m.id).split('@')[0]; return '+' + (s.charAt(0) === '+' ? s.slice(1) : s); }
+    function draw(){
+      var hits = all.filter(function(m){ return !term || label(m).toLowerCase().indexOf(term) !== -1; });
+      tblBox.innerHTML = '';
+      if (!hits.length) { tblBox.appendChild(h('p', { class:'muted sm' }, ['Kein Mitglied passt zur Suche.'])); return; }
+      var slice = hits.slice(0, shown);
+      tblBox.appendChild(h('div', { class:'card', style:'padding:var(--s2) var(--s3)' }, [
+        dataTable(['Nummer', 'Rolle'], slice, function(m){
+          return [
+            label(m),
+            m.admin ? h('span', { class:'badge ok' }, [m.admin === 'superadmin' ? 'Inhaber' : 'Admin']) : h('span', { class:'muted' }, ['Mitglied'])
+          ];
+        }, function(m){
+          // Admins lassen sich ueber das Panel nicht entfernen.
+          if (m.admin) return h('span', { class:'muted sm' }, ['—']);
+          return h('span', { class:'row', style:'justify-content:flex-end' }, [
+            h('button', { class:'small ghost', onclick:function(){ memberAction(gr.jid, m, 'kick'); } }, ['Entfernen']),
+            h('button', { class:'small danger', onclick:function(){ memberAction(gr.jid, m, 'ban'); } }, ['Bannen'])
+          ]);
+        })
       ]));
-    });
+      if (hits.length > shown) {
+        tblBox.appendChild(h('button', { class:'ghost small', style:'margin-top:var(--s3)',
+          onclick:function(){ shown += PAGE; draw(); } },
+          ['Weitere ' + Math.min(PAGE, hits.length - shown) + ' von ' + hits.length + ' anzeigen']));
+      }
+    }
+    draw();
   }).catch(function(e){ mBox.innerHTML = ''; mBox.appendChild(h('p', { class:'muted' }, [e.message])); });
 }
 function memberAction(jid, member, action){
-  var label = (member.pn || member.id).split('@')[0];
+  var raw = String(member.pn || member.id).split('@')[0];
+  var label = raw.charAt(0) === '+' ? raw.slice(1) : raw;
   if (!confirm((action === 'kick' ? 'Wirklich entfernen: +' : 'Wirklich BANNEN: +') + label + '?')) return;
   api('/groups/' + encodeURIComponent(jid) + '/' + action, { method:'POST', body:{ user: member.pn || member.id } })
     .then(function(res){ toast(res.ok ? '✅ Erledigt' : '⚠️ Hat nicht geklappt (bin ich Admin?)'); })
@@ -1071,15 +1633,20 @@ function memberAction(jid, member, action){
 
 function renderCommands(){
   content.appendChild(h('h2', { class:'page-title' }, ['Befehle']));
+  // 75 Befehle sind ohne Filter eine sehr lange Liste — dieselbe Suche
+  // wie bei Gruppen und Logs.
+  var search = h('input', { type:'search', class:'search', placeholder:'Befehl oder Beschreibung suchen …',
+    oninput:function(e){ filterCommands(e.target.value); } });
+  content.appendChild(field('Befehl suchen', search, { hideLabel:true }));
   var box = h('div', { id:'cmdBox' }, [skel(52), skel(52), skel(52), skel(52)]);
   content.appendChild(box);
   api('/commands').then(function(res){
     box.innerHTML = '';
-    var groups = { community:'👥 Community', tools:'🧰 Tools', utility:'📊 Ranglisten & Status', admin:'🛡️ Admin' };
+    var groups = { community:'Community', tools:'Tools', utility:'Ranglisten & Status', admin:'Admin & Moderation' };
     Object.keys(groups).forEach(function(gk){
       var cmds = res.commands.filter(function(c){ return c.group === gk; });
       if (!cmds.length) return;
-      box.appendChild(h('div', { class:'section-h' }, [groups[gk] + ' (' + cmds.length + ')']));
+      box.appendChild(h('div', { class:'section-h cmd-sect', 'data-group':gk }, [groups[gk] + ' (' + cmds.length + ')']));
       cmds.forEach(function(c){
         var input = h('input', { type:'checkbox' }); input.checked = c.enabled;
         input.addEventListener('change', function(){
@@ -1087,25 +1654,31 @@ function renderCommands(){
             .then(function(){ toast('✅ !' + c.name + (input.checked ? ' aktiviert' : ' deaktiviert')); })
             .catch(function(e){ toast('⚠️ ' + e.message); input.checked = !input.checked; });
         });
-        box.appendChild(h('div', { class:'glass list-item row between' }, [
+        box.appendChild(h('div', {
+          class:'list-item row between cmd-row',
+          'data-find': ('!' + c.name + ' ' + (c.desc || '')).toLowerCase()
+        }, [
           h('div', {}, [ h('div', {}, ['!' + c.name]), h('div', { class:'muted sm' }, [c.desc]) ]),
           h('label', { class:'switch' }, [input, h('span', { class:'sl' })])
         ]));
       });
     });
-    box.appendChild(h('div', { class:'section-h' }, ['✨ Eigene Befehle & FAQ']));
+    box.appendChild(h('p', { class:'muted sm', id:'cmdNone', style:'display:none' }, ['Kein Befehl passt zur Suche.']));
+    box.appendChild(h('div', { class:'section-h' }, ['Eigene Befehle & FAQ']));
     var nName = h('input', { type:'text', placeholder:'name' });
-    var nReply = h('input', { type:'text', placeholder:'Antwort', style:'flex:1;min-width:150px' });
+    var nReply = h('input', { type:'text', placeholder:'Antwort' });
+    var nNameField = field('Name bzw. Schlüsselwort', nName);
+    var nReplyField = field('Antwort', nReply);
     var nType = h('select', {}, [ h('option', { value:'cmd' }, ['Befehl']), h('option', { value:'faq' }, ['FAQ']) ]);
     var addBtn = h('button', { class:'small', onclick:function(){
       api('/custom', { method:'POST', body:{ type:nType.value === 'faq' ? 'faq' : 'cmd', name:nName.value, reply:nReply.value } })
         .then(function(){ toast('✅ Gespeichert'); render(); })
         .catch(function(e){ toast('⚠️ ' + e.message); });
     } }, ['Anlegen']);
-    box.appendChild(h('div', { class:'glass card' }, [ h('div', { class:'row wrap' }, [nType, nName, nReply, addBtn]) ]));
+    box.appendChild(h('div', { class:'card' }, [ h('div', { class:'row wrap', style:'align-items:flex-end' }, [ field('Typ', nType), nNameField, nReplyField, addBtn ]) ]));
     [['cmd', res.custom], ['faq', res.faqs]].forEach(function(pair){
       (pair[1] || []).forEach(function(name){
-        box.appendChild(h('div', { class:'glass list-item row between' }, [
+        box.appendChild(h('div', { class:'list-item row between' }, [
           h('span', {}, ['!' + name + (pair[0] === 'faq' ? '  (FAQ)' : '')]),
           h('button', { class:'small danger', onclick:function(){
             api('/custom/' + pair[0] + '/' + encodeURIComponent(name), { method:'DELETE' })
@@ -1118,37 +1691,76 @@ function renderCommands(){
   }).catch(function(e){ box.textContent = e.message; });
 }
 
+// Filtert die Befehlsliste im DOM und blendet leer gewordene Gruppen aus.
+function filterCommands(term){
+  var q = String(term || '').trim().toLowerCase();
+  var box = document.getElementById('cmdBox');
+  if (!box) return;
+  var hits = 0;
+  var rows = box.querySelectorAll('.cmd-row');
+  for (var i = 0; i < rows.length; i++) {
+    var match = !q || rows[i].getAttribute('data-find').indexOf(q) !== -1;
+    rows[i].style.display = match ? '' : 'none';
+    if (match) hits++;
+  }
+  var sects = box.querySelectorAll('.cmd-sect');
+  for (var j = 0; j < sects.length; j++) {
+    var visible = false, n = sects[j].nextSibling;
+    while (n && !(n.classList && n.classList.contains('section-h'))) {
+      if (n.classList && n.classList.contains('cmd-row') && n.style.display !== 'none') { visible = true; break; }
+      n = n.nextSibling;
+    }
+    sects[j].style.display = visible ? '' : 'none';
+  }
+  var none = document.getElementById('cmdNone');
+  if (none) none.style.display = (q && !hits) ? '' : 'none';
+}
+
 function renderMod(){
   content.appendChild(h('h2', { class:'page-title' }, ['Moderation']));
   var box = h('div', {}, [skel(52), skel(52), skel(52)]);
   content.appendChild(box);
-  api('/moderation').then(function(res){
+  // Die Gruppennamen kommen aus /api/groups — parallel laden, damit die
+  // Tabellen keine nackten JIDs zeigen.
+  Promise.all([api('/moderation'), api('/groups').then(function(r){ return rememberGroups(r.groups); }, function(){ return []; })])
+    .then(function(both){
+    var res = both[0];
     box.innerHTML = '';
-    function section(title, rows, type, renderRow){
+    function clearBtn(type, r){
+      return h('button', { class:'small ghost', onclick:function(){
+        api('/moderation/clear', { method:'POST', body:{ type:type, group:r.group_jid, user:r.user_jid } })
+          .then(function(){ toast('✅ Aufgehoben'); content.innerHTML = ''; renderMod(); })
+          .catch(function(e){ toast('⚠️ ' + e.message); });
+      } }, ['Aufheben']);
+    }
+    function section(title, rows, cols, cellsFn, type, emptyText){
       box.appendChild(h('div', { class:'section-h' }, [title + ' (' + rows.length + ')']));
-      if (!rows.length) box.appendChild(h('p', { class:'muted sm' }, ['Nichts offen. ✅']));
-      rows.forEach(function(r){
-        box.appendChild(h('div', { class:'glass list-item row between' }, [
-          h('div', { class:'sm' }, renderRow(r)),
-          h('button', { class:'small ghost', onclick:function(){
-            api('/moderation/clear', { method:'POST', body:{ type:type, group:r.group_jid, user:r.user_jid } })
-              .then(function(){ toast('✅ Aufgehoben'); content.innerHTML = ''; renderMod(); })
-              .catch(function(e){ toast('⚠️ ' + e.message); });
-          } }, ['Aufheben'])
+      if (!rows.length) { box.appendChild(h('p', { class:'muted sm' }, [emptyText])); return; }
+      box.appendChild(h('div', { class:'card', style:'padding:var(--s2) var(--s3)' }, [
+        dataTable(cols, rows, cellsFn, function(r){ return clearBtn(type, r); })
+      ]));
+    }
+    section('Aktive Verwarnungen', res.warns, ['Nutzer', 'Gruppe', 'Grund', 'Seit'],
+      function(r){ return [shortJid(r.user_jid), gName(r.group_jid), r.reason || '—', fmtRel(r.created_at)]; },
+      'warn', 'Keine offenen Verwarnungen.');
+    section('Aktive Stummschaltungen', res.mutes, ['Nutzer', 'Gruppe', 'Läuft ab'],
+      function(r){ return [shortJid(r.user_jid), gName(r.group_jid), fmtRel(r.until) + ' (' + new Date(Number(r.until)).toLocaleString('de-DE') + ')']; },
+      'mute', 'Niemand ist stummgeschaltet.');
+    section('Sperren', res.bans, ['Nutzer', 'Gruppe', 'Grund'],
+      function(r){ return [shortJid(r.user_jid), gName(r.group_jid), r.reason || '—']; },
+      'ban', 'Keine Sperren aktiv.');
+
+    box.appendChild(h('div', { class:'section-h' }, ['Audit-Log']));
+    if (!res.audit.length) {
+      box.appendChild(h('p', { class:'muted sm' }, ['Noch keine Moderationsaktionen aufgezeichnet.']));
+    } else {
+      res.audit.forEach(function(a){
+        box.appendChild(h('div', { class:'log-line info' }, [
+          new Date(Number(a.created_at)).toLocaleString('de-DE') + ' · ' + a.action +
+          (a.target ? ' → ' + shortJid(a.target) : '') + (a.detail ? ' · ' + a.detail : '')
         ]));
       });
     }
-    function who(r){ return '+' + String(r.user_jid).split('@')[0]; }
-    section('⚠️ Aktive Verwarnungen', res.warns, 'warn', function(r){ return [ h('div', {}, [who(r)]), h('div', { class:'muted' }, [r.reason || '']) ]; });
-    section('🔇 Aktive Mutes', res.mutes, 'mute', function(r){ return [ h('div', {}, [who(r)]), h('div', { class:'muted' }, ['bis ' + new Date(Number(r.until)).toLocaleString('de-DE')] ) ]; });
-    section('⛔ Bans', res.bans, 'ban', function(r){ return [ h('div', {}, [who(r)]), h('div', { class:'muted' }, [r.reason || '']) ]; });
-    box.appendChild(h('div', { class:'section-h' }, ['📋 Audit-Log']));
-    res.audit.forEach(function(a){
-      box.appendChild(h('div', { class:'log-line info' }, [
-        new Date(Number(a.created_at)).toLocaleString('de-DE') + ' · ' + a.action +
-        (a.target ? ' → +' + String(a.target).split('@')[0] : '') + (a.detail ? ' · ' + a.detail : '')
-      ]));
-    });
   }).catch(function(e){ box.textContent = e.message; });
 }
 
@@ -1158,44 +1770,60 @@ function renderAgenda(){
   content.appendChild(box);
   api('/agenda').then(function(res){
     box.innerHTML = '';
-    box.appendChild(h('div', { class:'section-h' }, ['⏰ Geplante Nachrichten (' + res.schedules.length + ')']));
-    if (!res.schedules.length) box.appendChild(h('p', { class:'muted sm' }, ['Nichts geplant — im Chat: !schedule 18:30 Text']));
-    res.schedules.forEach(function(s){
-      box.appendChild(h('div', { class:'glass list-item row between' }, [
-        h('div', { class:'sm' }, [ h('div', {}, [new Date(Number(s.send_at)).toLocaleString('de-DE') + ' → ' + s.chat]), h('div', { class:'muted' }, [String(s.text).slice(0, 90)]) ]),
-        h('button', { class:'small danger', onclick:function(){
-          if (!confirm('Geplante Nachricht #' + s.id + ' löschen?')) return;
-          api('/agenda/schedule/' + s.id, { method:'DELETE' })
-            .then(function(){ toast('✅ Gelöscht'); content.innerHTML = ''; renderAgenda(); })
-            .catch(function(e){ toast('⚠️ ' + e.message); });
-        } }, ['Löschen'])
-      ]));
-    });
-    box.appendChild(h('div', { class:'section-h' }, ['🎂 Nächste Geburtstage (' + res.birthdays.length + ')']));
-    if (!res.birthdays.length) box.appendChild(h('p', { class:'muted sm' }, ['Keine Geburtstage eingetragen — im Chat: !geburtstag 24.12.']));
-    res.birthdays.forEach(function(b){
-      var who = b.name || '+' + String(b.user_jid || '').split('@')[0];
-      var when = b.days === 0 ? '🎂 HEUTE!' : b.days === 1 ? 'morgen' : 'in ' + b.days + ' Tagen';
-      box.appendChild(h('div', { class:'glass list-item row between' }, [
-        h('span', { class:'sm' }, [who + ' — ' + b.day + '.' + b.month + '.']),
-        h('span', { class:'badge ' + (b.days === 0 ? 'accent' : b.days <= 7 ? 'warn' : 'ok') }, [when])
-      ]));
-    });
-    box.appendChild(h('div', { class:'section-h' }, ['📊 Laufende Umfragen (' + res.polls.length + ')']));
-    if (!res.polls.length) box.appendChild(h('p', { class:'muted sm' }, ['Keine offenen Umfragen — im Chat: !umfrage Frage? | A | B']));
-    res.polls.forEach(function(p){
-      box.appendChild(h('div', { class:'glass list-item' }, [
-        h('div', { class:'sm' }, [p.question]),
-        h('div', { class:'muted sm' }, [p.chat + ' · ' + p.votes + ' Stimmen · seit ' + new Date(Number(p.created_at)).toLocaleString('de-DE')])
-      ]));
-    });
+    function wrap(el){ return h('div', { class:'card', style:'padding:var(--s2) var(--s3)' }, [el]); }
+
+    box.appendChild(h('div', { class:'section-h' }, ['Geplante Nachrichten (' + res.schedules.length + ')']));
+    if (!res.schedules.length) {
+      box.appendChild(h('p', { class:'muted sm' }, ['Nichts geplant — im Chat: !schedule 18:30 Text']));
+    } else {
+      box.appendChild(wrap(dataTable(['Wann', 'Gruppe', 'Text'], res.schedules,
+        function(s){
+          return [
+            h('span', {}, [fmtRel(s.send_at)]),
+            s.chat,
+            h('span', { class:'muted' }, [String(s.text).slice(0, 90) + (String(s.text).length > 90 ? '…' : '')])
+          ];
+        },
+        function(s){
+          return h('button', { class:'small danger', onclick:function(){
+            if (!confirm('Geplante Nachricht #' + s.id + ' löschen?')) return;
+            api('/agenda/schedule/' + s.id, { method:'DELETE' })
+              .then(function(){ toast('✅ Gelöscht'); content.innerHTML = ''; renderAgenda(); })
+              .catch(function(e){ toast('⚠️ ' + e.message); });
+          } }, ['Löschen']);
+        })));
+    }
+
+    box.appendChild(h('div', { class:'section-h' }, ['Nächste Geburtstage (' + res.birthdays.length + ')']));
+    if (!res.birthdays.length) {
+      box.appendChild(h('p', { class:'muted sm' }, ['Keine Geburtstage eingetragen — im Chat: !geburtstag 24.12.']));
+    } else {
+      box.appendChild(wrap(dataTable(['Name', 'Datum', 'Wann'], res.birthdays, function(b){
+        var when = b.days === 0 ? 'Heute' : b.days === 1 ? 'Morgen' : 'in ' + b.days + ' Tagen';
+        return [
+          b.name || shortJid(b.user_jid),
+          b.day + '.' + b.month + '.',
+          h('span', { class:'badge ' + (b.days === 0 ? 'accent' : b.days <= 7 ? 'warn' : '') }, [when])
+        ];
+      })));
+    }
+
+    box.appendChild(h('div', { class:'section-h' }, ['Laufende Umfragen (' + res.polls.length + ')']));
+    if (!res.polls.length) {
+      box.appendChild(h('p', { class:'muted sm' }, ['Keine offenen Umfragen — im Chat: !umfrage Frage? | A | B']));
+    } else {
+      box.appendChild(wrap(dataTable(['Frage', 'Gruppe', 'Stimmen', 'Läuft seit'], res.polls, function(p){
+        return [p.question, p.chat, h('span', { class:'num-cell' }, [nfmt(p.votes)]), fmtRel(p.created_at)];
+      })));
+    }
   }).catch(function(e){ box.innerHTML = ''; box.appendChild(h('p', { class:'muted' }, [e.message])); });
 }
 
 function renderLogs(){
   content.appendChild(h('h2', { class:'page-title' }, ['Logs']));
-  var search = h('input', { type:'text', class:'search', placeholder:'Filtern …', oninput:function(e){ draw(e.target.value); } });
-  content.appendChild(search);
+  var search = h('input', { type:'search', class:'search', placeholder:'Filtern …', oninput:function(e){ draw(e.target.value); } });
+  var searchField = field('Logs filtern', search, { hideLabel:true });
+  content.appendChild(searchField);
   var box = h('div', { id:'logBox' }, [skel(30), skel(30), skel(30)]);
   content.appendChild(box);
   var logs = [];
@@ -1234,14 +1862,14 @@ function renderSettings(){
     });
   }
   sysBox.appendChild(skel(52));
-  content.appendChild(h('div', { class:'glass card' }, [
-    h('h3', {}, ['🕹️ Globale Systeme']),
+  content.appendChild(h('div', { class:'card' }, [
+    h('h3', {}, ['Globale Systeme']),
     h('p', { class:'muted sm', style:'margin-bottom:12px' }, ['Schaltet Funktionen bot-weit für ALLE Gruppen. Entspricht den Befehlen !global und !wartung.']),
     sysBox
   ]));
   api('/global').then(drawSys).catch(function(){ sysBox.innerHTML = ''; sysBox.appendChild(h('p', { class:'muted sm' }, ['Konnte Systeme nicht laden.'])); });
-  content.appendChild(h('div', { class:'glass card', style:'margin-top:12px' }, [
-    h('h3', {}, ['🔄 Neustart']),
+  content.appendChild(h('div', { class:'card', style:'margin-top:12px' }, [
+    h('h3', {}, ['Neustart']),
     h('p', { class:'muted sm', style:'margin-bottom:10px' }, ['Startet den Bot-Prozess neu (2 Min Cooldown). Die Session bleibt erhalten.']),
     h('button', { onclick:function(){
       if (!confirm('Bot wirklich neu starten?')) return;
@@ -1258,41 +1886,63 @@ function renderSettings(){
     }).then(function(r){ toast('✅ Import ok (' + r.imported + ' Zeilen)'); })
       .catch(function(e){ toast('⚠️ Import fehlgeschlagen: ' + e.message); });
   });
-  content.appendChild(h('div', { class:'glass card', style:'margin-top:12px' }, [
-    h('h3', {}, ['💾 Konfiguration']),
+  content.appendChild(h('div', { class:'card', style:'margin-top:12px' }, [
+    h('h3', {}, ['Konfiguration']),
     h('p', { class:'muted sm', style:'margin-bottom:10px' }, ['Gruppen-Einstellungen, Custom-Befehle, Blacklists & Toggles als JSON sichern oder einspielen.']),
     h('div', { class:'row' }, [ h('button', { class:'small', onclick:function(){ location.href = '/api/config/export'; } }, ['⬇️ Export']), h('button', { class:'small ghost', onclick:function(){ fileInput.click(); } }, ['⬆️ Import']), fileInput ])
   ]));
-  var THEMES = [ { id:'dark', label:'🌑 Schwarz' }, { id:'nature', label:'🌿 Natur' } ];
-  var themeRow = h('div', { class:'row wrap' });
-  var cur = currentTheme();
-  THEMES.forEach(function(tm){
-    themeRow.appendChild(h('button', { class: 'small' + (cur === tm.id ? '' : ' ghost'), onclick:function(){ applyTheme(tm.id); render(); toast('🎨 Design: ' + tm.label); } }, [tm.label]));
-  });
-  content.appendChild(h('div', { class:'glass card', style:'margin-top:12px' }, [
-    h('h3', {}, ['🎨 Design']),
-    h('p', { class:'muted sm', style:'margin-bottom:10px' }, ['Schwarz (dunkel) oder Natur (hell & lebendig). Gilt für dieses Gerät.']),
+  var THEMES = [ { id:'dark', label:'Dunkel' }, { id:'nature', label:'Hell' } ];
+  var themeRow = h('div', { class:'row wrap', role:'group', 'aria-label':'Design' });
+  function drawThemes(){
+    themeRow.innerHTML = '';
+    var cur = currentTheme();
+    THEMES.forEach(function(tm){
+      themeRow.appendChild(h('button', {
+        type:'button', class:'choice small',
+        'aria-pressed': cur === tm.id ? 'true' : 'false',
+        onclick:function(){ applyTheme(tm.id); render(); toast('Design: ' + tm.label); }
+      }, [tm.label]));
+    });
+  }
+  drawThemes();
+  content.appendChild(h('div', { class:'card', style:'margin-top:12px' }, [
+    h('h3', {}, ['Design']),
+    h('p', { class:'muted sm', style:'margin-bottom:10px' }, ['Dunkel oder hell. Ohne eigene Wahl folgt das Panel der Systemeinstellung. Gilt für dieses Gerät.']),
     themeRow
   ]));
-  var accRow = h('div', { class:'row', style:'gap:12px' });
-  ACCENTS.forEach(function(acc){
-    accRow.appendChild(h('span', { class:'accent-dot', style:'background:' + acc.color + ';width:28px;height:28px', onclick:function(){ applyAccent(acc.id); renderNav(); toast('🎨 Akzent: ' + acc.id); } }));
-  });
-  content.appendChild(h('div', { class:'glass card', style:'margin-top:12px' }, [
-    h('h3', {}, ['🎨 Akzentfarbe']),
+  var accRow = h('div', { class:'row wrap', role:'group', 'aria-label':'Akzentfarbe' });
+  function drawAccents(){
+    accRow.innerHTML = '';
+    ACCENTS.forEach(function(acc){
+      var b = h('button', {
+        type:'button', class:'accent-dot',
+        'aria-pressed': currentAccent() === acc.id ? 'true' : 'false',
+        'aria-label':'Akzentfarbe ' + acc.label, title:acc.label,
+        onclick:function(){ applyAccent(acc.id); renderAccentRow(); drawAccents(); toast('Akzent: ' + acc.label); }
+      });
+      b.appendChild(h('i', { style:'background:' + acc.color }));
+      accRow.appendChild(b);
+    });
+  }
+  drawAccents();
+  // Damit die Sidebar-Auswahl diese Seite mit aktualisiert.
+  renderSettingsChoices = function(){ drawAccents(); drawThemes(); };
+  content.appendChild(h('div', { class:'card', style:'margin-top:12px' }, [
+    h('h3', {}, ['Akzentfarbe']),
     h('p', { class:'muted sm', style:'margin-bottom:10px' }, ['Gilt für dieses Gerät (gespeichert im Browser).']),
     accRow
   ]));
-  var fxRow = h('div', { class:'row wrap' });
-  [ { id:'full', label:'✨ Volle Effekte' }, { id:'lite', label:'⚡ Schnell (für schwache Geräte)' } ].forEach(function(fm){
+  var fxRow = h('div', { class:'row wrap', role:'group', 'aria-label':'Leistungsmodus' });
+  [ { id:'full', label:'Voll' }, { id:'lite', label:'Sparsam' } ].forEach(function(fm){
     fxRow.appendChild(h('button', {
-      class: 'small' + ((liteFx ? 'lite' : 'full') === fm.id ? '' : ' ghost'),
+      type:'button', class:'choice small',
+      'aria-pressed': (liteFx ? 'lite' : 'full') === fm.id ? 'true' : 'false',
       onclick:function(){ try { localStorage.setItem('fx', fm.id); } catch(e){} location.reload(); }
     }, [fm.label]));
   });
-  content.appendChild(h('div', { class:'glass card', style:'margin-top:12px' }, [
-    h('h3', {}, ['⚡ Leistung']),
-    h('p', { class:'muted sm', style:'margin-bottom:10px' }, ['Wenn das Panel ruckelt: Schnell-Modus wählen — gleiche Funktionen, ohne Glas-/Glüh-Effekte und Animationen. Gilt für dieses Gerät.']),
+  content.appendChild(h('div', { class:'card', style:'margin-top:12px' }, [
+    h('h3', {}, ['Leistung']),
+    h('p', { class:'muted sm', style:'margin-bottom:10px' }, ['Bei schwacher Hardware: sparsamer Modus — gleiche Funktionen, ohne Raster und Schatten. Gilt für dieses Gerät.']),
     fxRow
   ]));
   var wipeSession = h('input', { type:'checkbox' });
@@ -1306,13 +1956,13 @@ function renderSettings(){
       .catch(function(e){ toast('⚠️ ' + e.message); })
       .then(function(){ wipeBtn.disabled = false; });
   } }, ['🗑️ Komplette Datenbank löschen']);
-  content.appendChild(h('div', { class:'glass card danger-zone', style:'margin-top:12px' }, [
+  content.appendChild(h('div', { class:'card danger-zone', style:'margin-top:12px' }, [
     h('h3', {}, ['🚨 Danger-Zone']),
     h('p', { class:'muted sm', style:'margin-bottom:10px' }, ['Setzt den Bot komplett auf Null: alle XP, Einstellungen, Verwarnungen, eigenen Befehle und Statistiken werden gelöscht. Das lässt sich NICHT rückgängig machen — vorher oben per Export sichern!']),
     h('label', { class:'row', style:'gap:8px;margin-bottom:10px;cursor:pointer' }, [ wipeSession, h('span', { class:'sm' }, ['Auch WhatsApp-Verknüpfung löschen (danach neu per QR koppeln)']) ]),
     wipeBtn
   ]));
-  content.appendChild(h('div', { class:'glass card', style:'margin-top:12px' }, [
+  content.appendChild(h('div', { class:'card', style:'margin-top:12px' }, [
     h('h3', {}, ['ℹ️ Hinweise']),
     h('p', { class:'muted sm' }, ['Keep-Alive: UptimeRobot muss SELF_URL/health alle 5 Minuten anpingen, sonst schläft der Free-Tier ein. Gruppen-Einstellungen findest du im Tab „Gruppen", Statistiken & Ranglisten im Tab „Statistik".'])
   ]));

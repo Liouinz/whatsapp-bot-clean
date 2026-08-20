@@ -1,5 +1,5 @@
 // Geburtstage: Nutzer tragen sich ein, der Scheduler gratuliert täglich um 9:00
-// in der Gruppe, in der der Geburtstag gesetzt wurde — inkl. Coin-Geschenk.
+// in der Gruppe, in der der Geburtstag gesetzt wurde.
 
 import { PREFIX, config } from '../config.js';
 import { dbRun, dbRows, todayKey } from '../db.js';

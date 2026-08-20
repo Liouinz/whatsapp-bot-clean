@@ -72,7 +72,15 @@ function passwordOk(candidate) {
 }
 
 function clientIp(req) {
-  return (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '?';
+  // req.ip respektiert `trust proxy` (siehe app.set weiter unten): Express
+  // verwirft die vom Client frei setzbaren linken X-Forwarded-For-Eintraege und
+  // nimmt die Adresse, die der vertraute Proxy angehaengt hat.
+  //
+  // Vorher wurde der Header direkt geparst und der LINKESTE Wert genommen. Das
+  // war doppelt angreifbar: ein rotierender Fake-Header liess den
+  // Fehlversuchs-Zaehler nie hochlaufen (Bruteforce ohne Sperre), und ein
+  // konstanter Fake-Header mit der IP des Betreibers sperrte diesen gezielt aus.
+  return req.ip || req.socket.remoteAddress || '?';
 }
 
 function issueSession(res) {
@@ -339,6 +347,10 @@ export function createDashboard() {
       } else {
         return res.status(400).json({ error: 'Unbekannte Einstellung.' });
       }
+      // listGroups() cached 60 s. Ohne diese Zeile lieferte /api/groups nach
+      // einer Aenderung bis zu eine Minute lang noch die alten Schalter —
+      // die Gruppenliste und das Detail widersprachen der Datenbank.
+      groupCache.at = 0;
       await audit('panel-setting', jid, field, 'panel', JSON.stringify(value).slice(0, 100));
       res.json({ ok: true });
     } catch (err) {
@@ -405,7 +417,6 @@ export function createDashboard() {
   const GLOBAL_KEYS = { xp: 'system_xp', maintenance: 'maintenance' };
   const globalPayload = () => ({
     xp: getGlobalFlag('system_xp'),
-    spiele: getGlobalFlag('system_spiele'),
     maintenance: getGlobalFlag('maintenance'),
   });
   api.get('/global', (req, res) => res.json(globalPayload()));
@@ -478,10 +489,21 @@ export function createDashboard() {
     }
   });
 
+  // Stacktraces enthalten interne Dateipfade und Zeilennummern. Der Ring-Buffer
+  // behaelt sie vollstaendig (fuer die Server-Logs), das Panel bekommt nur die
+  // erste Zeile plus einen Hinweis auf die Zahl der unterdrueckten Frames.
+  function redactTrace(msg) {
+    const text = String(msg || '');
+    const lines = text.split('\n');
+    if (lines.length < 2) return text;
+    const frames = lines.slice(1).filter((l) => /^\s*at\s/.test(l)).length;
+    return frames > 0 ? `${lines[0].trim()} (+${frames} Stack-Frames unterdrueckt)` : text;
+  }
+
   api.get('/logs', (req, res) => {
     const logs = getRecentLogs();
     const size = config.log?.ringSize || 500;
-    res.json({ logs: logs.slice(-size) });
+    res.json({ logs: logs.slice(-size).map((l) => ({ ...l, msg: redactTrace(l.msg) })) });
   });
 
   let statsCache = { at: 0, data: null };
@@ -755,7 +777,6 @@ async function statusPayload() {
     activity: state.activity,
     global: {
       xp: getGlobalFlag('system_xp'),
-      spiele: getGlobalFlag('system_spiele'),
       maintenance: getGlobalFlag('maintenance'),
     },
   };
