@@ -17,6 +17,9 @@ import { state, setForceRelinkHandler, setPairingCodeRequester } from './state.j
 import { preflight } from './preflight.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
 import { loadGlobalSettings } from './global.js';
+import { loadActiveEvent } from './events.js';
+import { loadCustomCommands } from './commands/custom.js';
+import { loadAfk } from './commands/afk.js';
 
 let watchdogTimer = null;
 let botSock = null;
@@ -420,12 +423,21 @@ async function main() {
     await initDb();
     logger.success('Datenbank erfolgreich initialisiert.', 'Bootstrap');
 
-    logger.info('Lade Status (Mutes, Toggles, AI-Quota, Global-Settings)...', 'Bootstrap');
+    logger.info('Lade Status (Mutes, Toggles, AI-Quota, Global-Settings, Event, Custom-Befehle, AFK)...', 'Bootstrap');
     await Promise.all([
       loadMutes(),
       loadToggles(),
       initAiUsage(),
       loadGlobalSettings(),
+      // Ohne diesen Aufruf wurde active_event zwar persistiert, aber nie
+      // gelesen — ein laufendes Saison-Event ging bei JEDEM Neustart verloren.
+      loadActiveEvent(),
+      // resolveCustom() liest ausschliesslich aus dem RAM-Cache. Ohne diesen
+      // Aufruf waren alle !addcmd-Befehle und FAQ-Eintraege nach jedem
+      // Neustart tot — bis zufaellig jemand im Panel einen Eintrag anlegte
+      // oder loeschte und der Cache dabei komplett neu gefuellt wurde.
+      loadCustomCommands(),
+      loadAfk(),
     ]);
     logger.success('Runtime-Zustände erfolgreich geladen.', 'Bootstrap');
 

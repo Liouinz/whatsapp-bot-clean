@@ -1,5 +1,5 @@
 // !event — Status ansehen (jeder), Events starten/stoppen (Admins).
-// Der Effekt (globaler XP/Coin-Multiplikator) gilt bot-weit für alle.
+// Der Effekt (globaler XP-Multiplikator) gilt bot-weit für alle.
 
 import { PREFIX } from '../config.js';
 import { EVENTS, getEvent } from '../data/events.js';

@@ -1,7 +1,7 @@
-// Globale Bot-Einstellungen (bot-weit, über alle Gruppen): System-Schalter
-// (XP/Spiele/Economy) und Wartungsmodus. Persistiert in global_settings,
-// RAM-first — die Prüfungen liegen im heißen Pfad (jede Nachricht/Befehl) und
-// dürfen keinen DB-Zugriff kosten.
+// Globale Bot-Einstellungen (bot-weit, über alle Gruppen): XP-Schalter und
+// Wartungsmodus. Persistiert in global_settings, RAM-first — die Prüfungen
+// liegen im heißen Pfad (jede Nachricht/Befehl) und dürfen keinen DB-Zugriff
+// kosten.
 
 import { dbRun, dbRows } from './db.js';
 

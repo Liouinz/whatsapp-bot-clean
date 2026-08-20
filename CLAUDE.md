@@ -67,7 +67,7 @@ Altbestand, nicht das Vorbild:
 `admin.js` 27 · `community.js` 6 · `management.js` 6 · `fun.js` 6 ·
 `custom.js` 5 · `schedule.js` 5 · `tools.js` 4 · `polls.js` 4 · Rest 1–3.
 
-Insgesamt 76 Befehle.
+Insgesamt 75 Befehle (126 Schlüssel inkl. Aliassen).
 
 ## Datenbank
 
@@ -84,7 +84,7 @@ Insgesamt 76 Befehle.
 
 ## Tests
 
-`npm ci && npm test`. Stand: **90 pass / 0 fail**.
+`npm ci && npm test`. Stand: **59 pass / 0 fail** (kalte DB).
 
 Wichtig: **Test-DBs vor dem Lauf löschen** (`rm -f .test-*.db*`). Die Dateien
 sind gitignored, und ein warmer Zustand hat früher einen echten Fehler verdeckt
@@ -96,4 +96,30 @@ Befunde ab (Wochenreport-Dedupe, Auth-Instanz-Stilllegung, Key-Persistenz,
 Scheduler-Claim, atomare Transfers). 8 dieser Tests schlagen gegen den Stand
 vor den Fixes fehl — das ist geprüft, nicht angenommen.
 
+`test/regression-audit3.test.mjs` deckt den dritten Audit ab: Login-Lockout an
+`req.ip`, AI-Breaker bei 429, kumulatives AI-Zeitbudget, Prompt-Trennung,
+Event-Wiederherstellung beim Start, Guard gegen SQL-Kommentare, Laden der
+Custom-Befehle beim Start, Invalidierung des Gruppen-Caches. Auch hier gilt:
+gegen den Stand vor den Fixes schlagen sie fehl, geprüft per `git stash`.
+
 Kein ESLint, kein Prettier, keine CI.
+
+## Panel-UI
+
+`dashboard-ui.js` liefert CSS, HTML-Rumpf und Client-JS als String-Templates.
+Regeln, die beim Ändern zählen:
+
+- **Ein Token-System.** Abstände `--s1…--s8`, Schriftgrößen `--fs-xs…--fs-2xl`,
+  Radien `--r1…--r3`, Schatten `--sh1…--sh3`. Keine Ad-hoc-Pixelwerte.
+- **Farbe bedeutet Zustand.** `--ok` / `--warn` / `--bad` nur für Aussagen über
+  den Betrieb, nie dekorativ. Der wählbare Akzent gilt für Interaktion
+  (Fokus, aktive Navigation, primäre Aktion).
+- **Kontrast ist geprüft, nicht geschätzt.** Beide Themes und alle drei Akzente
+  erfüllen 4.5:1 für Text und 3:1 für grafische Objekte. Neue Farbpaare gegen
+  die *dunkelste* Fläche des hellen Themes (`--bg-2`) prüfen, nicht gegen
+  `--surface`.
+- **Kein `innerHTML` für Serverdaten.** `h()` erzeugt Text-Nodes; das
+  `html:`-Attribut ist ausschließlich für fest verdrahtete Icons und die aus
+  Zahlen gebauten SVG-Diagramme.
+- Anklickbare Listenzeilen sind `<button class="list-btn">`, nicht
+  `<div onclick>` — sonst sind sie nicht per Tastatur erreichbar.
