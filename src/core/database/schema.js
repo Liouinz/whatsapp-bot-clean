@@ -60,7 +60,11 @@ export async function initDb() {
     `CREATE TABLE IF NOT EXISTS user_boosts (user_jid TEXT, type TEXT, mult REAL, expires_at INTEGER, PRIMARY KEY (user_jid, type))`,
     `CREATE TABLE IF NOT EXISTS allowed_chats (jid TEXT PRIMARY KEY, note TEXT)`,
     `CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at)`,
-    `CREATE INDEX IF NOT EXISTS idx_warnings_expires ON warnings(expires_at)`
+    `CREATE INDEX IF NOT EXISTS idx_warnings_expires ON warnings(expires_at)`,
+    // Die Nutzersuche schlaegt ueber alle Personen-Tabellen auf user_jid zu.
+    `CREATE INDEX IF NOT EXISTS idx_members_user ON members(user_jid)`,
+    `CREATE INDEX IF NOT EXISTS idx_xp_user ON xp(user_jid)`,
+    `CREATE INDEX IF NOT EXISTS idx_warnings_user ON warnings(user_jid)`
   ];
 
   for (const sql of schemas) {
@@ -82,6 +86,12 @@ export async function initDb() {
     { table: 'group_settings', column: 'last_weekly_report', ddl: 'TEXT' },
     // Zaehler fuer fehlgeschlagene Sendeversuche geplanter Nachrichten.
     { table: 'scheduled_messages', column: 'attempts', ddl: 'INTEGER DEFAULT 0' },
+    // Anzeigename (pushName) und echte Nachrichtenaktivitaet je Gruppe.
+    // last_seen bleibt unveraendert ("zuletzt in den Gruppen-Metadaten
+    // gesehen"); last_active ist die tatsaechliche Aktivitaet aus dem
+    // Nachrichtenpfad. Zwei Bedeutungen, zwei Spalten.
+    { table: 'members', column: 'push_name', ddl: 'TEXT' },
+    { table: 'members', column: 'last_active', ddl: 'INTEGER' },
   ];
   for (const { table, column, ddl } of migrations) {
     try {

@@ -23,13 +23,14 @@ src/core/cache/     TTLCache
 src/auth.js         Baileys-Auth-State in Turso (useMultiFileAuthState wird bewusst nicht benutzt)
 src/queue.js        serielle Sende-Queue mit Jitter
 src/permissions.js  LID-aware Rollen (USER < GROUP_ADMIN < COMMUNITY_OWNER < BOT_OWNER)
+src/identity.js     Nutzeranzeige: JID → "+49 170 1234567 (Max Mustermann)", Batch-Aufloesung
 src/moderation.js   Auto-Mod, Warn-Eskalation, Anti-Raid
 src/scheduler.js    Tick-Loop: geplante Nachrichten, Nachtmodus, Geburtstage, Wochenreport
 src/ai.js           Gemini nur als Fallback, Cooldown + Tageslimit + Circuit-Breaker
 src/dashboard.js    Express-Panel, ~40 Routen, alle hinter requireAuth
 src/dashboard-ui.js gesamte Panel-UI als JS-String-Templates (1328 Z. — nicht komplett lesen)
 src/data/           statische Daten: Saison-Events
-test/               7 .mjs-Dateien, `npm test` = `node --test`
+test/               9 .mjs-Dateien, `npm test` = `node --test`
 ```
 
 Die Service-Schicht sind die flachen `src/*.js` (`moderation.js`,
@@ -84,7 +85,7 @@ Insgesamt 75 Befehle (126 Schlüssel inkl. Aliassen).
 
 ## Tests
 
-`npm ci && npm test`. Stand: **59 pass / 0 fail** (kalte DB).
+`npm ci && npm test`. Stand: **84 pass / 0 fail** (kalte DB).
 
 Wichtig: **Test-DBs vor dem Lauf löschen** (`rm -f .test-*.db*`). Die Dateien
 sind gitignored, und ein warmer Zustand hat früher einen echten Fehler verdeckt
@@ -123,3 +124,23 @@ Regeln, die beim Ändern zählen:
   Zahlen gebauten SVG-Diagramme.
 - Anklickbare Listenzeilen sind `<button class="list-btn">`, nicht
   `<div onclick>` — sonst sind sie nicht per Tastatur erreichbar.
+
+## Nutzeranzeige
+
+**Die JID ist die Identitaet, der Name ist nur Anzeige.** Jede Aktion (Kick,
+Ban, Verwarnung aufheben) laeuft weiter ueber `user_jid` — nie ueber den Namen.
+
+Alles laeuft ueber `src/identity.js`; keine eigenen `split('@')[0]`-Loesungen
+mehr bauen. Wichtig beim Erweitern:
+
+- `resolveIdentities(jids, { groupJid })` ist die **Batch**-Variante. Im Panel
+  immer diese nutzen — 100 Nutzer kosten so vier Abfragen statt vierhundert.
+- Zwei Attrappen aus dem Bestand duerfen nie als Name durchgehen: `xp.name`
+  faellt in `router.js` auf die Telefonnummer zurueck, `user_profiles.name` in
+  `commands/profile.js` auf `'Unbekannt'`. `isRealName()` filtert beide.
+- Namensquelle ist `members.push_name`, geschrieben von `touchMember()` im
+  Nachrichtenpfad — gedrosselt auf 5 Minuten je Person und Gruppe, eine
+  Namensaenderung schlaegt sofort durch.
+- `members.last_seen` heisst "zuletzt in den Gruppen-Metadaten gesehen",
+  `members.last_active` ist die echte Nachrichtenaktivitaet. Zwei Bedeutungen,
+  zwei Spalten — nicht vermischen.
