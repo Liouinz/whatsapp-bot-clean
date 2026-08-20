@@ -619,7 +619,9 @@ a.list-item { text-decoration: none; color: inherit; cursor: pointer; }
 .lb-main { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .lb-title { font-size: var(--fs-base); font-weight: 560; }
 .lb-tags { display: flex; gap: var(--s2); flex-wrap: wrap; flex: none; }
+.lb-flags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
 .lb-chev { flex: none; color: var(--text-faint); font-size: var(--fs-lg); line-height: 1; }
+.lb-id { font-size: var(--fs-xs); color: var(--text-faint); letter-spacing: .02em; }
 .list-btn:hover .lb-chev { color: var(--text-dim); }
 
 /* Anklickbarer Text in einer Tabellenzelle. Ein <span onclick> waere hier
@@ -631,6 +633,76 @@ a.list-item { text-decoration: none; color: inherit; cursor: pointer; }
   text-decoration: underline; text-underline-offset: 3px;
 }
 .link-btn:hover { filter: none; color: var(--text); }
+
+/* Filter-Chips: echte Buttons mit aria-pressed, 44px Trefferflaeche. */
+.chip-row { display: flex; gap: var(--s2); flex-wrap: wrap; margin-top: var(--s3); }
+.chip {
+  background: var(--surface); color: var(--text-dim);
+  border: 1px solid var(--line-ui); border-radius: 99px;
+  padding: 8px var(--s4); min-height: 44px; font-size: var(--fs-sm); font-weight: 500;
+}
+.chip:hover { background: var(--surface-2); color: var(--text); filter: none; }
+.chip[aria-pressed="true"] {
+  background: var(--accent-dim); border-color: var(--accent); color: var(--accent); font-weight: 560;
+}
+
+/* Sortierbare Tabellenkoepfe. Der Kopf selbst bleibt <th>, der Button
+   darin macht ihn tastaturbedienbar. */
+.sort-btn {
+  background: none; border: 0; box-shadow: none; padding: 2px 0; min-height: 24px;
+  display: inline-flex; align-items: center; gap: var(--s1);
+  font-size: var(--fs-xs); font-weight: 560; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--text-faint);
+}
+.sort-btn:hover { color: var(--text); filter: none; }
+.sort-btn.is-active { color: var(--accent); }
+.sort-ind { font-size: 9px; line-height: 1; }
+
+.pager {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s3); flex-wrap: wrap; margin-top: var(--s3);
+}
+
+/* ── Command Palette ───────────────────────────────────────── */
+.cmdk {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(0, 0, 0, .55);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 10vh var(--s4) var(--s4);
+}
+.cmdk-panel {
+  width: 100%; max-width: 560px;
+  background: var(--surface); border: 1px solid var(--line-ui);
+  border-radius: var(--r3); box-shadow: var(--sh3); overflow: hidden;
+}
+.cmdk-input {
+  width: 100%; border: 0; border-bottom: 1px solid var(--line);
+  border-radius: 0; background: var(--surface); min-height: 52px;
+  font-size: var(--fs-base); padding: 0 var(--s4);
+}
+.cmdk-input:focus { border-color: var(--line); outline: none; }
+.cmdk-list { max-height: 48vh; overflow-y: auto; }
+.cmdk-item {
+  display: flex; align-items: center; gap: var(--s3);
+  width: 100%; text-align: left; min-height: 44px;
+  background: none; border: 0; border-radius: 0; box-shadow: none;
+  padding: var(--s2) var(--s4); color: var(--text); font-weight: 400;
+}
+.cmdk-item:hover, .cmdk-item.is-active { background: var(--surface-2); filter: none; }
+.cmdk-item.is-active { box-shadow: inset 2px 0 0 var(--accent); }
+.cmdk-kind {
+  flex: none; min-width: 66px;
+  font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .07em;
+  /* Nicht --text-faint: die aktive Zeile liegt auf --surface-2, und dort
+     rutschte das Label auf 4.38:1 — knapp unter die Textgrenze. */
+  color: var(--text-dim);
+}
+.cmdk-label { flex: 1 1 auto; min-width: 0; font-size: var(--fs-sm); }
+.cmdk-foot {
+  border-top: 1px solid var(--line); padding: var(--s2) var(--s4);
+  font-size: var(--fs-xs);
+}
+@media (max-width: 599px) { .cmdk { padding-top: var(--s4); } }
 .detail-head { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s4); flex-wrap: wrap; }
 
 /* ── Tabellen ──────────────────────────────────────────────── */
@@ -645,7 +717,11 @@ a.list-item { text-decoration: none; color: inherit; cursor: pointer; }
 .tbl td { padding: var(--s3); border-bottom: 1px solid var(--line); vertical-align: middle; }
 .tbl tr:last-child td { border-bottom: 0; }
 .tbl td.num { text-align: right; }
-.tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+/* overflow-x klippt die Tabelle zwar sichtbar, ihre Breite wanderte aber
+   trotzdem in die scrollWidth der Vorfahren — die ganze SEITE liess sich auf
+   schmalen Geraeten seitlich schieben. contain:paint macht den Wrapper zum
+   echten Abschluss; nur die Tabelle scrollt, nicht mehr das Dokument. */
+.tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; contain: paint; }
 
 /* ── Badges ────────────────────────────────────────────────── */
 .badge {
@@ -1137,6 +1213,136 @@ function currentAccent(){
 // Wird von der Extras-Seite ueberschrieben, wenn sie gerade sichtbar ist.
 var renderSettingsChoices = function(){};
 
+// ── Command Palette (Ctrl/Cmd+K) ───────────────────────────────────
+// Bewusst schlank: keine neue API, keine eigene Datenhaltung. Ansichten und
+// Befehle kommen aus dem, was ohnehin geladen ist; Nutzer und Gruppen aus den
+// bestehenden Endpunkten.
+var paletteOpen = false;
+
+function openPalette(){
+  if (paletteOpen) return;
+  paletteOpen = true;
+  var prevFocus = document.activeElement;
+
+  var input = h('input', { type:'search', id:'cmdkInput', class:'cmdk-input',
+    placeholder:'Nutzer, Gruppe, Befehl oder Ansicht …', autocomplete:'off', spellcheck:'false',
+    'aria-label':'Schnellsuche', 'aria-controls':'cmdkList', 'aria-expanded':'true' });
+  var list = h('div', { class:'cmdk-list', id:'cmdkList', role:'listbox' });
+  var panel = h('div', { class:'cmdk-panel', role:'dialog', 'aria-modal':'true', 'aria-label':'Schnellsuche' }, [
+    input, list,
+    h('div', { class:'cmdk-foot muted' }, ['↑↓ wählen · ⏎ öffnen · Esc schließen'])
+  ]);
+  var overlay = h('div', { class:'cmdk', onclick:function(e){ if (e.target === overlay) close(); } }, [panel]);
+
+  var items = [], active = 0, timer = null, ctrl = null;
+
+  function close(){
+    paletteOpen = false;
+    if (ctrl) ctrl.abort();
+    if (timer) clearTimeout(timer);
+    document.removeEventListener('keydown', onKey, true);
+    overlay.remove();
+    if (prevFocus && prevFocus.focus) prevFocus.focus();
+  }
+
+  function go(it){ close(); it.run(); }
+
+  function draw(){
+    list.innerHTML = '';
+    if (!items.length) {
+      list.appendChild(h('p', { class:'muted sm', style:'padding:var(--s3) var(--s4)' }, ['Nichts gefunden.']));
+      return;
+    }
+    items.forEach(function(it, i){
+      list.appendChild(h('button', {
+        class:'cmdk-item' + (i === active ? ' is-active' : ''), type:'button',
+        role:'option', 'aria-selected': i === active ? 'true' : 'false',
+        onclick:function(){ go(it); }
+      }, [
+        h('span', { class:'cmdk-kind' }, [it.kind]),
+        h('span', { class:'cmdk-label' }, [it.label])
+      ]));
+    });
+  }
+
+  function localMatches(q){
+    var out = [];
+    TABS.forEach(function(t){
+      if (!q || t.label.toLowerCase().indexOf(q) !== -1) {
+        out.push({ kind:'Ansicht', label:t.label, run:function(){ location.hash = '#' + t.id; } });
+      }
+    });
+    if (q && window._cmdNames) {
+      window._cmdNames.filter(function(n){ return n.indexOf(q) !== -1; }).slice(0, 5).forEach(function(n){
+        out.push({ kind:'Befehl', label:'!' + n, run:function(){ location.hash = '#commands'; } });
+      });
+    }
+    return out;
+  }
+
+  function search(){
+    var q = input.value.trim().toLowerCase();
+    items = localMatches(q);
+    draw();
+    if (q.length < 2) return;
+    if (ctrl) ctrl.abort();
+    ctrl = new AbortController();
+    var mine = ctrl;
+    Promise.all([
+      api('/users?limit=5&filter=all&q=' + encodeURIComponent(q), { signal: mine.signal }).catch(function(){ return { users: [] }; }),
+      api('/groups', { signal: mine.signal }).catch(function(){ return { groups: [] }; })
+    ]).then(function(r){
+      if (mine !== ctrl) return;
+      (r[0].users || []).forEach(function(u){
+        items.push({ kind:'Nutzer', label: userLabel(u.user, u.jid), run:function(){
+          location.hash = '#users';
+          setTimeout(function(){ openUser(u.jid); }, 60);
+        } });
+      });
+      rememberGroups(r[1].groups).filter(function(g){
+        return g.name.toLowerCase().indexOf(q) !== -1;
+      }).slice(0, 5).forEach(function(g){
+        items.push({ kind:'Gruppe', label:g.name, run:function(){ location.hash = '#groups'; } });
+      });
+      if (active >= items.length) active = 0;
+      draw();
+    }).catch(function(){});
+  }
+
+  function onKey(e){
+    if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); active = Math.min(active + 1, items.length - 1); draw(); return; }
+    if (e.key === 'ArrowUp') { e.preventDefault(); active = Math.max(active - 1, 0); draw(); return; }
+    if (e.key === 'Enter' && items[active]) { e.preventDefault(); go(items[active]); return; }
+    // Fokusfalle: Tab darf das Overlay nicht verlassen.
+    if (e.key === 'Tab') {
+      var focusable = panel.querySelectorAll('input,button');
+      if (!focusable.length) return;
+      var first = focusable[0], last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  }
+
+  input.addEventListener('input', function(){
+    active = 0;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(search, 200);
+  });
+  document.addEventListener('keydown', onKey, true);
+  document.body.appendChild(overlay);
+  input.focus();
+  search();
+}
+
+addEventListener('keydown', function(e){
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+    e.preventDefault();
+    if (paletteOpen) return;
+    openPalette();
+  }
+});
+
 addEventListener('hashchange', function(){
   current = location.hash.replace('#','') || 'home';
   render();
@@ -1527,7 +1733,12 @@ function renderGroups(){
 function drawGroupList(filter){
   var box = document.getElementById('groupList');
   if (!box) return;
-  var groups = (window._groups || []).filter(function(gr){ return gr.name.toLowerCase().indexOf((filter || '').toLowerCase()) !== -1; });
+  // Auch die interne Gruppen-ID ist durchsuchbar — bei Support-Faellen nennt
+  // ein Log die JID, nicht den Namen.
+  var q = (filter || '').toLowerCase();
+  var groups = (window._groups || []).filter(function(gr){
+    return !q || gr.name.toLowerCase().indexOf(q) !== -1 || gr.jid.toLowerCase().indexOf(q) !== -1;
+  });
   box.innerHTML = '';
   if (!groups.length) return box.appendChild(h('p', { class:'muted' }, ['Keine Gruppen gefunden.']));
   groups.forEach(function(gr){
@@ -1537,11 +1748,19 @@ function drawGroupList(filter){
     if (gr.antiraid) flags.push('Anti-Raid');
     if (gr.nightmode && gr.nightmode.enabled) flags.push('Nachtmodus');
     if (gr.welcome) flags.push('Begrüßung');
-    var sub = gr.members + ' Mitglieder · ' + (flags.length ? flags.join(' · ') : 'kein Schutz aktiv');
+    // Die aktiven Schutzfunktionen als Badges: in der frueheren Textzeile
+    // ("… · Anti-Link · Anti-Spam") war auf einen Blick nicht erkennbar, was
+    // eingeschaltet ist. Neutrale Farbe — aktiver Schutz ist kein Alarm.
+    var sub = gr.members + ' Mitglieder';
     box.appendChild(h('button', { class:'list-btn', type:'button', onclick:function(){ renderGroupDetail(gr); } }, [
       h('span', { class:'lb-main' }, [
         h('span', { class:'lb-title' }, [gr.name]),
-        h('span', { class:'muted sm' }, [sub])
+        h('span', { class:'muted sm' }, [sub]),
+        // Die interne ID bleibt sichtbar, aber deutlich nachrangig.
+        h('span', { class:'lb-id mono' }, [gr.jid.split('@')[0]]),
+        h('span', { class:'lb-flags' }, flags.length
+          ? flags.map(function(f){ return h('span', { class:'badge' }, [f]); })
+          : [h('span', { class:'muted sm' }, ['kein Schutz aktiv'])])
       ]),
       h('span', { class:'lb-tags' }, [
         gr.enabled ? null : h('span', { class:'badge warn' }, ['Pausiert']),
@@ -1608,7 +1827,7 @@ function renderGroupDetail(gr){
     // rendern ergab eine 10.000 px lange Seite ohne jede Orientierung —
     // deshalb Suche und schrittweises Nachladen.
     var PAGE = 50, shown = PAGE, term = '';
-    var search = h('input', { type:'search', class:'search', placeholder:'Nummer suchen …',
+    var search = h('input', { type:'search', class:'search', placeholder:'Name oder Nummer suchen …',
       oninput:function(e){ term = e.target.value.trim().toLowerCase(); shown = PAGE; draw(); } });
     mBox.appendChild(field('Mitglied suchen', search, { hideLabel:true }));
     var tblBox = h('div', { style:'margin-top:var(--s3)' });
@@ -1624,7 +1843,10 @@ function renderGroupDetail(gr){
       tblBox.appendChild(h('div', { class:'card', style:'padding:var(--s2) var(--s3)' }, [
         dataTable(['Mitglied', 'Rolle'], slice, function(m){
           return [
-            label(m),
+            // Querverweis in die zentrale Nutzerverwaltung. Geklickt wird der
+            // Name, gesendet wird die technische ID.
+            h('button', { class:'link-btn', type:'button',
+              onclick:function(){ openUser(m.pn || m.id, function(){ renderGroupDetail(gr); }); } }, [label(m)]),
             m.admin ? h('span', { class:'badge ok' }, [m.admin === 'superadmin' ? 'Inhaber' : 'Admin']) : h('span', { class:'muted' }, ['Mitglied'])
           ];
         }, function(m){
@@ -1667,119 +1889,220 @@ function renderUsers(){
     'Suche nach Name, Telefonnummer oder JID. Die Nummer bleibt die eindeutige Identität — der Name ist nur Anzeige.'
   ]));
 
+  var state = { q:'', page:1, limit:25, sort:'name', dir:'asc', filter:'groups' };
+  var timer = null, ctrl = null;
+
   var input = h('input', { type:'search', class:'search', placeholder:'Name, Nummer oder JID eingeben …',
     autocomplete:'off', spellcheck:'false' });
   content.appendChild(field('Nutzer suchen', input, { hideLabel:true }));
 
-  var box = h('div', { id:'userResults', style:'margin-top:var(--s4)' }, [
-    h('p', { class:'muted sm' }, ['Mindestens 2 Zeichen eingeben.'])
-  ]);
+  // Filter als echte Buttons mit aria-pressed — nicht als Attrappen-Chips.
+  var FILTERS = [
+    ['groups', 'In Gruppen'],
+    ['all', 'Alle bekannten'],
+    ['warned', 'Mit Verwarnung'],
+    ['muted', 'Stummgeschaltet']
+  ];
+  var filterRow = h('div', { class:'chip-row', role:'group', 'aria-label':'Filter' });
+  content.appendChild(filterRow);
+
+  var box = h('div', { id:'userResults', style:'margin-top:var(--s4)' });
   content.appendChild(box);
 
-  var timer = null, ctrl = null, term = '', offset = 0, rows = [];
+  function drawFilters(){
+    filterRow.innerHTML = '';
+    FILTERS.forEach(function(f){
+      filterRow.appendChild(h('button', {
+        class:'chip', type:'button',
+        'aria-pressed': state.filter === f[0] ? 'true' : 'false',
+        onclick:function(){ state.filter = f[0]; state.page = 1; load(); }
+      }, [f[1]]));
+    });
+  }
 
-  function show(nodes){ box.innerHTML = ''; nodes.forEach(function(n){ box.appendChild(n); }); }
+  function setSort(key){
+    if (state.sort === key) state.dir = state.dir === 'asc' ? 'desc' : 'asc';
+    else { state.sort = key; state.dir = key === 'name' ? 'asc' : 'desc'; }
+    state.page = 1;
+    load();
+  }
 
-  function run(append){
+  function sortHead(label, key){
+    var active = state.sort === key;
+    return h('button', {
+      class:'sort-btn' + (active ? ' is-active' : ''), type:'button',
+      'aria-label': 'Nach ' + label + ' sortieren',
+      onclick:function(){ setSort(key); }
+    }, [label, h('span', { class:'sort-ind', 'aria-hidden':'true' }, [active ? (state.dir === 'asc' ? '▲' : '▼') : ''])]);
+  }
+
+  function load(){
+    drawFilters();
     if (ctrl) ctrl.abort();
     ctrl = new AbortController();
     var mine = ctrl;
-    var q = term;
-    api('/users/search?q=' + encodeURIComponent(q) + '&limit=' + USER_PAGE + '&offset=' + offset,
-        { signal: mine.signal })
-      .then(function(res){
-        // Antwort einer inzwischen verworfenen Eingabe nicht anzeigen.
-        if (mine !== ctrl || q !== term) return;
-        rows = append ? rows.concat(res.users) : res.users;
-        draw(res.hasMore);
-      })
+    box.innerHTML = '';
+    box.appendChild(skel(48)); box.appendChild(skel(48));
+    var qs = '?page=' + state.page + '&limit=' + state.limit +
+      '&sort=' + state.sort + '&dir=' + state.dir + '&filter=' + state.filter +
+      (state.q ? '&q=' + encodeURIComponent(state.q) : '');
+    api('/users' + qs, { signal: mine.signal })
+      .then(function(res){ if (mine === ctrl) draw(res); })
       .catch(function(e){
         if (e.name === 'AbortError' || e.message === 'auth') return;
-        show([h('p', { class:'muted sm' }, [e.message])]);
+        box.innerHTML = '';
+        box.appendChild(h('p', { class:'muted sm' }, [e.message]));
       });
   }
 
-  function draw(hasMore){
-    if (!rows.length) { show([h('p', { class:'muted sm' }, ['Niemand gefunden.'])]); return; }
-    var nodes = [
-      h('div', { class:'card', style:'padding:var(--s2) var(--s3)' }, [
-        dataTable(['Nutzer', 'Gruppen', 'XP', 'Warnungen', 'Zuletzt aktiv'], rows, function(u){
-          return [
-            h('button', { class:'link-btn', type:'button', onclick:function(){ openUser(u); } },
-              [userLabel(u.user, u.jid)]),
-            h('span', { class:'muted' }, [u.groups.length ? String(u.groups.length) : '—']),
-            h('span', { class:'num-cell' }, [u.xp ? nfmt(u.xp) : '—']),
-            u.warnings
-              ? h('span', { class:'badge warn' }, [String(u.warnings)])
-              : h('span', { class:'muted' }, ['—']),
-            h('span', { class:'muted' }, [u.lastActive ? fmtRel(u.lastActive) : 'unbekannt'])
-          ];
-        })
-      ])
-    ];
-    if (hasMore) {
-      nodes.push(h('button', { class:'ghost small', style:'margin-top:var(--s3)', onclick:function(){
-        offset += USER_PAGE; run(true);
-      } }, ['Weitere ' + USER_PAGE + ' anzeigen']));
+  function draw(res){
+    box.innerHTML = '';
+    var p = res.pagination;
+    if (!res.users.length) {
+      box.appendChild(h('p', { class:'muted sm' }, [
+        state.q ? 'Niemand gefunden.' : 'In dieser Auswahl ist niemand bekannt.'
+      ]));
+      return;
     }
-    show(nodes);
+    box.appendChild(h('div', { class:'card', style:'padding:var(--s2) var(--s3)' }, [
+      h('div', { class:'tbl-wrap' }, [
+        h('table', { class:'tbl' }, [
+          h('thead', {}, [h('tr', {}, [
+            h('th', {}, [sortHead('Nutzer', 'name')]),
+            h('th', {}, ['Gruppen']),
+            h('th', {}, [sortHead('XP', 'xp')]),
+            h('th', {}, [sortHead('Warnungen', 'warnings')]),
+            h('th', {}, [sortHead('Zuletzt aktiv', 'activity')]),
+            h('th', { class:'num' }, [h('span', { class:'visually-hidden' }, ['Herkunft'])])
+          ])]),
+          h('tbody', {}, res.users.map(function(u){
+            return h('tr', {}, [
+              h('td', {}, [h('button', { class:'link-btn', type:'button', onclick:function(){ openUser(u.jid); } },
+                [userLabel(u.user, u.jid)])]),
+              h('td', { class:'muted' }, [u.groups.length ? String(u.groups.length) : '—']),
+              h('td', {}, [h('span', { class:'num-cell' }, [u.xp ? nfmt(u.xp) : '—'])]),
+              h('td', {}, [u.warnings ? h('span', { class:'badge warn' }, [String(u.warnings)]) : h('span', { class:'muted' }, ['—'])]),
+              h('td', { class:'muted' }, [u.lastActive ? fmtRel(u.lastActive) : 'unbekannt']),
+              h('td', { class:'num' }, [
+                u.inGroups ? h('span', { class:'badge ok' }, ['Gruppe'])
+                           : h('span', { class:'badge' }, ['Adressbuch'])
+              ])
+            ]);
+          }))
+        ])
+      ])
+    ]));
+
+    // Seitennavigation nur zeigen, wenn es etwas zu blaettern gibt.
+    if (p.pages > 1) {
+      box.appendChild(h('div', { class:'pager', role:'navigation', 'aria-label':'Seiten' }, [
+        h('button', { class:'ghost small', type:'button', disabled: p.page <= 1,
+          onclick:function(){ state.page = p.page - 1; load(); } }, ['← Zurück']),
+        h('span', { class:'muted sm num-cell' }, ['Seite ' + p.page + ' von ' + p.pages + ' · ' + nfmt(p.total) + ' Personen']),
+        h('button', { class:'ghost small', type:'button', disabled: p.page >= p.pages,
+          onclick:function(){ state.page = p.page + 1; load(); } }, ['Weiter →'])
+      ]));
+    } else {
+      box.appendChild(h('p', { class:'muted sm', style:'margin-top:var(--s3)' }, [nfmt(p.total) + ' Personen']));
+    }
   }
 
   input.addEventListener('input', function(e){
-    term = e.target.value.trim();
-    offset = 0; rows = [];
+    state.q = e.target.value.trim();
+    state.page = 1;
     if (timer) clearTimeout(timer);
-    if (term.length < 2) {
-      if (ctrl) { ctrl.abort(); ctrl = null; }
-      show([h('p', { class:'muted sm' }, ['Mindestens 2 Zeichen eingeben.'])]);
-      return;
+    if (state.q && state.q.length < 2) return;
+    timer = setTimeout(load, 300);
+  });
+
+  load();
+}
+
+// Detailkarte: laedt genau eine Person und zeigt ausschliesslich, was das
+// Projekt wirklich weiss.
+// Der zweite Parameter erlaubt die Rueckkehr dorthin, wo geklickt wurde —
+// aus einer Gruppe heraus zurueck in dieselbe Gruppe, nicht in die Liste.
+function openUser(jid, back){
+  content.innerHTML = '';
+  content.appendChild(skel(60));
+  api('/users/' + encodeURIComponent(jid)).then(function(d){
+    content.innerHTML = '';
+    content.appendChild(h('div', { class:'detail-head' }, [
+      h('button', { class:'ghost small', onclick:function(){ if (back) back(); else render(); } }, ['← Zurück']),
+      h('h2', { class:'page-title', style:'margin:0' }, [userLabel(d.user, d.jid)])
+    ]));
+
+    var SRC = { pushName:'WhatsApp-Name (selbst gesetzt)', contact:'Adressbuch', verified:'Verifiziertes Konto',
+      group_name:'Aus einer Gruppe', stored_profile:'Gespeichertes Profil', fallback:'kein Name bekannt' };
+    var facts = [
+      ['Telefonnummer', (d.user && d.user.phone) || shortJid(d.jid)],
+      ['Anzeigename', (d.user && d.user.name) || 'nicht bekannt'],
+      ['Namensquelle', SRC[(d.user && d.user.nameSource)] || 'unbekannt'],
+      ['Technische ID', d.jid],
+      ['WhatsApp-LID', d.lid || '—'],
+      ['Erstmals gesehen', d.firstSeen ? new Date(d.firstSeen).toLocaleString('de-DE') : '—'],
+      ['XP / Level', nfmt(d.xp) + ' · Level ' + d.level],
+      ['Gezählte Nachrichten', nfmt(d.messages)],
+      ['Zuletzt aktiv', d.lastActive ? fmtRel(d.lastActive) + ' (' + new Date(d.lastActive).toLocaleString('de-DE') + ')' : 'unbekannt']
+    ];
+    content.appendChild(h('div', { class:'card' }, [
+      h('h3', {}, ['Übersicht']),
+      h('div', { class:'tbl-wrap' }, [
+        h('table', { class:'tbl' }, [h('tbody', {}, facts.map(function(f){
+          return h('tr', {}, [h('td', { class:'muted', style:'width:42%' }, [f[0]]), h('td', {}, [f[1]])]);
+        }))])
+      ])
+    ]));
+
+    // Alle bekannten Namen nebeneinander — so ist sichtbar, ob ein alter
+    // gespeicherter Name einen aktuellen WhatsApp-Namen verdeckt.
+    var known = [
+      ['WhatsApp-Name', d.names.pushName],
+      ['Adressbuch', d.names.contactName],
+      ['Verifiziert', d.names.verifiedName]
+    ].filter(function(n){ return n[1]; });
+    if (known.length) {
+      content.appendChild(h('div', { class:'section-h' }, ['Bekannte Namen']));
+      content.appendChild(h('div', { class:'card', style:'padding:var(--s2) var(--s3)' }, [
+        h('div', { class:'tbl-wrap' }, [h('table', { class:'tbl' }, [h('tbody', {}, known.map(function(n){
+          return h('tr', {}, [h('td', { class:'muted', style:'width:42%' }, [n[0]]), h('td', {}, [n[1]])]);
+        }))])])
+      ]));
     }
-    show([skel(48), skel(48)]);
-    timer = setTimeout(function(){ run(false); }, 300);
+
+    content.appendChild(h('div', { class:'section-h' }, ['Gruppen (' + d.groups.length + ')']));
+    if (!d.groups.length) {
+      content.appendChild(h('p', { class:'muted sm' }, ['In keiner vom Bot betreuten Gruppe gesehen.']));
+    } else {
+      content.appendChild(h('div', { class:'card', style:'padding:var(--s2) var(--s3)' }, [
+        dataTable(['Gruppe', 'XP dort', 'Zuletzt aktiv'], d.groups, function(g){
+          return [g.name || gName(g.jid), h('span', { class:'num-cell' }, [g.xp ? nfmt(g.xp) : '—']),
+            g.lastActive ? fmtRel(g.lastActive) : 'unbekannt'];
+        })
+      ]));
+    }
+
+    modSection('Aktive Verwarnungen', d.warnings, ['Gruppe', 'Grund', 'Seit'], function(w){
+      return [gName(w.group_jid), w.reason || '—', fmtRel(w.created_at)];
+    });
+    modSection('Stummschaltungen', d.mutes, ['Gruppe', 'Läuft ab'], function(m){
+      return [gName(m.group_jid), fmtRel(m.until)];
+    });
+    modSection('Sperren', d.bans, ['Gruppe', 'Grund'], function(b){
+      return [gName(b.group_jid), b.reason || '—'];
+    });
+  }).catch(function(e){
+    content.innerHTML = '';
+    content.appendChild(h('p', { class:'muted' }, [e.message]));
   });
 }
 
-// Detailkarte: zeigt ausschliesslich, was ohnehin schon in der Datenbank
-// steht. Keine erfundenen Felder, keine Nachladeschleife pro Person.
-function openUser(u){
-  content.innerHTML = '';
-  content.appendChild(h('div', { class:'detail-head' }, [
-    h('button', { class:'ghost small', onclick:function(){ render(); } }, ['← Zurück']),
-    h('h2', { class:'page-title', style:'margin:0' }, [userLabel(u.user, u.jid)])
+function modSection(title, rows, cols, cellsFn){
+  content.appendChild(h('div', { class:'section-h' }, [title + ' (' + rows.length + ')']));
+  if (!rows.length) { content.appendChild(h('p', { class:'muted sm' }, ['Nichts offen.'])); return; }
+  content.appendChild(h('div', { class:'card', style:'padding:var(--s2) var(--s3)' }, [
+    dataTable(cols, rows, cellsFn)
   ]));
-
-  var facts = [
-    ['Telefonnummer', (u.user && u.user.phone) || shortJid(u.jid)],
-    ['Anzeigename', (u.user && u.user.name) || 'nicht bekannt'],
-    ['Technische ID', u.jid],
-    ['Gesammelte XP', u.xp ? nfmt(u.xp) : '0'],
-    ['Gezählte Nachrichten', u.messages ? nfmt(u.messages) : '0'],
-    ['Aktive Verwarnungen', String(u.warnings)],
-    ['Stummgeschaltet', u.mutedUntil ? 'bis ' + new Date(u.mutedUntil).toLocaleString('de-DE') : 'nein'],
-    ['Zuletzt aktiv', u.lastActive ? fmtRel(u.lastActive) + ' (' + new Date(u.lastActive).toLocaleString('de-DE') + ')' : 'unbekannt']
-  ];
-  content.appendChild(h('div', { class:'card' }, [
-    h('h3', {}, ['Übersicht']),
-    h('div', { class:'tbl-wrap' }, [
-      h('table', { class:'tbl' }, [
-        h('tbody', {}, facts.map(function(f){
-          return h('tr', {}, [
-            h('td', { class:'muted', style:'width:42%' }, [f[0]]),
-            h('td', {}, [f[1]])
-          ]);
-        }))
-      ])
-    ])
-  ]));
-
-  content.appendChild(h('div', { class:'section-h' }, ['Gruppen (' + u.groups.length + ')']));
-  if (!u.groups.length) {
-    content.appendChild(h('p', { class:'muted sm' }, ['In keiner vom Bot betreuten Gruppe gesehen.']));
-  } else {
-    u.groups.forEach(function(g){
-      content.appendChild(h('div', { class:'list-item' }, [h('span', {}, [g.name])]));
-    });
-  }
 }
 
 function renderCommands(){
@@ -1793,6 +2116,8 @@ function renderCommands(){
   content.appendChild(box);
   api('/commands').then(function(res){
     box.innerHTML = '';
+    // Namen fuer die Command Palette merken — die Ansicht laedt sie ohnehin.
+    window._cmdNames = res.commands.map(function(c){ return c.name; });
     var groups = { community:'Community', tools:'Tools', utility:'Ranglisten & Status', admin:'Admin & Moderation' };
     Object.keys(groups).forEach(function(gk){
       var cmds = res.commands.filter(function(c){ return c.group === gk; });

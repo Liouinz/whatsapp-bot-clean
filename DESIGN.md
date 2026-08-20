@@ -1,220 +1,260 @@
 ---
 name: WhatsApp Community Bot — Control Center
-description: Dark Aurora-Glow glassmorphism control panel for a self-hosted WhatsApp community bot.
+description: Nüchternes Token-System für das Panel eines selbst gehosteten WhatsApp-Community-Bots. Zwei Themes, ein wählbarer Akzent, Farbe ausschließlich mit Bedeutung.
 colors:
-  void: "#05070d"
-  surface-glass: "#0F162694"
-  surface-glass-soft: "#1820388C"
-  line: "#82A5FF21"
-  text: "#eaf0ff"
-  muted: "#8d97b5"
-  accent-cyan: "#00e5d0"
-  accent-cyan-secondary: "#31b8ff"
-  accent-cyan-dim: "#00E5D021"
-  accent-cyan-glow: "#00E5D066"
-  accent-violet: "#8b6bff"
-  accent-violet-secondary: "#d06bff"
-  accent-mint: "#42e695"
-  accent-mint-secondary: "#3bb2b8"
-  warn: "#ffb454"
-  bad: "#ff5d7a"
-  ok: "#37e08d"
+  bg: "#131519"
+  bg-2: "#0f1114"
+  surface: "#1a1d22"
+  surface-2: "#21252b"
+  surface-3: "#282d34"
+  line: "#2b3038"
+  line-strong: "#3b424c"
+  line-ui: "#656870"
+  text: "#e9e7e2"
+  text-dim: "#a3a9b2"
+  text-faint: "#838994"
+  accent-amber: "#e0a33c"
+  accent-violet: "#9b8cf0"
+  accent-mint: "#58cfa6"
+  accent-ink: "#14161a"
+  ok: "#4cb782"
+  warn: "#d9a441"
+  bad: "#ea7a72"
+  bad-solid: "#c8473f"
+  nature-bg: "#f4f2ed"
+  nature-surface: "#fbfaf7"
+  nature-text: "#1e2126"
+  nature-text-dim: "#575d66"
+  nature-accent-amber: "#8a5a06"
 typography:
   display:
-    fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
-    fontSize: "1.75rem"
+    fontFamily: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+    fontSize: "2.25rem"
     fontWeight: 600
     lineHeight: 1.2
-    letterSpacing: "0.01em"
   headline:
-    fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
-    fontSize: "1.55rem"
+    fontFamily: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+    fontSize: "1.5rem"
     fontWeight: 600
-    lineHeight: 1.25
-    letterSpacing: "0.01em"
+    lineHeight: 1.2
   body:
-    fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
-    fontSize: "0.95rem"
+    fontFamily: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+    fontSize: "0.9375rem"
     fontWeight: 400
-    lineHeight: 1.5
+    lineHeight: 1.55
   label:
-    fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
-    fontSize: "0.76rem"
-    fontWeight: 600
+    fontFamily: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+    fontSize: "0.75rem"
+    fontWeight: 560
     lineHeight: 1.3
-    letterSpacing: "0.09em"
+    letterSpacing: "0.08em"
   mono:
-    fontFamily: "ui-monospace, Menlo, Consolas, monospace"
-    fontSize: "0.78rem"
+    fontFamily: "ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace"
+    fontSize: "0.8125rem"
     fontWeight: 400
     lineHeight: 1.4
 rounded:
-  sm: "8px"
-  md: "12px"
-  lg: "18px"
-  pill: "99px"
+  r1: "3px"
+  r2: "6px"
+  r3: "10px"
 spacing:
-  xs: "8px"
-  sm: "12px"
-  md: "16px"
-  lg: "24px"
-  xl: "32px"
+  s1: "4px"
+  s2: "8px"
+  s3: "12px"
+  s4: "16px"
+  s5: "24px"
+  s6: "32px"
+  s7: "48px"
+  s8: "64px"
 components:
   button-primary:
-    backgroundColor: "{colors.accent-cyan-dim}"
-    textColor: "{colors.accent-cyan}"
-    rounded: "{rounded.md}"
-    padding: "11px 18px"
-  button-primary-hover:
-    backgroundColor: "{colors.accent-cyan-dim}"
-    textColor: "{colors.accent-cyan}"
+    backgroundColor: "{colors.accent-amber}"
+    textColor: "{colors.accent-ink}"
+    rounded: "{rounded.r2}"
+    padding: "9px 16px"
   button-ghost:
-    backgroundColor: "transparent"
-    textColor: "{colors.muted}"
-    rounded: "{rounded.md}"
-    padding: "11px 18px"
-  button-danger:
-    backgroundColor: "{colors.bad}"
-    textColor: "{colors.bad}"
-    rounded: "{rounded.md}"
-    padding: "11px 18px"
-  card:
-    backgroundColor: "{colors.surface-glass}"
+    backgroundColor: "{colors.surface-2}"
     textColor: "{colors.text}"
-    rounded: "{rounded.lg}"
-    padding: "18px"
+    rounded: "{rounded.r2}"
+    padding: "9px 16px"
+  button-danger:
+    backgroundColor: "{colors.bad-solid}"
+    textColor: "#ffffff"
+    rounded: "{rounded.r2}"
+    padding: "9px 16px"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.r3}"
+    padding: "16px"
+  badge-neutral:
+    backgroundColor: "{colors.surface-3}"
+    textColor: "{colors.text-dim}"
+    rounded: "{rounded.r1}"
+    padding: "3px 8px"
   badge-ok:
     backgroundColor: "{colors.ok}"
     textColor: "{colors.ok}"
-    rounded: "{rounded.pill}"
-    padding: "3px 9px"
+    rounded: "{rounded.r1}"
+    padding: "3px 8px"
   badge-bad:
     backgroundColor: "{colors.bad}"
     textColor: "{colors.bad}"
-    rounded: "{rounded.pill}"
-    padding: "3px 9px"
+    rounded: "{rounded.r1}"
+    padding: "3px 8px"
 ---
 
 # Design System: WhatsApp Community Bot — Control Center
 
-## 1. Overview
+## 1. Überblick
 
-**Creative North Star: "The Signal Room"**
+**Leitbild: „Der Kontrollraum, nicht das Schaufenster."**
 
-A dark operations room for a bot that runs unattended: aurora-glow fields drift slowly behind glass panels, a single status dot tells you in one glance whether the connection is alive, and every number on screen ticks and pulses because it's live, not a screenshot. The palette is near-black and quiet by default; color only shows up where it means something — a cyan glow on the thing you can act on, amber for "watch this," red for "this broke," green for "this is fine." Underneath the technical shell, the bot itself is playful (games, coins, birthdays, emoji-rich lists), and the Control Center lets that personality surface in its interactive states: buttons glow on press, counters tween upward, toasts slide in with a bit of bounce-free energy. It explicitly rejects the flat, light, corporate-SaaS-admin look — this is a control console you'd want to watch at 2am, not a spreadsheet with rounded corners.
+Das Panel ist ein Betriebswerkzeug für einen Bot, der unbeaufsichtigt läuft.
+Wer es öffnet, will in Sekunden wissen, ob die Verbindung steht, wer gerade
+auffällig ist und welcher Schalter umgelegt werden muss. Alles, was dieser
+Frage nicht dient, ist Ballast. Deshalb: ruhige Flächen, ein einziger Akzent,
+Farbe nur dort, wo sie eine Aussage über den Betrieb trifft.
 
-**Key Characteristics:**
-- Near-black void background (`#05070d`) with slow-drifting aurora-glow blobs behind translucent glass panels.
-- One primary accent (cyan by default, user-switchable to violet or mint) used sparingly — glows, active states, the status pulse — never as a body-text or large-surface color.
-- Depth from blur + colored glow, not gray drop shadows: cards lift with an accent-tinted ring, not a heavier shadow.
-- Playful, energetic component feedback (animated counters, hover lift, pulsing status dot, toast slide-in) layered on an otherwise precise, technical shell.
-- Mobile-first: a bottom tab bar on phones becomes a sticky sidebar at ≥900px — the same components, no separate "desktop design."
+Das frühere Aurora-Glassmorphism-Bild ist bewusst abgelöst worden. Blur,
+Leuchtkanten und mehrfarbige Verläufe kosteten Lesbarkeit und Rechenzeit auf
+Telefonen und trugen keine Information. Was blieb, ist ein Token-System, das
+sich in beiden Themes und allen drei Akzenten messbar an WCAG 2.1 AA hält.
 
-## 2. Colors
+**Kennzeichen**
+- Zwei Themes: dunkel (Standard) und `nature` (helles Papier-Theme).
+- Ein wählbarer Akzent — Amber, Violett, Mint — jeweils nur für Interaktion.
+- Drei Zustandsfarben — `--ok`, `--warn`, `--bad` — nur für Betriebsaussagen.
+- Tiefe entsteht aus drei neutralen Schattenstufen, nicht aus Leuchten.
+- Ein Rasterschritt von 4 px, acht Abstandsstufen, sechs Schriftgrößen.
+- Mobile zuerst: unter 900 px eine feste untere Leiste, darüber eine Seitenspalte.
 
-The palette is a near-black glass surface with a single switchable accent; state colors (warn/bad/ok) are the only other saturated hues on screen.
+## 2. Farben
 
-### Primary
-- **Signal Cyan** (`#00e5d0`): the default accent — active nav item, focus rings, the status-dot glow when connected, primary button text/glow, chart lines and bars. Used at low opacity (`accent-cyan-dim`, 13%) as a tint and background wash; full-strength only for glows, text, and thin strokes.
-- **Signal Cyan — Secondary** (`#31b8ff`): pairs with Signal Cyan in the aurora field and the horizontal progress bars (`.hbar` gradient); never used alone.
+### Flächen
+Fünf abgestufte Flächen bauen die Hierarchie auf: `--bg` (Seite), `--bg-2`
+(tiefer gelegte Bereiche wie Eingabefelder), `--surface` (Karte), `--surface-2`
+(Karte auf Karte, Geisterknopf), `--surface-3` (neutrale Badge, Hover).
 
-### Secondary
-- **Violet Signal** (`#8b6bff` / secondary `#d06bff`): the "violet" accent theme — a full swap-in replacement for Signal Cyan via `[data-accent="violet"]`, not a simultaneous second color.
-- **Mint Signal** (`#42e695` / secondary `#3bb2b8`): the "mint" accent theme, same swap-in role as Violet.
+Drei Linien: `--line` (Trennung ohne Bedienbedeutung), `--line-strong`
+(Betonung), `--line-ui` (Rand jedes Bedienelements — liegt bei 3,03:1 und
+erfüllt damit WCAG 1.4.11 für grafische Objekte).
 
-### Neutral
-- **Void** (`#05070d`): page background — the darkest surface, always visible at the edges around the aurora glow.
-- **Glass Navy** (`rgba(15,21,38,.58)` / `#0F162694`): the standard panel background — sidebar, cards, tab bar, login card. Always paired with `backdrop-filter: blur(16px) saturate(1.25)`.
-- **Glass Navy — Soft** (`rgba(24,32,56,.55)` / `#1820388C`): the hover/secondary glass tone — nav-link hover, toast background.
-- **Hairline** (`rgba(130,165,255,.13)`): the one border color in the whole system, a faint cool-blue line at 13% opacity. Every glass panel, input, and button uses exactly this.
-- **Ink** (`#eaf0ff`): primary text on dark surfaces.
-- **Muted** (`#8d97b5`): secondary text — labels, sub-titles, timestamps, placeholder-adjacent copy.
+### Text
+`--text` für Inhalt, `--text-dim` für Nebeninformation, `--text-faint` für die
+schwächste Stufe (interne IDs, Zeitstempel). `--text-faint` wurde von `#8b909a`
+auf `#838994` bzw. `#5f666f` korrigiert, weil es zuvor je nach Fläche zwischen
+3,69:1 und 4,13:1 lag.
 
-### State
-- **Warn** (`#ffb454`), **Bad** (`#ff5d7a`), **Ok** (`#37e08d`): reserved for status dots, badges, and log lines. Never used decoratively.
+### Akzent — nur Interaktion
+Genau eine Akzentfarbe ist gleichzeitig aktiv. Sie markiert Fokus, aktive
+Navigation und die primäre Aktion. Sie sagt nie etwas über den Zustand des
+Bots aus. Zwei Abstufungen: `--accent-dim` als Fläche, `--accent-line` als Rand.
 
-### Named Rules
-**The One Glow Rule.** Only one accent hue is live at a time (cyan, violet, or mint — chosen by the user, persisted to `localStorage`). Never mix two accent hues in the same view; the aurora field's third blob (`#3a5bff`, fixed blue) is the one deliberate exception, there to keep the background from reading as monochrome.
+### Zustand — nur Status
+`--ok` (läuft), `--warn` (beobachten), `--bad` (kaputt). Zusätzlich
+`--bad-solid` für den gefüllten Gefahrenknopf: Weiß auf `--bad` lag bei 3,19:1,
+Weiß auf `--bad-solid` besteht.
 
-**The Dim-Then-Glow Rule.** Every accent use has exactly two states: a 13%-opacity tint for backgrounds/washes (`accent-dim`) and a 40%-opacity halo for glow (`accent-glow`). Don't invent a third opacity step; consistency across buttons, dots, and rings is what makes the system read as one voice.
+### Benannte Regeln
+**Die Bedeutungsregel.** Eine Farbe erscheint nur, wenn sie eine Aussage
+trägt. Dekorative Einfärbung gibt es nicht — eine neutrale Fläche ist die
+Voreinstellung, nicht der Notbehelf.
 
-## 3. Typography
+**Die Prüfregel.** Neue Farbpaare werden gemessen, nicht geschätzt, und zwar
+gegen die *dunkelste* Fläche des hellen Themes (`--bg-2`), nicht gegen
+`--surface`. Das Skript im Arbeitsverzeichnis liest die berechneten Werte aus
+dem laufenden DOM; genau so wurden alle bisherigen Verstöße gefunden.
 
-**Body & UI Font:** Inter, with `ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif` fallback.
-**Monospace Font:** `ui-monospace, Menlo, Consolas, monospace` — log lines only.
+## 3. Typografie
 
-**Character:** A single geometric-humanist sans carries every weight and size in the system; hierarchy comes from size, weight, and letter-spacing, not from mixing families. Labels lean on wide uppercase tracking to read as "system chrome" against the free-flowing glass panels.
+Systemschriften: `ui-sans-serif, system-ui, …` für alles, `ui-monospace, …`
+für Logzeilen, IDs und Telefonnummern in Tabellen. Keine Webfont-Ladung —
+das spart auf dem Telefon einen Netzwerkweg und einen Layoutsprung.
 
-### Hierarchy
-- **Display** (600, 1.75rem, 1.2 line-height): the login screen's bot name — the single largest text in the app, seen once per session.
-- **Headline** (600, 1.55rem, 1.25 line-height, 0.01em tracking): `.page-title` — one per screen, top of every tab.
-- **Title** (700, 1.15rem): hero card title (`.h-title`) and stat numbers use tabular figures at 1.7rem/700 for the animated counters.
-- **Body** (400, 0.95rem, 1.5 line-height): default UI text, form inputs, buttons.
-- **Label** (600, 0.76–0.82rem, 0.09em tracking, uppercase): card headings (`h3`), section headers (`.section-h`) — always muted-colored, always uppercase, always tracked wide.
-- **Micro-label** (500–600, 0.62–0.68rem): mobile tab-bar labels and pill badges — the smallest readable tier, reserved for chrome, never for content.
+Hierarchie über sechs Stufen (`--fs-xs` … `--fs-2xl`) und zwei Zeilenhöhen
+(`--lh-tight`, `--lh-normal`). Beschriftungen von Karten und Abschnitten sind
+klein, versal und weit gesperrt (0,08 em) und immer `--text-dim` — sie sind
+Rahmen, nicht Inhalt.
 
-### Named Rules
-**The One Family Rule.** Every UI text element uses Inter. The only exception is log output, which switches to monospace so timestamps and structured messages align.
+**Die Ein-Familien-Regel.** Eine Sans für die gesamte Oberfläche, eine
+Monospace für maschinenlesbare Werte. Nichts sonst.
 
-## 4. Elevation
+## 4. Tiefe
 
-Hybrid: neutral drop shadows give panels physical weight at rest, and colored glow is layered on top as the *interactive* signal. A resting glass card has a soft black shadow (`0 10px 38px rgba(0,0,0,.4)`) plus a 1px inner highlight; hovering or activating it adds an accent-tinted ring and glow instead of a heavier gray shadow. Status and brand elements (the logo dot, the online status dot, active nav items) skip neutral shadows entirely and glow purely in the accent color — glow *is* their elevation.
+Drei Schattenstufen, alle neutral: `--sh1` (Karte in Ruhe), `--sh2`
+(Schwebendes wie Toasts), `--sh3` (Overlay wie Modal und Befehlspalette).
+Farbiges Leuchten als Tiefenmittel gibt es nicht mehr.
 
-### Shadow Vocabulary
-- **Resting glass** (`0 10px 38px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.045)`): default state for every `.glass` panel — card, sidebar, tab bar, login card, toast.
-- **Hover lift** (`0 14px 44px rgba(0,0,0,.5), 0 0 0 1px var(--accent-dim)`): cards marked `.hover` on `:hover` — adds depth and a thin accent ring, no color shift on the shadow itself.
-- **Accent glow — soft** (`0 0 18px var(--accent-dim)`): buttons on hover.
-- **Accent glow — strong** (`0 0 16px var(--accent), 0 0 46px var(--accent-glow)`): the logo dot and the "connected" status dot — a persistent pulse, not a hover-only effect.
+**Die Sparsamkeitsregel.** Eine Karte in Ruhe bekommt `--sh1` und einen
+1-px-Rand. Wer mehr Betonung braucht, ändert die Fläche, nicht den Schatten.
 
-### Named Rules
-**The Glow-Is-Status Rule.** Colored glow is reserved for things that are *live* or *actionable* right now (status dot, active nav, focused input, hovered button). A static, non-interactive element never gets a glow — only the neutral resting-glass shadow.
+## 5. Komponenten
 
-## 5. Components
+### Knöpfe
+Radius `--r2`, Mindesthöhe 38 px (klein: 32 px), Schriftgewicht 560.
+Primär füllt den Akzent mit `--accent-ink` als Text. `ghost` liegt auf
+`--surface-2` mit `--line-ui` als Rand. `danger` füllt `--bad-solid` mit Weiß.
+Hover ändert Helligkeit, nicht Größe.
 
-### Buttons
-- **Shape:** 12px radius (`.small` variant: 10px); pill-adjacent but not fully rounded.
-- **Primary:** transparent-to-black vertical gradient wash tinted with `accent-dim`, accent-colored text, 1px hairline border, `11px 18px` padding.
-- **Hover / Focus:** soft accent glow (`0 0 18px var(--accent-dim)`); the trailing arrow glyph (where present) slides 4px right. `:active` scales to 0.97.
-- **Ghost:** transparent background, muted text, no glow on hover — text brightens to `--text` instead. Used for secondary actions ("← Zurück", "Abmelden").
-- **Danger:** `rgba(255,93,122,.08)` background, `--bad` text — no glow; the red itself is the warning.
+### Karten
+`--surface`, 1 px `--line`, Radius `--r3`, Innenabstand `--s4`, Schatten
+`--sh1`. Die Überschrift `h3` ist eine Beschriftung, keine Schlagzeile.
 
-### Cards
-- **Corner Style:** 18px radius, matching every `.glass` surface.
-- **Background:** Glass Navy at 58% opacity over blur(16px) + saturate(1.25%).
-- **Shadow Strategy:** see Elevation — resting glass shadow at rest, hover-lift + accent ring on `.hover` cards (stat tiles, group rows).
-- **Border:** 1px Hairline (`rgba(130,165,255,.13)`) on every card, no exceptions.
-- **Internal Padding:** 18px standard; list-item rows use 13px/16px.
-
-### Inputs / Fields
-- **Style:** near-black translucent fill (`rgba(4,7,14,.65)`), Hairline border, 11–13px radius depending on context (form inputs vs. login).
-- **Focus:** border shifts to the active accent color plus a 3px accent-dim halo (login) or a plain border-color change (in-panel forms) — no layout shift.
-- **Toggle switch:** a 46×26px pill track; off-state uses a neutral blue-gray fill and pale thumb, on-state swaps the track to `accent-dim` and the thumb to accent color with a small glow.
+### Eingaben
+`--bg-2` als Fläche, `--line-ui` als Rand, Radius `--r2`. Der Fokus setzt
+einen sichtbaren Akzentrahmen ohne Layoutsprung. Jedes Feld hat ein `label`;
+wo es optisch stört, bleibt es über `hideLabel` für Screenreader erhalten.
 
 ### Badges
-- **Style:** pill radius (99px), 3px/9px padding, 0.68rem bold uppercase-tracked text.
-- **Roles:** `ok` (green), `bad` (red), `warn` (amber), `accent` (current accent) — background is always the same color at ~12% opacity, text at full strength. No neutral/default badge variant exists; a badge always carries a state.
+Radius `--r1`, versal, klein. Vier Rollen: neutral (`--surface-3`, für
+Sacheigenschaften wie „Anti-Link aktiv"), `ok`, `warn`, `bad`. Die neutrale
+Variante ist ausdrücklich vorgesehen — nicht jede Eigenschaft ist ein Alarm.
+
+### Tabellen
+`.tbl` in einem `.tbl-wrap` mit `overflow-x: auto` **und `contain: paint`**.
+Ohne `contain` wurde die ganze Seite auf schmalen Geräten schiebbar, obwohl
+der Wrapper korrekt gesetzt war — das war ein echter, gemessener Fehler.
 
 ### Navigation
-- **Desktop (≥900px):** sticky glass sidebar, 232px wide, icon + label rows; active item gets `accent-dim` background and accent-colored text and label weight bumps to 600.
-- **Mobile (<900px):** the sidebar disappears entirely in favor of a fixed bottom glass tab bar with icon-over-micro-label items, horizontally scrollable if it overflows; active item styled identically to desktop (accent-dim background, accent text).
-- **Accent switcher:** a row of three small filled circles (cyan/violet/mint) beneath the desktop nav, and a larger version in Extras — the selected dot gets a white ring.
+Ab 900 px eine feste Seitenspalte, darunter eine untere Leiste mit
+Symbol-über-Text. Der aktive Eintrag trägt `--accent-dim` und Akzenttext.
+Selten genutzte Bereiche liegen mobil unter „Mehr".
 
-### Status Dot (signature component)
-A single 14px circle that is the entire "is the bot alive" answer: red/static (stopped or connecting-without-glow), amber pulsing (connecting), green pulsing with a strong glow (connected). It appears once per session, top of the Übersicht tab, and is the only element allowed a *permanent* (non-hover) glow.
+### Befehlspalette
+Ctrl/Cmd+K öffnet eine Liste über `role="dialog"` mit Fokusfalle, Escape,
+Pfeiltasten und Enter. Sie ruft ausschließlich vorhandene Endpunkte auf und
+führt keine eigene Zustandshaltung — bewusst schlank gehalten.
 
-## 6. Do's and Don'ts
+### Zustandszeile (Signaturkomponente)
+Eine Zeile am Kopf der Übersicht beantwortet die einzige Frage, die immer
+zuerst gestellt wird: läuft der Bot? Sie trägt `is-open`, `is-connecting` oder
+`is-down` und färbt sich entsprechend — der einzige Ort, an dem Farbe ohne
+Interaktion großflächig auftritt.
 
-### Do:
-- **Do** keep the void (`#05070d`) as the true background color on every screen — glass panels float on top of it, they never replace it.
-- **Do** use exactly the two accent-opacity steps (13% dim, 40% glow) — see The Dim-Then-Glow Rule.
-- **Do** pair neutral resting shadows with accent-colored *interactive* glow (The Glow-Is-Status Rule) rather than inventing new shadow colors.
-- **Do** keep all body/UI text in Inter; switch to the monospace stack only for log output.
-- **Do** let the bot's playful register (emoji, animated counters, medal-style leaderboards) show up in content and micro-interactions, even though the shell itself is precise and dark.
-- **Do** maintain WCAG 2.1 AA contrast (≥4.5:1 body text, ≥3:1 large text) against the dark/glass backgrounds, and ship every animation (drift, pulse, shimmer, tween) with a `prefers-reduced-motion` fallback — both already implemented, keep them when extending the UI.
+## 6. Gebote und Verbote
 
-### Don't:
-- **Don't** introduce a light or cream-neutral surface anywhere in the panel — this is not a generic light-mode SaaS admin template, and warm-neutral backgrounds contradict the established dark-glass identity.
-- **Don't** run two accent hues at once outside the fixed third aurora blob (`#3a5bff`) — see The One Glow Rule.
-- **Don't** add gray/neutral drop shadows to status or brand elements (logo dot, status dot, active nav) — those glow, they don't shadow.
-- **Don't** pair a 1px border with a wide, soft, non-accent-colored drop shadow on cards or buttons ("ghost-card" pattern) — the system's depth vocabulary is blur + accent glow, not generic soft shadows.
-- **Don't** add a second font family for "variety" — one sans (Inter) plus one monospace (logs only) is the complete type system.
+### Tue:
+- **Tue** jede Größe aus den Tokens nehmen — `--s1…--s8`, `--fs-xs…--fs-2xl`,
+  `--r1…--r3`, `--sh1…--sh3`. Ad-hoc-Pixelwerte sind der Anfang vom Zerfall.
+- **Tue** Kontraste messen, bevor du eine Farbe einführst, und zwar in beiden
+  Themes und allen drei Akzenten.
+- **Tue** anklickbare Listenzeilen als `<button class="list-btn">` bauen, damit
+  sie per Tastatur erreichbar sind.
+- **Tue** Serverdaten über `h()` als Textknoten einsetzen. Das `html:`-Attribut
+  ist ausschließlich für fest verdrahtete Symbole und aus Zahlen gebaute SVGs.
+- **Tue** jede Animation hinter `prefers-reduced-motion` abschaltbar halten —
+  die globale Regel ist vorhanden, neue Bewegung darf sie nicht umgehen.
+
+### Tue nicht:
+- **Tue nicht** Blur, Leuchten oder mehrfarbige Verläufe wieder einführen. Das
+  war die vorige Identität und wurde aus Lesbarkeits- und Leistungsgründen
+  abgelöst.
+- **Tue nicht** Akzentfarbe für Statusaussagen benutzen und Zustandsfarben
+  nicht für Interaktion. Die Trennung ist der Kern des Systems.
+- **Tue nicht** eine zweite Schriftfamilie „zur Abwechslung" hinzufügen.
+- **Tue nicht** `innerHTML` mit Werten aus der Datenbank oder von WhatsApp
+  füllen — Namen sind Fremdeingaben.
+- **Tue nicht** rohe JIDs als Anzeige verwenden. Anzeige ist
+  „+49 170 1234567 (Max Mustermann)"; die JID bleibt technische Identität und
+  steht höchstens nachrangig daneben.

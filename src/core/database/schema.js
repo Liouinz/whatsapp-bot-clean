@@ -7,6 +7,7 @@ export const DATA_TABLES = [
   'custom_commands', 'faq', 'rob_cooldown', 'active_event', 'global_settings',
   'group_daily', 'player_contracts', 'quests', 'command_toggles', 'levels',
   'blocked_words', 'antiraid', 'audit_log', 'ai_usage', 'members', 'nightmode', 'allowed_chats',
+  'contacts',
   // Diese fuenf wurden von initDb() angelegt, fehlten aber in DATA_TABLES und
   // ueberlebten damit jeden "Alle Daten loeschen"-Wipe aus dem Panel — inklusive
   // der personenbezogenen Profildaten in user_profiles.
@@ -59,12 +60,22 @@ export async function initDb() {
     `CREATE TABLE IF NOT EXISTS active_event (id INTEGER PRIMARY KEY, event_id TEXT, name TEXT, emoji TEXT, xp_mult REAL DEFAULT 1.0, coin_mult REAL DEFAULT 1.0, started_at INTEGER, expires_at INTEGER)`,
     `CREATE TABLE IF NOT EXISTS user_boosts (user_jid TEXT, type TEXT, mult REAL, expires_at INTEGER, PRIMARY KEY (user_jid, type))`,
     `CREATE TABLE IF NOT EXISTS allowed_chats (jid TEXT PRIMARY KEY, note TEXT)`,
+    // Zentrale Personen-Tabelle. members ist pro (Gruppe, Person) und hat
+    // deshalb keinen Platz fuer jemanden aus einer DM oder aus dem
+    // Adressbuch. Schluessel ist die kanonische PN-JID — die Identitaet.
+    //   push_name     = Contact.notify      (Name, den die Person selbst setzt)
+    //   contact_name  = Contact.name        (Name aus dem Adressbuch)
+    //   verified_name = Contact.verifiedName (Business-Konten)
+    //   known_from    = 'group' | 'contacts' | 'message'
+    `CREATE TABLE IF NOT EXISTS contacts (user_jid TEXT PRIMARY KEY, user_lid TEXT, push_name TEXT, contact_name TEXT, verified_name TEXT, known_from TEXT, first_seen INTEGER, last_active INTEGER)`,
     `CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_warnings_expires ON warnings(expires_at)`,
     // Die Nutzersuche schlaegt ueber alle Personen-Tabellen auf user_jid zu.
     `CREATE INDEX IF NOT EXISTS idx_members_user ON members(user_jid)`,
     `CREATE INDEX IF NOT EXISTS idx_xp_user ON xp(user_jid)`,
-    `CREATE INDEX IF NOT EXISTS idx_warnings_user ON warnings(user_jid)`
+    `CREATE INDEX IF NOT EXISTS idx_warnings_user ON warnings(user_jid)`,
+    // Die Nutzersuche schlaegt ueber die LID zurueck auf die Person.
+    `CREATE INDEX IF NOT EXISTS idx_contacts_lid ON contacts(user_lid)`
   ];
 
   for (const sql of schemas) {

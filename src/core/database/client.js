@@ -34,6 +34,16 @@ export async function dbRun(sql, args = []) {
   }
 }
 
+// Sammelschreiben. Wichtig: `getDb().batch()` direkt aufzurufen umgeht den
+// Guard — die Zusage "auth_creds und auth_keys sind unantastbar" gilt sonst
+// nur fuer dbRun(). Deshalb geht jeder Stapelschreiber ueber diese Funktion.
+export async function dbBatch(stmts) {
+  const list = Array.isArray(stmts) ? stmts : [];
+  if (!list.length) return [];
+  for (const s of list) assertNotAuthWrite(s?.sql || '');
+  return getDb().batch(list, 'write');
+}
+
 export async function dbRows(sql, args = []) {
   try {
     const res = await dbRun(sql, args);

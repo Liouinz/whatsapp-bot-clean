@@ -4,7 +4,8 @@ import { jidNormalizedUser } from '@whiskeysockets/baileys';
 import { OWNER_NUMBERS, BOT_OWNER_NUMBERS } from './config.js';
 import { state } from './state.js';
 import { logError } from './logger.js';
-import { dbRun } from './db.js';
+import { dbBatch } from './db.js';
+import { ingestParticipants } from './identity.js';
 
 const EFFECTIVE_BOT_OWNERS = BOT_OWNER_NUMBERS.length ? BOT_OWNER_NUMBERS : OWNER_NUMBERS;
 
@@ -52,25 +53,61 @@ export function invalidateGroupMeta(groupJid) {
 }
 
 const persistedMappings = new Set();
+const MEMBER_CHUNK = 200;
+
+// Gruppen-Metadaten kommen auch aus dem Cache und werden von
+// botIsAdminInMeta() haeufig durchlaufen. Ohne Drossel wuerde jeder dieser
+// Durchlaeufe die komplette Teilnehmerliste erneut schreiben.
+const NAME_INGEST_MS = 10 * 60_000;
+const lastNameIngest = new Map();
+
+function learnParticipantNames(meta) {
+  const id = meta?.id;
+  if (!id || !Array.isArray(meta.participants)) return;
+  const now = Date.now();
+  const prev = lastNameIngest.get(id);
+  if (prev && now - prev < NAME_INGEST_MS) return;
+  if (lastNameIngest.size > 500) lastNameIngest.delete(lastNameIngest.keys().next().value);
+  lastNameIngest.set(id, now);
+  // GroupParticipant ist in Baileys ein `Contact & { admin }` — notify/name
+  // sind also vorhanden und wurden bisher weggeworfen, obwohl das Panel die
+  // Metadaten fuer die Mitgliederliste ohnehin abruft.
+  ingestParticipants(meta.participants);
+}
 
 function learnLidMappings(meta) {
   if (!meta?.participants) return;
+  learnParticipantNames(meta);
+  const now = Date.now();
+  const stmts = [];
   for (const p of meta.participants) {
     const lid = normalizeId(p.lid || (String(p.id).endsWith('@lid') ? p.id : null));
     const pn = normalizeId(p.phoneNumber || p.jid || (String(p.id).endsWith('@s.whatsapp.net') ? p.id : null));
     if (lid && pn) {
       if (lidToPn.size > 20_000) lidToPn.delete(lidToPn.keys().next().value);
       lidToPn.set(lid, pn);
-      const key = `${meta.id}|${lid}|${pn}`;
-      if (persistedMappings.has(key)) continue;
-      persistedMappings.add(key);
-      if (persistedMappings.size > 20_000) persistedMappings.delete(persistedMappings.keys().next().value);
-      dbRun(
-        `INSERT INTO members (group_jid, user_jid, user_lid, last_seen) VALUES (?, ?, ?, ?)
-         ON CONFLICT(group_jid, user_jid) DO UPDATE SET user_lid = excluded.user_lid, last_seen = excluded.last_seen`,
-        [meta.id, pn, lid, Date.now()]
-      ).catch(() => {});
     }
+    // Frueher wurde die Zeile nur geschrieben, wenn LID *und* Nummer vorlagen.
+    // In einer PN-adressierten Gruppe hat ein Teilnehmer aber gar keine LID —
+    // diese Personen fehlten damit vollstaendig in `members`, obwohl sie in der
+    // Gruppe sind. Der Panel-Filter "In Gruppen" zaehlte entsprechend zu wenig.
+    if (!pn) continue;
+    const key = `${meta.id}|${lid || ''}|${pn}`;
+    if (persistedMappings.has(key)) continue;
+    persistedMappings.add(key);
+    if (persistedMappings.size > 20_000) persistedMappings.delete(persistedMappings.keys().next().value);
+    stmts.push({
+      sql: `INSERT INTO members (group_jid, user_jid, user_lid, last_seen) VALUES (?, ?, ?, ?)
+            ON CONFLICT(group_jid, user_jid) DO UPDATE SET
+              user_lid  = COALESCE(excluded.user_lid, members.user_lid),
+              last_seen = excluded.last_seen`,
+      args: [meta.id, pn, lid, now],
+    });
+  }
+  // Eine WhatsApp-Gruppe fasst bis zu 1024 Personen. Beim ersten Sehen waeren
+  // das ebenso viele Einzelanweisungen — deshalb in Bloecken.
+  for (let i = 0; i < stmts.length; i += MEMBER_CHUNK) {
+    dbBatch(stmts.slice(i, i + MEMBER_CHUNK)).catch(() => {});
   }
 }
 
