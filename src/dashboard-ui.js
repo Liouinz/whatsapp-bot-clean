@@ -617,7 +617,7 @@ a.list-item { text-decoration: none; color: inherit; cursor: pointer; }
 }
 .list-btn:hover { background: var(--surface-2); border-color: var(--line-strong); filter: none; }
 .lb-main { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.lb-title { font-size: var(--fs-base); font-weight: 560; }
+.lb-title { font-size: var(--fs-md); font-weight: 560; }
 .lb-tags { display: flex; gap: var(--s2); flex-wrap: wrap; flex: none; }
 .lb-flags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
 .lb-chev { flex: none; color: var(--text-faint); font-size: var(--fs-lg); line-height: 1; }
@@ -678,7 +678,7 @@ a.list-item { text-decoration: none; color: inherit; cursor: pointer; }
 .cmdk-input {
   width: 100%; border: 0; border-bottom: 1px solid var(--line);
   border-radius: 0; background: var(--surface); min-height: 52px;
-  font-size: var(--fs-base); padding: 0 var(--s4);
+  font-size: var(--fs-md); padding: 0 var(--s4);
 }
 .cmdk-input:focus { border-color: var(--line); outline: none; }
 .cmdk-list { max-height: 48vh; overflow-y: auto; }
@@ -1537,7 +1537,7 @@ function renderStats(){
   content.appendChild(box);
   api('/stats').then(function(res){
     box.innerHTML = '';
-    box.appendChild(h('div', { class:'card' }, [ h('h3', {}, ['Nachrichten — letzte 14 Tage']), barChart(res.daily) ]));
+    box.appendChild(h('div', { class:'card' }, [ h('h3', {}, ['Nachrichten — letzte 14 Tage']), barChart(res.daily, res.days) ]));
     box.appendChild(h('div', { class:'grid cols4', style:'margin-top:12px' }, [
       miniStat('Aktive Warns', res.counts.warns),
       miniStat('Custom-Befehle', res.counts.custom),
@@ -1576,9 +1576,18 @@ function topList(title, rows, valueFn){
   });
   return el;
 }
-function barChart(daily){
-  var days = [];
-  for (var i = 13; i >= 0; i--) { days.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10)); }
+function barChart(daily, serverDays){
+  // Die Tagesschluessel kommen vom Server (/api/stats liefert sie als 'days').
+  // Hier wurden sie frueher im Browser gebaut — mit toISOString(), also UTC,
+  // waehrend der Server in seiner eigenen Zeitzone schreibt. Sobald die beiden
+  // auseinanderlaufen, findet der Chart seine Zeilen nicht mehr und zeigt
+  // Nullen. Der lokale Aufbau bleibt nur als Rueckfallebene fuer eine Antwort
+  // ohne diese Liste.
+  var days = serverDays;
+  if (!days || !days.length) {
+    days = [];
+    for (var i = 13; i >= 0; i--) { days.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10)); }
+  }
   var byDay = {};
   (daily || []).forEach(function(r){ byDay[r.day] = Number(r.messages); });
   var values = days.map(function(d){ return byDay[d] || 0; });

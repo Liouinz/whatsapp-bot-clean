@@ -1,5 +1,10 @@
 // Gemeinsamer Laufzeit-Zustand — wird von Socket-Lifecycle, Router und Panel gelesen.
 
+// Derselbe Tagesbegriff wie in der DB-Schicht. Vorher rechnete rolloverDay()
+// in UTC und die gespeicherten Tagesschluessel ebenfalls — beide falsch, aber
+// wenigstens gleich falsch. Jetzt gibt es genau eine Quelle.
+import { todayKey } from './db.js';
+
 export const state = {
   sock: null,
   connection: 'connecting',
@@ -21,14 +26,14 @@ export const state = {
   sentToday: 0,
   commandsToday: 0,
   aiCallsToday: 0,
-  statsDay: new Date().toISOString().slice(0, 10),
+  statsDay: todayKey(),
 
   activity: new Array(24).fill(0),
   activitySlot: Math.floor(Date.now() / 600_000),
 };
 
 export function rolloverDay() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayKey();
   if (state.statsDay !== today) {
     state.statsDay = today;
     state.sentToday = 0;
@@ -57,6 +62,18 @@ export function setPairingCodeRequester(fn) {
 export async function requestPairingCode(phoneNumber) {
   if (!pairingCodeRequester) throw new Error('Der Bot ist noch nicht bereit oder bereits verbunden — bitte kurz warten.');
   return pairingCodeRequester(phoneNumber);
+}
+
+// Gleiches Muster wie forceRelink: index.js besitzt den Lebenszyklus und
+// hinterlegt den Handler, alle anderen fragen ihn hier ab. Ein direkter Import
+// von index.js waere ein Zyklus (index.js importiert dashboard.js).
+let shutdownHandler = null;
+export function setShutdownHandler(fn) {
+  shutdownHandler = fn;
+}
+export async function requestShutdown(reason) {
+  if (!shutdownHandler) throw new Error('Der Bot ist noch nicht bereit — bitte kurz warten.');
+  return shutdownHandler(reason);
 }
 
 let forceRelinkHandler = null;

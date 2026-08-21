@@ -1,8 +1,26 @@
 node_modules/
+
+# Geheimnisse. `.env.*` deckt auch .env.local, .env.production usw. ab —
+# die Ausnahme darunter muss danach stehen, sonst greift sie nicht.
 .env
 .env.*
+!.env.example
+
 auth_info/
 /data/
 *.log
+
+# Lokale Datenbanken. `.test-*.db*` fing nur die Testdateien; wer lokal mit
+# einer file:-URL statt gegen Turso arbeitet, erzeugt sonst eine getrackte DB.
 .test-*.db*
+*.db
+*.db-journal
+*.sqlite*
+
+# Werkzeuge und Editoren
 .aider*
+.vscode/
+.idea/
+.DS_Store
+coverage/
+.claude/settings.local.json

@@ -10,7 +10,7 @@ Self-hosting owners/admins of the WhatsApp Community Bot (Render free-tier + Tur
 
 ## Product Purpose
 
-The panel is the admin interface for a self-hosted WhatsApp bot: authenticate with `ACCESS_SECRET`, then monitor and steer everything the bot does (status, people, moderation, economy/leveling config, scheduling, logs, QR re-pairing, accent theme, config export/import). Success is an admin resolving a task (re-pair the bot, find the person behind a number, mute a raid, adjust a toggle) in a few taps, with the live state always visible and trustworthy.
+The panel is the admin interface for a self-hosted WhatsApp bot: authenticate with `ACCESS_SECRET`, then monitor and steer everything the bot does (status, people, moderation, command toggles and leveling config, scheduling, logs, QR re-pairing, accent theme, config export/import). Success is an admin resolving a task (re-pair the bot, find the person behind a number, mute a raid, adjust a toggle) in a few taps, with the live state always visible and trustworthy.
 
 ## Brand Personality
 

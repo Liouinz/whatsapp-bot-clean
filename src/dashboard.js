@@ -6,10 +6,10 @@ import crypto from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import express from 'express';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { BOT_NAME, config } from './config.js';
-import { state, rolloverDay, requestPairingCode, forceRelink } from './state.js';
-import { getDb, dbRun, dbRows, flushBuffers, wipeAllData, xpToLevel } from './db.js';
+import { state, rolloverDay, requestPairingCode, forceRelink, requestShutdown } from './state.js';
+import { dbRun, dbRows, dbBatch, dayKey, wipeAllData, xpToLevel } from './db.js';
 import { getRecentLogs, logError, logInfo, logWarn } from './logger.js';
 import { getAiQuota, initAiUsage } from './ai.js';
 import { registry, isCommandEnabled, setCommandEnabled, loadToggles, resetXpCache } from './router.js';
@@ -59,6 +59,41 @@ function sendAsset(req, res, key, cacheControl) {
   return res.end(a.body);
 }
 
+// ── Async-Routen: Fehler gehen an die Error-Middleware, nicht an den Prozess ──
+
+/**
+ * Express 4 leitet die abgelehnte Promise eines `async`-Handlers **nicht** an
+ * seine Error-Middleware weiter — sie landet als `unhandledRejection` im
+ * Prozess. Zusammen mit dem frueheren Handler in index.js, der daraufhin
+ * herunterfuhr, hiess das: ein DB- oder Sendefehler in einer Panel-Route
+ * beendete den kompletten Bot. Auf "Senden" klicken, waehrend WhatsApp gerade
+ * reconnectet, reichte aus.
+ *
+ * Arity 4 bleibt unangetastet — das ist die Signatur einer Error-Middleware.
+ */
+const wrapHandler = (h) =>
+  typeof h === 'function' && h.length < 4
+    ? function asyncRoute(req, res, next) {
+        return Promise.resolve(h(req, res, next)).catch(next);
+      }
+    : h;
+
+/**
+ * Haengt das `.catch(next)` an JEDEN Handler dieses Routers.
+ *
+ * Bewusst am Router und nicht an den einzelnen Routen: ein try/catch je Route
+ * schuetzt nur die Routen, an die jemand gedacht hat — beim naechsten Endpunkt
+ * waere die Luecke zurueck. Die vorhandenen try/catch-Bloecke bleiben, wo sie
+ * eine eigene, sprechende Fehlermeldung liefern; dies ist das Netz darunter.
+ */
+function asyncSafe(router) {
+  for (const method of ['get', 'post', 'put', 'patch', 'delete', 'all']) {
+    const original = router[method];
+    router[method] = (...args) => original.apply(router, args.map(wrapHandler));
+  }
+  return router;
+}
+
 // ── Auth-Grundlagen ────────────────────────────────────────────────
 
 const sessions = new Map(); // token → Ablauf-Zeitstempel
@@ -81,7 +116,14 @@ function clientIp(req) {
   // war doppelt angreifbar: ein rotierender Fake-Header liess den
   // Fehlversuchs-Zaehler nie hochlaufen (Bruteforce ohne Sperre), und ein
   // konstanter Fake-Header mit der IP des Betreibers sperrte diesen gezielt aus.
-  return req.ip || req.socket.remoteAddress || '?';
+  //
+  // ipKeyGenerator() fasst IPv6 auf das /56-Praefix zusammen. Ohne das bekam
+  // JEDE Adresse eines Praefixes ihren eigenen Fehlversuchs-Zaehler — und ein
+  // einzelnes IPv6-Praefix umfasst mehr Adressen, als man je durchprobieren
+  // muesste. Die Aussperre nach fuenf Fehlversuchen war damit fuer jeden
+  // umgehbar, der IPv6 hat. IPv4 bleibt unveraendert, IPv4-mapped-IPv6
+  // (::ffff:1.2.3.4) wird auf die IPv4-Form normalisiert.
+  return ipKeyGenerator(req.ip || req.socket.remoteAddress || '?');
 }
 
 function issueSession(res) {
@@ -217,7 +259,7 @@ export function createDashboard() {
   app.get('/theme-init.js', (req, res) => sendAsset(req, res, '/theme-init.js', 'public, max-age=31536000, immutable'));
 
   // ── API ──
-  const api = express.Router();
+  const api = asyncSafe(express.Router());
   app.use('/api', requireAuth, api);
 
   api.get('/status', async (req, res) => {
@@ -578,9 +620,12 @@ export function createDashboard() {
   }
 
   api.get('/logs', (req, res) => {
-    const logs = getRecentLogs();
+    // Groesse durchreichen: getRecentLogs() ohne Argument lieferte 50 Zeilen,
+    // das nachgelagerte slice(-500) konnte daran nichts mehr aendern. Die
+    // Log-Ansicht zeigte also ein Zehntel dessen, was der Ring-Puffer hielt.
     const size = config.log?.ringSize || 500;
-    res.json({ logs: logs.slice(-size).map((l) => ({ ...l, msg: redactTrace(l.msg) })) });
+    const logs = getRecentLogs(size);
+    res.json({ logs: logs.map((l) => ({ ...l, msg: redactTrace(l.msg) })) });
   });
 
   let statsCache = { at: 0, data: null };
@@ -589,8 +634,13 @@ export function createDashboard() {
       if (statsCache.data && Date.now() - statsCache.at < 30_000) {
         return res.json(statsCache.data);
       }
-      const since14 = new Date(Date.now() - 13 * 86_400_000).toISOString().slice(0, 10);
-      const since7 = new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
+      // Tagesschluessel ueber dayKey() — dieselbe Zeitzone, in der
+      // bufferStat()/bufferGroupMessage() schreiben. Vorher rechnete die
+      // Leseseite in UTC.
+      const days = [];
+      for (let i = 13; i >= 0; i--) days.push(dayKey(new Date(Date.now() - i * 86_400_000)));
+      const since14 = days[0];
+      const since7 = days[7];
       const [daily, topGroups, counters] = await Promise.all([
         dbRows('SELECT day, messages, commands, ai_calls FROM daily_stats WHERE day >= ? ORDER BY day', [since14]),
         dbRows(
@@ -608,6 +658,11 @@ export function createDashboard() {
       ]);
       const payload = {
         daily,
+        // Die 14 erwarteten Tagesschluessel mitliefern. Der Chart im Panel hat
+        // sie sich bisher selbst gebaut — im Browser und damit in dessen
+        // Zeitzone. Sobald Server und Browser verschiedene Tagesbegriffe haben,
+        // findet der Chart seine Zeilen nicht mehr und zeigt Nullen.
+        days,
         topGroups,
         counts: {
           warns: Number(counters[0][0]?.c || 0),
@@ -681,16 +736,30 @@ export function createDashboard() {
     }
     lastPanelRestartAt = Date.now();
     await audit('restart', '', '', 'panel', '');
-    await flushBuffers().catch(() => {});
     res.json({ ok: true, message: 'Neustart in 2 Sekunden …' });
     logInfo('🔄 Neustart über das Panel ausgelöst.');
 
-    setTimeout(() => process.exit(0), 3000);
+    // Ueber den gemeinsamen Shutdown-Pfad statt process.exit(0). Nur der ruft
+    // auch flushAuth(): der frueher hier stehende Direkt-Exit verlor die
+    // ausstehenden Signal-Key-Writes aus dem 150-ms-Fenster in auth.js, und
+    // nach dem Neustart standen "Bad MAC"-Fehler im Log. Der Befehl !neustart
+    // hat es die ganze Zeit richtig gemacht — der Panel-Pfad war der Ausreisser.
+    // flushBuffers() liegt jetzt ebenfalls dort, ebenso das Stoppen von
+    // Scheduler, Flush-Loop und Watchdog.
+    setTimeout(() => {
+      requestShutdown('Panel-Neustart').catch((err) => logError(err, 'panel.restart'));
+    }, 3000);
   });
 
   let lastWipeAt = 0;
   api.post('/db/wipe', async (req, res) => {
-    if (String(req.body?.confirm || '') !== 'LÖSCHEN') {
+    // Strikt auf den String pruefen, nicht auf String(...). JavaScript wandelt
+    // ein einelementiges Array in genau sein Element um: String(['LÖSCHEN'])
+    // ist 'LÖSCHEN'. Ein Client, der `confirm` versehentlich als Array oder
+    // als Objekt mit passender toString() schickt, hat damit die
+    // Sicherheitsabfrage umgangen und die komplette Datenbank geleert —
+    // nachgestellt und bestaetigt, bevor das hier geaendert wurde.
+    if (req.body?.confirm !== 'LÖSCHEN') {
       return res.status(400).json({ error: 'Bestätigung fehlt — bitte exakt "LÖSCHEN" eingeben.' });
     }
     if (Date.now() - lastWipeAt < 30_000) {
@@ -728,7 +797,7 @@ export function createDashboard() {
   api.get('/config/export', async (req, res) => {
     try {
       const data = {};
-      const tables = ['group_settings', 'nightmode', 'antiraid', 'blocked_words', 'custom_commands', 'faq', 'command_toggles', 'allowed_chats'];
+      const tables = ['group_settings', 'nightmode', 'antiraid', 'blocked_words', 'custom_commands', 'faq', 'command_toggles'];
       for (const t of tables) data[t] = await dbRows(`SELECT * FROM ${t}`, []);
       res.setHeader('Content-Disposition', `attachment; filename="${BOT_NAME.toLowerCase()}-config.json"`);
       res.json({ exportedAt: new Date().toISOString(), bot: BOT_NAME, data });
@@ -738,29 +807,59 @@ export function createDashboard() {
     }
   });
 
+  // Importierbare Tabellen: VOLLSTAENDIGE Spaltenliste plus der Schluessel,
+  // ueber den ein vorhandener Datensatz aktualisiert wird.
+  //
+  // Hier stand ein `INSERT OR REPLACE` ueber eine unvollstaendige Spaltenliste.
+  // OR REPLACE ersetzt die GANZE Zeile — alles, was nicht aufgezaehlt war, fiel
+  // auf seinen Default zurueck. Ein Import loeschte damit welcome_text,
+  // slowmode_secs, weekly_report und last_weekly_report jeder Gruppe aus der
+  // Datei, obwohl der Export (SELECT *) genau diese Werte enthaelt: ein Backup
+  // einzuspielen zerstoerte also Einstellungen, die im Backup drinstanden.
+  // Nachgestellt und bestaetigt. Der mitgeloeschte last_weekly_report liess
+  // ausserdem den Wochenreport erneut rausgehen.
+  const IMPORTABLE = {
+    group_settings: {
+      key: ['jid'],
+      cols: [
+        'jid', 'enabled', 'antilink', 'antispam', 'blacklist_on', 'welcome', 'rules',
+        'welcome_text', 'levelup_announce', 'slowmode_secs', 'weekly_report', 'last_weekly_report',
+      ],
+    },
+    nightmode: { key: ['group_jid'], cols: ['group_jid', 'enabled', 'start_hhmm', 'end_hhmm', 'is_closed'] },
+    antiraid: { key: ['group_jid'], cols: ['group_jid', 'enabled', 'locked_until'] },
+    blocked_words: { key: ['group_jid', 'word'], cols: ['group_jid', 'word'] },
+    custom_commands: { key: ['name'], cols: ['name', 'reply', 'by_jid', 'created_at'] },
+    faq: { key: ['keyword'], cols: ['keyword', 'answer', 'by_jid', 'created_at'] },
+    command_toggles: { key: ['name'], cols: ['name', 'enabled'] },
+  };
+
   api.post('/config/import', async (req, res) => {
     const data = req.body?.data;
     if (!data || typeof data !== 'object') return res.status(400).json({ error: 'Ungültige Config-Datei.' });
-    const allowed = {
-      group_settings: ['jid', 'enabled', 'antilink', 'antispam', 'blacklist_on', 'welcome', 'rules', 'levelup_announce'],
-      nightmode: ['group_jid', 'enabled', 'start_hhmm', 'end_hhmm', 'is_closed'],
-      antiraid: ['group_jid', 'enabled', 'locked_until'],
-      blocked_words: ['group_jid', 'word'],
-      custom_commands: ['name', 'reply', 'by_jid', 'created_at'],
-      faq: ['keyword', 'answer', 'by_jid', 'created_at'],
-      command_toggles: ['name', 'enabled'],
-      allowed_chats: ['jid', 'note'],
-    };
     try {
       let imported = 0;
-      for (const [table, cols] of Object.entries(allowed)) {
+      for (const [table, { key, cols }] of Object.entries(IMPORTABLE)) {
         const rows = data[table];
         if (!Array.isArray(rows)) continue;
         for (const row of rows.slice(0, 500)) {
-          const vals = cols.map((c) => (row[c] === undefined ? null : row[c]));
+          if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
+          // Ohne Schluessel gibt es kein Ziel — solche Zeilen still ueberspringen.
+          if (key.some((k) => row[k] === undefined || row[k] === null || row[k] === '')) continue;
+          // Nur Spalten schreiben, die die Zeile wirklich mitbringt. Eine
+          // fehlende Spalte bleibt dadurch unangetastet, statt auf NULL zu
+          // fallen — eine unvollstaendige Datei ist so nie ein Loeschbefehl.
+          const present = cols.filter((c) => row[c] !== undefined);
+          const updates = present.filter((c) => !key.includes(c));
+          const conflict = updates.length
+            ? `DO UPDATE SET ${updates.map((c) => `${c} = excluded.${c}`).join(', ')}`
+            : 'DO NOTHING';
+          // Tabellen-, Spalten- und Schluesselnamen stammen ausschliesslich aus
+          // IMPORTABLE oben; alle Werte sind gebundene ?-Parameter.
           await dbRun(
-            `INSERT OR REPLACE INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
-            vals
+            `INSERT INTO ${table} (${present.join(', ')}) VALUES (${present.map(() => '?').join(', ')})
+             ON CONFLICT(${key.join(', ')}) ${conflict}`,
+            present.map((c) => row[c])
           );
           imported++;
         }
@@ -768,6 +867,12 @@ export function createDashboard() {
       invalidateSettings();
       invalidateBlockedWords();
       await loadCustomCommands();
+      // command_toggles liegt im RAM (router.js). Ohne dieses Nachladen wirkten
+      // importierte Befehls-Schalter erst nach dem naechsten Neustart.
+      await loadToggles();
+      // listGroups() cached 60 s — sonst widersprechen die Schalter in der
+      // Gruppenliste direkt nach dem Import der Datenbank.
+      groupCache.at = 0;
       await audit('config-import', '', '', 'panel', `${imported} Zeilen`);
       res.json({ ok: true, imported });
     } catch (err) {
@@ -988,10 +1093,9 @@ async function userDetail(jid) {
 
 const groupCache = { at: 0, list: [] };
 
-export async function refreshGroupCache() {
-  groupCache.at = 0;
-  return listGroups();
-}
+// refreshGroupCache() stand hier und wurde von nichts aufgerufen. Wer den
+// Gruppen-Cache verwerfen will, setzt `groupCache.at = 0` — genau das machen
+// die Einstellungs-Route und der Wipe bereits an Ort und Stelle.
 
 async function listGroups() {
   if (Date.now() - groupCache.at < 60_000) return groupCache.list;
@@ -1034,7 +1138,9 @@ async function listGroups() {
       args: [meta.id, meta.subject || '', meta.participants?.length || 0, admin ? 1 : 0, Date.now()],
     });
   }
-  if (upserts.length) getDb().batch(upserts, 'write').catch(() => {});
+  // dbBatch statt getDb().batch(): nur dieser Weg laeuft durch den Guard, der
+  // Schreibzugriffe auf auth_creds/auth_keys blockt.
+  if (upserts.length) dbBatch(upserts).catch(() => {});
   list.sort((a, b) => a.name.localeCompare(b.name));
   groupCache.at = Date.now();
   groupCache.list = list;

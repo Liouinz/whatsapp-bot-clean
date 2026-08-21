@@ -2,15 +2,15 @@
 // Jeder Befehl: Rechteprüfung → Aktion → klare Rückmeldung. Nie "nichts passiert".
 
 import { config } from '../config.js';
-import { dbRun, dbRows, flushBuffers } from '../db.js';
-import { state } from '../state.js';
+import { dbRun, dbRows } from '../db.js';
+import { state, requestShutdown } from '../state.js';
+import { logError } from '../logger.js';
 import {
   addWarning, activeWarnings, clearWarnings, muteUser, unmuteUser,
   kickUser, banUser, unbanUser, invalidateSettings, invalidateBlockedWords, audit,
 } from '../moderation.js';
 import { botIsAdmin, adminDebugInfo, resolveLid, isProtectedTarget, getGroupMeta } from '../permissions.js';
 import { buildWeeklyReport } from '../scheduler.js';
-import { flushAuth } from '../auth.js';
 
 let lastRestartAt = 0;
 
@@ -496,9 +496,12 @@ export const adminCommands = [
       lastRestartAt = now;
       await ctx.reply('🔄 Alles klar, ich starte neu — bin gleich wieder da!');
       await audit('restart', ctx.chatJid, '', ctx.sender, 'per Befehl');
-      await flushBuffers().catch(() => {});
-      await flushAuth().catch(() => {});
-      setTimeout(() => process.exit(0), 3000);
+      // Flush und Exit liegen jetzt im gemeinsamen Shutdown-Pfad (index.js),
+      // damit Panel-Neustart und Befehl nachweislich dasselbe tun. Vorher war
+      // das hier die einzige Stelle, die flushAuth() korrekt aufrief.
+      setTimeout(() => {
+        requestShutdown('Neustart-Befehl').catch((err) => logError(err, 'admin.neustart'));
+      }, 3000);
     },
   },
   {

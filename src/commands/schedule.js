@@ -1,6 +1,6 @@
 // Geplante Nachrichten & Countdowns — liegen in Turso und überstehen Neustarts.
 
-import { PREFIX } from '../config.js';
+import { PREFIX, config } from '../config.js';
 import { dbRun, dbRows } from '../db.js';
 
 export function parseTime(args) {
@@ -41,7 +41,7 @@ function parseClock(text, dayOffset) {
 export function fmtTime(ts) {
   return new Date(ts).toLocaleString('de-DE', {
     day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-    timeZone: process.env.TZ || 'Europe/Berlin',
+    timeZone: config.timezone,
   });
 }
 

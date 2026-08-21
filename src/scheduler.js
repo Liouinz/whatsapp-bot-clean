@@ -4,7 +4,7 @@
 
 import { BOT_NAME, config } from './config.js';
 import { state } from './state.js';
-import { dbRun, dbRows, todayKey, flushBuffers } from './db.js';
+import { dbRun, dbRows, dayKey, todayKey, flushBuffers } from './db.js';
 import { sendText } from './queue.js';
 import { logError, logInfo } from './logger.js';
 import { botIsAdmin } from './permissions.js';
@@ -80,7 +80,7 @@ async function processDueMessages() {
 function nowHHMM() {
   return new Date().toLocaleTimeString('de-DE', {
     hour: '2-digit', minute: '2-digit', hour12: false,
-    timeZone: process.env.TZ || 'Europe/Berlin',
+    timeZone: config.timezone,
   });
 }
 
@@ -164,7 +164,10 @@ function miniBar(value, max, width = 6) {
 export async function buildWeeklyReport(groupJid) {
   await flushBuffers();
   const days = lastDays(7);
-  const dayKeys = days.map((d) => d.toISOString().slice(0, 10));
+  // Ueber dayKey() statt toISOString(): der Wochenreport liest group_daily,
+  // und dort schreibt bufferGroupMessage() jetzt Berliner Tagesschluessel.
+  // Zwei Tagesbegriffe haetten hier eine um einen Tag verschobene Kurve ergeben.
+  const dayKeys = days.map((d) => dayKey(d));
   const [daily, topRows, warnRows] = await Promise.all([
     dbRows(
       `SELECT day, messages FROM group_daily WHERE group_jid = ? AND day >= ?`,

@@ -1,8 +1,11 @@
 // Zentrales Logger-System
 // Kompatibel mit alten und neuen Modulen
 
+import { config } from './config.js';
+
 const ring = [];
-const maxRingSize = 500;
+// Aus der Konfiguration statt hart kodiert — der Wert stand doppelt im Projekt.
+const maxRingSize = config.log?.ringSize || 500;
 
 let errorSummarizer = null;
 
@@ -42,9 +45,24 @@ export const logger = {
 
     if (errorSummarizer) {
       try {
-        Promise.resolve(errorSummarizer(text, ctx)).catch((sumErr) => {
-          console.error('⚠️ ErrorSummarizer fehlgeschlagen:', sumErr);
-        });
+        Promise.resolve(errorSummarizer(text, ctx))
+          .then((summary) => {
+            // Das Ergebnis wurde bisher verworfen: die Gemini-Aufrufe liefen
+            // (bis zu 10 pro Tag), aber niemand hat die Zusammenfassung je
+            // gesehen — getErrorSummarizer() hat im ganzen Projekt keinen
+            // Aufrufer. Sie landet jetzt als eigene Zeile im Ring-Puffer und
+            // damit in der Log-Ansicht des Panels.
+            //
+            // Bewusst ueber pushRing und nicht ueber logger.info: der Weg
+            // ueber den Logger waere ein Ruecksprung in genau diese Funktion.
+            const line = String(summary || '').trim();
+            if (!line) return;
+            console.log(`🤖 [KI] ${ctx ? `[${ctx}] ` : ''}${line}`);
+            pushRing('info', `🤖 ${line}`, ctx ? `ai-summary:${ctx}` : 'ai-summary');
+          })
+          .catch((sumErr) => {
+            console.error('⚠️ ErrorSummarizer fehlgeschlagen:', sumErr);
+          });
       } catch (sumErr) {
         console.error('⚠️ ErrorSummarizer synchron fehlgeschlagen:', sumErr);
       }
@@ -52,7 +70,7 @@ export const logger = {
   },
 
   debug(msg, ctx = '') {
-    if (process.env.DEBUG) {
+    if (config.debug) {
       console.debug(`🔍 [DEBUG] ${ctx ? `[${ctx}] ` : ''}${msg}`);
       pushRing('debug', msg, ctx);
     }
@@ -75,23 +93,18 @@ export function logWarn(msg, context = '') {
   logger.warn(msg, context);
 }
 
-export function logSuccess(msg, context = '') {
-  logger.success(msg, context);
-}
+// Entfernt, weil nachweislich ungenutzt: logSuccess(), logDebug(), trace() und
+// getLogs(). Jede dieser Funktionen kam im gesamten Projekt genau einmal vor —
+// in ihrer eigenen Deklaration. `logger.success`/`logger.debug` gibt es
+// weiterhin und wird auch benutzt; getLogs() war ausserdem ein Duplikat von
+// getRecentLogs() ohne Begrenzung.
 
-export function logDebug(msg, context = '') {
-  logger.debug(msg, context);
-}
-
-export function trace(msg, context = '') {
-  logger.debug(msg, context);
-}
-
-export function getLogs() {
-  return [...ring];
-}
-
-export function getRecentLogs(n = 50) {
+/**
+ * Die letzten `n` Zeilen. Der Standard ist die volle Ringgroesse und nicht mehr
+ * 50: die Panel-Route rief ohne Argument auf und schnitt das Ergebnis danach
+ * auf config.log.ringSize — was an 50 Zeilen nichts mehr aendern konnte.
+ */
+export function getRecentLogs(n = maxRingSize) {
   return ring.slice(-n);
 }
 
@@ -99,8 +112,4 @@ export function setErrorSummarizer(fn) {
   if (typeof fn === 'function') {
     errorSummarizer = fn;
   }
-}
-
-export function getErrorSummarizer() {
-  return errorSummarizer;
 }

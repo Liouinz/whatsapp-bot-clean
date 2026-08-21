@@ -1,14 +1,29 @@
 import { config } from './config.js';
 import { logger } from './logger.js';
-import { getDb } from './core/database/client.js';
+import { dbRun } from './core/database/client.js';
 
 export { PROTECTED_TABLES, assertNotAuthWrite, deleteTargetTable } from './core/database/guard.js';
 export { getDb, dbRun, dbRows, dbRowsStrict, dbBatch } from './core/database/client.js';
 export { DATA_TABLES, PROTECTED_TABLES_SET, initDb } from './core/database/schema.js';
 export { wipeAllData } from './core/database/wipe.js';
 
+/**
+ * Tagesschluessel (YYYY-MM-DD) in der konfigurierten Zeitzone.
+ *
+ * Vorher stand hier `toISOString().slice(0, 10)` — also UTC, obwohl config.js
+ * ausdruecklich TZ=Europe/Berlin setzt. Zwischen 00:00 und 02:00 lokaler Zeit
+ * landeten Nachrichten, Befehle und KI-Aufrufe dadurch auf dem Vortag, und das
+ * KI-Tageslimit sprang um 02:00 statt um Mitternacht.
+ *
+ * 'en-CA' ist das Gebietsschema, das YYYY-MM-DD liefert — dieselbe Sortier-
+ * ordnung wie bisher, damit die `day >= ?`-Vergleiche in SQL weiter stimmen.
+ */
+export function dayKey(date = new Date()) {
+  return date.toLocaleDateString('en-CA', { timeZone: config.timezone });
+}
+
 export function todayKey() {
-  return new Date().toISOString().slice(0, 10);
+  return dayKey();
 }
 
 const xpBuffer = new Map();
@@ -45,9 +60,30 @@ export function bufferGroupMessage(groupJid) {
   groupMsgBuffer.set(key, entry);
 }
 
-export async function flushBuffers() {
-  const db = getDb();
+let flushInFlight = null;
 
+/**
+ * Schreibt die Puffer weg. **Single-Flight**: laeuft schon ein Flush, bekommt
+ * der Aufrufer dieselbe Promise.
+ *
+ * Der Guard ist kein Schoenheitsfehler-Fix. Die Puffer-Eintraege werden erst
+ * NACH `Promise.allSettled` geloescht — ein zweiter, ueberlappender Lauf las
+ * dieselben Eintraege noch einmal und schickte `xp = xp + excluded.xp` erneut.
+ * Aus 100 gepufferten XP wurden so 200. Erreichbar ueber vier Wege: das
+ * setInterval unten wartet die Promise nicht ab, buildWeeklyReport() ruft
+ * flushBuffers() aus dem Scheduler-Tick, der Panel-Neustart ruft es, und der
+ * Shutdown ruft es, waehrend stopFlushLoop() einen laufenden Flush nicht
+ * abwartet.
+ */
+export function flushBuffers() {
+  if (flushInFlight) return flushInFlight;
+  flushInFlight = flushBuffersOnce().finally(() => {
+    flushInFlight = null;
+  });
+  return flushInFlight;
+}
+
+async function flushBuffersOnce() {
   const xpEntries = Array.from(xpBuffer.entries());
   const statEntries = Array.from(statBuffer.entries());
   const groupMsgEntries = Array.from(groupMsgBuffer.entries());
@@ -64,11 +100,14 @@ export async function flushBuffers() {
       // eingetroffene Inkremente stillschweigend verwerfen.
       amountAtFlush: entry.amount,
       messagesAtFlush: entry.messages,
-      promise: db.execute({
-        sql: `INSERT INTO xp (group_jid, user_jid, xp, messages, name) VALUES (?, ?, ?, ?, ?)
-              ON CONFLICT(group_jid, user_jid) DO UPDATE SET xp = xp + excluded.xp, messages = messages + excluded.messages, name = excluded.name`,
-        args: [entry.chatJid, entry.userJid, entry.amount, entry.messages || 1, entry.name],
-      }),
+      // Ueber dbRun statt db.execute: nur so laeuft der Schreibvorgang durch den
+      // Guard (auth_creds/auth_keys) UND bekommt das Retry bei locked/busy/
+      // Netzwerkfehlern. Direkt am Client vorbei fehlte beides.
+      promise: dbRun(
+        `INSERT INTO xp (group_jid, user_jid, xp, messages, name) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(group_jid, user_jid) DO UPDATE SET xp = xp + excluded.xp, messages = messages + excluded.messages, name = excluded.name`,
+        [entry.chatJid, entry.userJid, entry.amount, entry.messages || 1, entry.name]
+      ),
     });
   }
 
@@ -80,16 +119,16 @@ export async function flushBuffers() {
       key,
       entry,
       countAtFlush: entry.count,
-      promise: db.execute({
-        sql: `INSERT INTO daily_stats (day, messages, commands, ai_calls) VALUES (?, ?, ?, ?)
-              ON CONFLICT(day) DO UPDATE SET ${col} = ${col} + excluded.${col}`,
-        args: [
+      promise: dbRun(
+        `INSERT INTO daily_stats (day, messages, commands, ai_calls) VALUES (?, ?, ?, ?)
+         ON CONFLICT(day) DO UPDATE SET ${col} = ${col} + excluded.${col}`,
+        [
           entry.day,
           entry.field === 'messages' ? entry.count : 0,
           entry.field === 'commands' ? entry.count : 0,
           entry.field === 'ai_calls' ? entry.count : 0,
-        ],
-      }),
+        ]
+      ),
     });
   }
 
@@ -99,11 +138,11 @@ export async function flushBuffers() {
       key,
       entry,
       countAtFlush: entry.count,
-      promise: db.execute({
-        sql: `INSERT INTO group_daily (group_jid, day, messages) VALUES (?, ?, ?)
-              ON CONFLICT(group_jid, day) DO UPDATE SET messages = messages + excluded.messages`,
-        args: [entry.groupJid, entry.day, entry.count],
-      }),
+      promise: dbRun(
+        `INSERT INTO group_daily (group_jid, day, messages) VALUES (?, ?, ?)
+         ON CONFLICT(group_jid, day) DO UPDATE SET messages = messages + excluded.messages`,
+        [entry.groupJid, entry.day, entry.count]
+      ),
     });
   }
 
@@ -157,10 +196,21 @@ export function xpToLevel(xp) {
   return level;
 }
 
+/**
+ * Fortschritt innerhalb der aktuellen Stufe.
+ *
+ * `level` gehoert mit in die Rueckgabe: beide Aufrufer (!rank, !profil) haben
+ * es sich vorher aus einem Feld destrukturiert, das es nie gab — die Befehle
+ * gaben dadurch "Level undefined" und "undefined/undefined XP" aus. Ein Test
+ * fuer diese Rechnung existierte nicht, deshalb ist es niemandem aufgefallen.
+ *
+ * @returns {{level:number, currentLevelXp:number, nextLevelXp:number, needed:number, progress:number}}
+ */
 export function levelProgress(xp) {
-  const currentLevelXp = totalXpForLevel(xpToLevel(xp));
-  const nextLevelXp = totalXpForLevel(xpToLevel(xp) + 1);
+  const level = xpToLevel(xp);
+  const currentLevelXp = totalXpForLevel(level);
+  const nextLevelXp = totalXpForLevel(level + 1);
   const needed = nextLevelXp - currentLevelXp;
   const progress = xp - currentLevelXp;
-  return { currentLevelXp, nextLevelXp, needed, progress };
+  return { level, currentLevelXp, nextLevelXp, needed, progress };
 }

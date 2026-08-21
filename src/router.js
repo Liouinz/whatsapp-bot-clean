@@ -38,6 +38,11 @@ export function setRegistry(commands) {
     byName.set(cmd.name, cmd);
     for (const alias of cmd.aliases || []) byName.set(alias, cmd);
   }
+  // Vorschlags-Kandidaten hier mitziehen: sichtbare Befehle + Aliasse
+  // (hidden bleibt hidden). Siehe suggestBase unten.
+  suggestBase = registry
+    .filter((c) => !c.hidden)
+    .flatMap((c) => [c.name, ...(c.aliases || [])]);
 }
 
 const toggles = new Map(); // name → enabled (live schaltbar übers Panel)
@@ -284,10 +289,14 @@ function editDistance(a, b, max) {
   return prev[b.length];
 }
 
-// Vorschlags-Kandidaten: sichtbare Befehle + Aliasse (hidden bleibt hidden)
-const SUGGEST_BASE = registry
-  .filter((c) => !c.hidden)
-  .flatMap((c) => [c.name, ...(c.aliases || [])]);
+// Vorschlags-Kandidaten. Wird von setRegistry() gefuellt.
+//
+// Hier stand eine Modul-Konstante, die zur IMPORTZEIT aus `registry` las — zu
+// dem Zeitpunkt noch leer, weil setRegistry() erst spaeter aus index.js laeuft.
+// Die Liste blieb dadurch dauerhaft [], Schritt 5d griff nie fuer einen echten
+// Befehl, und jeder Vertipper fiel auf den KI-Fallback 5e durch: genau der
+// Aufruf, den dieser Schritt einsparen soll.
+let suggestBase = [];
 
 /** Ähnlichsten bekannten Befehl finden (oder null). */
 export function suggestCommand(name) {
@@ -296,7 +305,7 @@ export function suggestCommand(name) {
   const max = name.length >= 6 ? 2 : 1;
   let best = null;
   let bestDist = max + 1;
-  for (const cand of [...SUGGEST_BASE, ...customList, ...faqs]) {
+  for (const cand of [...suggestBase, ...customList, ...faqs]) {
     const d = editDistance(name, cand, max);
     if (d < bestDist) {
       bestDist = d;

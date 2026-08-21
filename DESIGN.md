@@ -93,12 +93,12 @@ components:
     rounded: "{rounded.r1}"
     padding: "3px 8px"
   badge-ok:
-    backgroundColor: "{colors.ok}"
+    backgroundColor: "{colors.ok-dim}"
     textColor: "{colors.ok}"
     rounded: "{rounded.r1}"
     padding: "3px 8px"
   badge-bad:
-    backgroundColor: "{colors.bad}"
+    backgroundColor: "{colors.bad-dim}"
     textColor: "{colors.bad}"
     rounded: "{rounded.r1}"
     padding: "3px 8px"
@@ -207,9 +207,15 @@ einen sichtbaren Akzentrahmen ohne Layoutsprung. Jedes Feld hat ein `label`;
 wo es optisch stört, bleibt es über `hideLabel` für Screenreader erhalten.
 
 ### Badges
-Radius `--r1`, versal, klein. Vier Rollen: neutral (`--surface-3`, für
-Sacheigenschaften wie „Anti-Link aktiv"), `ok`, `warn`, `bad`. Die neutrale
-Variante ist ausdrücklich vorgesehen — nicht jede Eigenschaft ist ein Alarm.
+Radius `--r1`, versal, klein. Fünf Rollen: neutral (`--surface-3`, für
+Sacheigenschaften wie „Anti-Link aktiv"), `ok`, `warn`, `bad` und `accent`.
+Die neutrale Variante ist ausdrücklich vorgesehen — nicht jede Eigenschaft ist
+ein Alarm. Jede Zustandsvariante setzt die gedämpfte Fläche (`--ok-dim` usw.)
+als Hintergrund und die Vollfarbe als Text, nie beides gleich.
+
+`badge.accent` ist die eine bewusste Ausnahme von der Regel „Akzent nur für
+Interaktion": sie markiert die aktuell gewählte Einstellung, also den Zustand,
+den der Nutzer selbst gesetzt hat.
 
 ### Tabellen
 `.tbl` in einem `.tbl-wrap` mit `overflow-x: auto` **und `contain: paint`**.

@@ -29,7 +29,7 @@ test('T-8: Guard blockt Auth-Schreibzugriffe auch hinter SQL-Kommentaren', () =>
 });
 
 test('T-8: Guard blockt legitime Statements NICHT', () => {
-  assert.doesNotThrow(() => assertNotAuthWrite('DELETE FROM coins'));
+  assert.doesNotThrow(() => assertNotAuthWrite('DELETE FROM xp'));
   assert.doesNotThrow(() => assertNotAuthWrite('SELECT * FROM auth_creds'));
   assert.doesNotThrow(() => assertNotAuthWrite('-- Kommentar\nSELECT 1'));
 });
