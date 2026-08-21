@@ -70,7 +70,7 @@ export const logger = {
   },
 
   debug(msg, ctx = '') {
-    if (process.env.DEBUG) {
+    if (config.debug) {
       console.debug(`🔍 [DEBUG] ${ctx ? `[${ctx}] ` : ''}${msg}`);
       pushRing('debug', msg, ctx);
     }
@@ -93,21 +93,11 @@ export function logWarn(msg, context = '') {
   logger.warn(msg, context);
 }
 
-export function logSuccess(msg, context = '') {
-  logger.success(msg, context);
-}
-
-export function logDebug(msg, context = '') {
-  logger.debug(msg, context);
-}
-
-export function trace(msg, context = '') {
-  logger.debug(msg, context);
-}
-
-export function getLogs() {
-  return [...ring];
-}
+// Entfernt, weil nachweislich ungenutzt: logSuccess(), logDebug(), trace() und
+// getLogs(). Jede dieser Funktionen kam im gesamten Projekt genau einmal vor —
+// in ihrer eigenen Deklaration. `logger.success`/`logger.debug` gibt es
+// weiterhin und wird auch benutzt; getLogs() war ausserdem ein Duplikat von
+// getRecentLogs() ohne Begrenzung.
 
 /**
  * Die letzten `n` Zeilen. Der Standard ist die volle Ringgroesse und nicht mehr
@@ -122,8 +112,4 @@ export function setErrorSummarizer(fn) {
   if (typeof fn === 'function') {
     errorSummarizer = fn;
   }
-}
-
-export function getErrorSummarizer() {
-  return errorSummarizer;
 }

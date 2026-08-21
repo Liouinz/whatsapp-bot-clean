@@ -2,10 +2,16 @@
 // Ziel: Konfigurationsfehler in Klartext melden statt kryptisch zu crashen.
 
 import { createClient } from '@libsql/client';
-import { REQUIRED_ENV, hasValidOwners } from './config.js';
+import { REQUIRED_ENV, hasValidOwners, config } from './config.js';
 
 const RETRIES = 3;
 const RETRY_BASE_MS = 2000;
+
+// Das Panel-Passwort schuetzt Kick, Ban, Broadcast und das komplette Leeren der
+// Datenbank. Aussperre (5 Fehlversuche / 15 Min) und Limiter (20/Min) bremsen
+// zwar, aber ein Drei-Zeichen-Secret ist auch damit in Stunden geraten. Es gibt
+// keinen Grund, hier kurz zu sein — der Wert wird einmal gesetzt und nie getippt.
+const MIN_SECRET_LENGTH = 16;
 
 function fail(message) {
   console.error('');
@@ -34,6 +40,42 @@ export async function preflight() {
         'Erwartet werden Ziffern im internationalen Format, per Komma getrennt ' +
         '(z. B. "491701234567,491709876543"). Ohne gueltige Nummer waere kein ' +
         'Owner-Befehl mehr ausfuehrbar.'
+    );
+  }
+
+  // Gesetzt heisst nicht brauchbar. Die drei Pruefungen unten decken genau die
+  // Werte ab, die vorher unbemerkt durchliefen und erst spaeter Schaden machten:
+  // ein zu kurzes Panel-Passwort, eine SELF_URL ohne Protokoll (Self-Ping still
+  // tot) und ein nicht-numerischer PORT (Render findet keinen Port).
+  const secret = (process.env.ACCESS_SECRET || '').trim();
+  if (secret.length < MIN_SECRET_LENGTH) {
+    fail(
+      `ACCESS_SECRET ist zu kurz (${secret.length} Zeichen, mindestens ${MIN_SECRET_LENGTH}). ` +
+        'Damit ist das Panel-Passwort ratbar — und hinter dem Panel liegen Kick, Ban, ' +
+        'Rundnachrichten und "Alle Daten loeschen". Beispiel fuer einen guten Wert: ' +
+        'openssl rand -base64 24'
+    );
+  }
+
+  const selfUrl = (process.env.SELF_URL || '').trim();
+  try {
+    const parsed = new URL(selfUrl);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error('Protokoll');
+  } catch {
+    fail(
+      `SELF_URL ist keine gueltige http(s)-Adresse (aktuell: "${selfUrl.slice(0, 40)}"). ` +
+        'Erwartet wird die vollstaendige oeffentliche Adresse inklusive Protokoll, ' +
+        'z. B. "https://mein-bot.onrender.com". Ohne sie bleibt der Keep-Alive-Ping wirkungslos.'
+    );
+  }
+
+  if (config.portInvalid) {
+    fail(
+      `PORT ist keine Portnummer (aktuell: "${config.portRaw}"). ` +
+        'Node oeffnet bei einem nicht-numerischen Wert keinen TCP-Port, sondern legt einen ' +
+        'Unix-Socket dieses Namens an — der Dienst scheint zu laufen, ist aber von aussen ' +
+        'nicht erreichbar. Auf Render wird PORT von der Plattform gesetzt; die Variable ' +
+        'gehoert dort normalerweise gar nicht ins Environment.'
     );
   }
 

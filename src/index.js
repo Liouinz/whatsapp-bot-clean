@@ -69,11 +69,32 @@ let selfPingTimer = null;
 
 function startSelfPing() {
   if (selfPingTimer) clearInterval(selfPingTimer);
-  const url = config.selfUrl?.trim();
-  if (!url) {
+  const raw = config.selfUrl?.trim();
+  if (!raw) {
     logger.warn('SELF_URL nicht gesetzt — Self-Ping deaktiviert.', 'KeepAlive');
     return;
   }
+
+  // Gegen /health pingen statt gegen die Wurzel. `/` liegt hinter requireAuth
+  // und antwortet mit 302 auf /login — die Statuspruefung unten hat deshalb
+  // alle 30 Sekunden "Self-Ping Antwort: 302" ins Log geschrieben, dauerhaft
+  // und ohne dass irgendetwas kaputt war. /health ist oeffentlich und liefert
+  // 200. Ein bereits auf /health zeigendes SELF_URL bleibt unveraendert.
+  let url;
+  try {
+    url = new URL('/health', raw).toString();
+  } catch {
+    // Ohne Protokoll wirft http.get() synchron (ERR_INVALID_URL). Frueher fiel
+    // das erst im Intervall auf und erzeugte alle 30 s eine Warnung, waehrend
+    // der Keep-Alive still tot war. Einmal sagen und abschalten ist ehrlicher.
+    logger.warn(
+      `SELF_URL ist keine gueltige URL ("${raw}") — Self-Ping deaktiviert. ` +
+        'Erwartet wird die vollstaendige Adresse inklusive https://.',
+      'KeepAlive'
+    );
+    return;
+  }
+
   selfPingTimer = setInterval(() => {
     try {
       const client = url.startsWith('https:') ? https : http;
@@ -311,15 +332,17 @@ async function startWhatsAppInner() {
         try {
           state.currentQr = await QRCode.toDataURL(qr, { margin: 2, scale: 8 });
           state.qrUpdatedAt = Date.now();
+          // Hier stand ein dynamischer Import von `qrcode-terminal`, um den Code
+          // als ASCII-Grafik ins Log zu zeichnen. Das Paket war nie deklariert
+          // und nie installiert — der Import schlug bei JEDEM Aufruf fehl, und
+          // der nackte catch gab stattdessen die Rohdaten aus. Im Log stand
+          // also seit jeher eine unscannbare Zeichenkette unter der
+          // Aufforderung, sie zu scannen. Statt eine Dependency fuer ein
+          // Log-Schmuckstueck nachzuziehen: klar benennen, was da steht.
           console.log('--------------------------------------------------');
-          console.log('📲 QR-CODE EMPFANGEN — Bitte im Dashboard oder mit WhatsApp scannen:');
-          console.log('--------------------------------------------------');
-          try {
-            const qrcodeTerminal = await import('qrcode-terminal');
-            qrcodeTerminal.default.generate(qr, { small: true });
-          } catch {
-            console.log(qr);
-          }
+          console.log('📲 QR-CODE EMPFANGEN — im Panel unter „QR" scannen.');
+          console.log('   Rohdaten (nur falls du sie selbst umwandeln willst):');
+          console.log(qr);
           console.log('--------------------------------------------------');
         } catch (err) {
           logger.error(`Fehler bei QR-Code-Generierung: ${err.message}`, 'Baileys');
@@ -504,7 +527,7 @@ async function main() {
     setShutdownHandler((reason) => gracefulShutdown(reason));
 
     const app = createDashboard();
-    const port = process.env.PORT || 3000;
+    const port = config.port;
     const server = app.listen(port, () => {
       logger.success(`Control Center Dashboard läuft auf Port ${port}`, 'Bootstrap');
     });

@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import express from 'express';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { BOT_NAME, config } from './config.js';
 import { state, rolloverDay, requestPairingCode, forceRelink, requestShutdown } from './state.js';
 import { dbRun, dbRows, dbBatch, dayKey, wipeAllData, xpToLevel } from './db.js';
@@ -116,7 +116,14 @@ function clientIp(req) {
   // war doppelt angreifbar: ein rotierender Fake-Header liess den
   // Fehlversuchs-Zaehler nie hochlaufen (Bruteforce ohne Sperre), und ein
   // konstanter Fake-Header mit der IP des Betreibers sperrte diesen gezielt aus.
-  return req.ip || req.socket.remoteAddress || '?';
+  //
+  // ipKeyGenerator() fasst IPv6 auf das /56-Praefix zusammen. Ohne das bekam
+  // JEDE Adresse eines Praefixes ihren eigenen Fehlversuchs-Zaehler — und ein
+  // einzelnes IPv6-Praefix umfasst mehr Adressen, als man je durchprobieren
+  // muesste. Die Aussperre nach fuenf Fehlversuchen war damit fuer jeden
+  // umgehbar, der IPv6 hat. IPv4 bleibt unveraendert, IPv4-mapped-IPv6
+  // (::ffff:1.2.3.4) wird auf die IPv4-Form normalisiert.
+  return ipKeyGenerator(req.ip || req.socket.remoteAddress || '?');
 }
 
 function issueSession(res) {
@@ -784,7 +791,7 @@ export function createDashboard() {
   api.get('/config/export', async (req, res) => {
     try {
       const data = {};
-      const tables = ['group_settings', 'nightmode', 'antiraid', 'blocked_words', 'custom_commands', 'faq', 'command_toggles', 'allowed_chats'];
+      const tables = ['group_settings', 'nightmode', 'antiraid', 'blocked_words', 'custom_commands', 'faq', 'command_toggles'];
       for (const t of tables) data[t] = await dbRows(`SELECT * FROM ${t}`, []);
       res.setHeader('Content-Disposition', `attachment; filename="${BOT_NAME.toLowerCase()}-config.json"`);
       res.json({ exportedAt: new Date().toISOString(), bot: BOT_NAME, data });
@@ -819,7 +826,6 @@ export function createDashboard() {
     custom_commands: { key: ['name'], cols: ['name', 'reply', 'by_jid', 'created_at'] },
     faq: { key: ['keyword'], cols: ['keyword', 'answer', 'by_jid', 'created_at'] },
     command_toggles: { key: ['name'], cols: ['name', 'enabled'] },
-    allowed_chats: { key: ['jid'], cols: ['jid', 'note'] },
   };
 
   api.post('/config/import', async (req, res) => {
@@ -1081,10 +1087,9 @@ async function userDetail(jid) {
 
 const groupCache = { at: 0, list: [] };
 
-export async function refreshGroupCache() {
-  groupCache.at = 0;
-  return listGroups();
-}
+// refreshGroupCache() stand hier und wurde von nichts aufgerufen. Wer den
+// Gruppen-Cache verwerfen will, setzt `groupCache.at = 0` — genau das machen
+// die Einstellungs-Route und der Wipe bereits an Ort und Stelle.
 
 async function listGroups() {
   if (Date.now() - groupCache.at < 60_000) return groupCache.list;

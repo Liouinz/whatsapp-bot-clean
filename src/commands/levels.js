@@ -28,7 +28,7 @@ export const levelCommands = [
         return ctx.reply('ℹ️ Du hast hier noch keine XP gesammelt — schreib einfach mit, dann geht es los! ⭐');
       }
       const xp = Number(rows[0].xp);
-      const { level, have, need } = levelProgress(xp);
+      const { level, progress, needed } = levelProgress(xp);
       const better = await dbRows(
         'SELECT COUNT(*) AS c FROM xp WHERE group_jid = ? AND xp > ?',
         [ctx.chatJid, xp]
@@ -38,7 +38,7 @@ export const levelCommands = [
         `⭐ *Dein Rang, ${ctx.senderName}*\n` +
           `• Level: *${level}*  ·  Platz *#${rankPos}*\n` +
           `• XP: ${xp} (${rows[0].messages} Nachrichten)\n` +
-          `• Bis Level ${level + 1}: ${bar(have, need)} ${have}/${need}`
+          `• Bis Level ${level + 1}: ${bar(progress, needed)} ${progress}/${needed}`
       );
     },
   },

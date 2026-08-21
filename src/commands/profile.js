@@ -37,7 +37,7 @@ export const profileCommands = [
       ]);
 
       const xp = xpRows.length ? Number(xpRows[0].xp) : 0;
-      const { level, have, need } = levelProgress(xp);
+      const { level, progress, needed } = levelProgress(xp);
       const name = isSelf ? ctx.senderName : xpRows[0]?.name || ctx.mentionTag(target);
 
       const better = await dbRows('SELECT COUNT(*) AS c FROM xp WHERE group_jid = ? AND xp > ?', [ctx.chatJid, xp]);
@@ -54,7 +54,7 @@ export const profileCommands = [
       if (profile?.birthday) text += `🎈 Geburtstag: ${profile.birthday}\n`;
       if (profile) text += `\n`;
       text += `\n⭐ Level *${level}* · Platz *#${rankPos}* in dieser Gruppe\n`;
-      text += `   ${progressBar(have, need)} ${have}/${need} XP\n`;
+      text += `   ${progressBar(progress, needed)} ${progress}/${needed} XP\n`;
       text += `💬 ${xpRows[0]?.messages ?? 0} Nachrichten · ${xp} XP gesamt\n`;
       if (warns.length > 0) text += `⚠️ ${warns.length}/${config.moderation.warnLimitKick} aktive Verwarnungen\n`;
       if (afk) text += `💤 Gerade AFK (seit ${fmtSince(afk.since)}): _${afk.reason}_\n`;
@@ -82,10 +82,19 @@ export const profileCommands = [
       
       const dbField = { alter: 'age', wohnort: 'location', hobbys: 'hobbies', bio: 'bio', geburtstag: 'birthday' }[field];
       
+      // resolveLid(): !profil liest ueber die aufgeloeste PN-JID. Ohne dieselbe
+      // Aufloesung beim Schreiben landete das Profil in einer LID-adressierten
+      // Gruppe unter einem anderen Schluessel und war beim Anzeigen unauffindbar.
+      //
+      // ctx.senderName statt ctx.pushName: `pushName` gibt es am ctx-Objekt gar
+      // nicht (makeCtx liefert `senderName`), der Ausdruck fiel also immer auf
+      // die Attrappe 'Unbekannt' zurueck — genau den Wert, den isRealName() in
+      // identity.js als "kein Name" wegfiltert. senderName ist entweder der
+      // echte pushName oder die Nummer; beides behandelt identity.js korrekt.
       await dbRun(
         `INSERT INTO user_profiles (user_jid, name, ${dbField}, updated_at) VALUES (?, ?, ?, ?)
          ON CONFLICT(user_jid) DO UPDATE SET ${dbField} = excluded.${dbField}, updated_at = excluded.updated_at`,
-        [ctx.sender, ctx.pushName || 'Unbekannt', value, Date.now()]
+        [resolveLid(ctx.sender), ctx.senderName, value, Date.now()]
       );
       
       return ctx.reply(`✅ ${field.charAt(0).toUpperCase() + field.slice(1)} gespeichert!`);

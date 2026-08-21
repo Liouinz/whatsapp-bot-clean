@@ -49,9 +49,9 @@ test('deleteTargetTable erkennt die Zieltabelle', () => {
 // abgedeckt (PROTECTED_TABLES, deleteTargetTable, wipeAllData).
 
 test('wipeAllData löscht Daten, aber NICHT die Session', async () => {
-  await dbRun('INSERT OR REPLACE INTO coins (user_jid, balance) VALUES (?, ?)', ['u@s.whatsapp.net', 999]);
+  await dbRun('INSERT OR REPLACE INTO xp (group_jid, user_jid, xp) VALUES (?, ?, ?)', ['g@g.us', 'u@s.whatsapp.net', 999]);
   await wipeAllData();
-  const coins = await dbRows('SELECT * FROM coins', []);
-  assert.equal(coins.length, 0, 'Daten wurden geleert');
+  const xpRows = await dbRows('SELECT * FROM xp', []);
+  assert.equal(xpRows.length, 0, 'Daten wurden geleert');
   assert.ok(await sessionIntact(), 'Session überlebt den Komplett-Wipe');
 });

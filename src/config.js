@@ -22,6 +22,19 @@ const parseNumbers = (raw) =>
 export const OWNER_NUMBERS = parseNumbers(process.env.OWNER_NUMBERS);
 export const BOT_OWNER_NUMBERS = parseNumbers(process.env.BOT_OWNER_NUMBERS);
 
+// PORT setzt auf Render die Plattform. Ein nicht-numerischer Wert ist heimtueckisch:
+// app.listen('banana') oeffnet in Node keinen TCP-Port, sondern legt einen
+// Unix-Socket dieses Namens an. Der Prozess laeuft dann, meldet "Dashboard laeuft
+// auf Port banana", `server.on('error')` feuert nie — und Render findet keinen
+// gebundenen Port und bricht den Deploy ohne verwertbare Meldung ab.
+const PORT_RAW = (process.env.PORT || '').trim();
+function parsePort(raw) {
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= 65535 ? n : null;
+}
+const PORT_PARSED = parsePort(PORT_RAW);
+
 // Der Preflight prueft nur, ob die Variable gesetzt ist — nicht, ob nach dem
 // Strippen aller Nicht-Ziffern etwas uebrig bleibt. Ein Tippfehler ergab damit
 // eine leere Owner-Liste, und niemand kam mehr an die Owner-Befehle.
@@ -32,6 +45,17 @@ export function hasValidOwners() {
 export const config = {
   botName: BOT_NAME,
   timezone: TIMEZONE,
+
+  // 3000 ist nur der lokale Rueckfallwert; auf Render kommt PORT von aussen.
+  port: PORT_PARSED ?? 3000,
+  // Gesetzt, aber unbrauchbar — der Preflight bricht damit mit Klartext ab,
+  // statt den Fehler bis in einen fehlschlagenden Deploy durchrutschen zu lassen.
+  portInvalid: PORT_RAW !== '' && PORT_PARSED === null,
+  portRaw: PORT_RAW,
+
+  // Wurde bisher direkt in logger.js gelesen — die einzige verbliebene
+  // Env-Abfrage ausserhalb dieser Datei neben den bewusst dynamischen.
+  debug: !!(process.env.DEBUG || '').trim(),
   ownerNumbers: OWNER_NUMBERS,
   botOwnerNumbers: BOT_OWNER_NUMBERS,
 

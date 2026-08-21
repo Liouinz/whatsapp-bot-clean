@@ -196,10 +196,21 @@ export function xpToLevel(xp) {
   return level;
 }
 
+/**
+ * Fortschritt innerhalb der aktuellen Stufe.
+ *
+ * `level` gehoert mit in die Rueckgabe: beide Aufrufer (!rank, !profil) haben
+ * es sich vorher aus einem Feld destrukturiert, das es nie gab — die Befehle
+ * gaben dadurch "Level undefined" und "undefined/undefined XP" aus. Ein Test
+ * fuer diese Rechnung existierte nicht, deshalb ist es niemandem aufgefallen.
+ *
+ * @returns {{level:number, currentLevelXp:number, nextLevelXp:number, needed:number, progress:number}}
+ */
 export function levelProgress(xp) {
-  const currentLevelXp = totalXpForLevel(xpToLevel(xp));
-  const nextLevelXp = totalXpForLevel(xpToLevel(xp) + 1);
+  const level = xpToLevel(xp);
+  const currentLevelXp = totalXpForLevel(level);
+  const nextLevelXp = totalXpForLevel(level + 1);
   const needed = nextLevelXp - currentLevelXp;
   const progress = xp - currentLevelXp;
-  return { currentLevelXp, nextLevelXp, needed, progress };
+  return { level, currentLevelXp, nextLevelXp, needed, progress };
 }
