@@ -8,7 +8,7 @@ die Sitzung liegt in der Datenbank statt auf der Platte.
 Mitgeliefert ist ein Web-Panel, über das der Bot verknüpft, überwacht und
 konfiguriert wird — Gruppen-Einstellungen, Moderation, Statistik, Logs.
 
-**Stand:** 75 Befehle · 24 API-Endpunkte · 198 Tests · Node ≥ 20 · ESM
+**Stand:** 75 Befehle · 25 API-Endpunkte · 206 Tests · Node ≥ 20 · ESM
 
 ---
 
@@ -265,7 +265,7 @@ rm -f .test-*.db*   # wichtig: nur ein kalter Lauf ist aussagekräftig
 npm test            # node --test
 ```
 
-Stand: **198 Tests, 0 Fehler.** Kein ESLint, kein Prettier, keine CI.
+Stand: **206 Tests, 0 Fehler.** Kein ESLint, kein Prettier, keine CI.
 
 Die Tests laufen gegen echte lokale SQLite-Dateien, nicht gegen Mocks; die
 Panel-Tests starten ein echtes `createDashboard()` auf einem freien Port und

@@ -53,7 +53,7 @@
         ],
         "summary": "Anmelden und Token-Paar erhalten",
         "security": [],
-        "description": "Solange **kein einziger** Zugang existiert, gilt einmalig `ACCESS_SECRET` als Passwort fuer den Benutzernamen `owner` und legt diesen Zugang an. Danach ist dieser Weg geschlossen.\n\nRate-Limit: 10 Anfragen je 15 Minuten und IP, geteilt mit `/auth/refresh`.",
+        "description": "Solange **kein einziger** Zugang existiert, gilt einmalig `ACCESS_SECRET` als Passwort fuer den Benutzernamen `owner` und legt diesen Zugang an. Danach ist dieser Weg geschlossen.\n\nRate-Limits: 10 Anfragen je 15 Minuten und IP (geteilt mit `/auth/refresh`) UND zusaetzlich 5 Versuche je 15 Minuten und **Konto** — Letzteres traegt auch dann, wenn ein Angreifer ueber viele IP-Adressen verfuegt.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1608,6 +1608,101 @@
           },
           "403": {
             "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Eigenes Passwort aendern",
+        "description": "Ohne diesen Endpunkt bliebe das Owner-Passwort dauerhaft identisch mit ACCESS_SECRET — dem Passwort des Web-Panels. Nach dem Wechsel werden alle **anderen** Geraete-Sitzungen widerrufen; die eigene bleibt bestehen.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "currentPassword",
+                  "newPassword"
+                ],
+                "properties": {
+                  "currentPassword": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "newPassword": {
+                    "type": "string",
+                    "minLength": 12,
+                    "maxLength": 256
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Geaendert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "otherSessionsRevoked": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED — aktuelles Passwort falsch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED",
             "content": {
               "application/json": {
                 "schema": {

@@ -41,7 +41,7 @@ src/api/            Control API v1 (Phase 2) — eigene Auth (Bearer), eigenes
                     · middleware/ · routes/ · services/
 src/services/       gemeinsame Abfrage-Schicht fuer Panel UND API (query.js)
 src/data/           statische Daten: Saison-Events
-test/               16 .mjs-Dateien, `npm test` = `node --test`
+test/               18 .mjs-Dateien, `npm test` = `node --test`
 ```
 
 Die Service-Schicht sind die flachen `src/*.js` (`moderation.js`,
@@ -116,7 +116,7 @@ Insgesamt 75 Befehle (126 Schlüssel inkl. Aliassen).
 
 ## Tests
 
-`npm ci && npm test`. Stand: **198 pass / 0 fail** (kalte DB).
+`npm ci && npm test`. Stand: **206 pass / 0 fail** (kalte DB).
 
 Wichtig: **Test-DBs vor dem Lauf löschen** (`rm -f .test-*.db*`). Die Dateien
 sind gitignored, und ein warmer Zustand hat früher einen echten Fehler verdeckt
@@ -209,6 +209,18 @@ Regeln, die beim Aendern zaehlen:
 - **`api_users`/`api_sessions`/`api_tokens` stehen in `INFRA_TABLES`**, nicht in
   `DATA_TABLES` — der Panel-Wipe loescht keine Zugaenge und sperrt damit keine
   Geraete aus.
+- **scrypt nur asynchron** (`crypto.scrypt`, nicht `scryptSync`). Der Prozess hat
+  einen Thread, und den teilen sich Bot, Panel und WhatsApp-Socket. Mit der
+  synchronen Variante stand die Event-Loop bei acht gleichzeitigen Aufrufen
+  **297 ms** still — nachgemessen, und ein unangemeldeter Endpunkt konnte das
+  ausloesen.
+- **Die Anmeldung rechnet auch fuer unbekannte Benutzernamen** (`verifyAgainstDummy`).
+  Sonst ist die Antwortzeit das Orakel, das der einheitliche Fehlertext
+  verschweigen soll: 1,9 ms statt 41 ms verriet, welche Namen es gibt.
+- **Bruteforce-Schutz haengt an zwei Zaehlern**: IP *und* Konto
+  (`usernameLimiter`, hinter der Eingabepruefung, damit fehlerhafte Anfragen
+  kein Kontingent verbrauchen). Ein IP-Limit allein traegt nicht — wer viele
+  Adressen hat, laeuft daran vorbei.
 - Der Zugriffs-Log laeuft auf `debug`, nicht auf `info`: bei einer App, die den
   Status pollt, waere der 500-Zeilen-Ringpuffer sonst binnen Minuten voll. 4xx
   als `warn`; `res.locals.expectedStatus` nimmt entworfene Faelle davon aus

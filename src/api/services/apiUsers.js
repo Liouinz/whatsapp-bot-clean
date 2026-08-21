@@ -5,6 +5,7 @@
 // zeitkonstant.
 
 import crypto from 'node:crypto';
+import { promisify } from 'node:util';
 import { dbRun, dbRowsStrict } from '../../db.js';
 import { config } from '../../config.js';
 
@@ -30,15 +31,25 @@ export function permissionsFor(role) {
 
 const SCRYPT_KEYLEN = 64;
 
-export function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
-  const hash = crypto.scryptSync(String(password), salt, SCRYPT_KEYLEN).toString('hex');
+// **Asynchron, nicht scryptSync.** scrypt ist absichtlich rechenintensiv — rund
+// 40 ms je Aufruf. Die synchrone Variante haelt dabei den EINEN Node-Thread an,
+// und der gehoert nicht nur der API: Bot, Panel und WhatsApp-Socket teilen ihn
+// sich. Gemessen mit scryptSync stieg die oeffentliche /health-Antwort unter 20
+// gleichzeitigen Anmeldungen von 1,4 ms auf 456 ms im p95 — ein unangemeldeter
+// Endpunkt konnte damit den kompletten Prozess ausbremsen, WhatsApp-Verarbeitung
+// eingeschlossen. crypto.scrypt() rechnet im Threadpool und laesst die
+// Event-Loop frei.
+const scrypt = promisify(crypto.scrypt);
+
+export async function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
+  const hash = (await scrypt(String(password), salt, SCRYPT_KEYLEN)).toString('hex');
   return { hash, salt };
 }
 
-export function verifyPassword(password, hash, salt) {
+export async function verifyPassword(password, hash, salt) {
   let candidate;
   try {
-    candidate = crypto.scryptSync(String(password), String(salt), SCRYPT_KEYLEN);
+    candidate = await scrypt(String(password), String(salt), SCRYPT_KEYLEN);
   } catch {
     return false;
   }
@@ -50,6 +61,30 @@ export function verifyPassword(password, hash, salt) {
   }
   if (expected.length !== candidate.length) return false;
   return crypto.timingSafeEqual(candidate, expected);
+}
+
+/**
+ * Ein Vergleichswert fuer Benutzernamen, die es gar nicht gibt.
+ *
+ * Ohne ihn verraet die Antwortzeit, welche Namen existieren: fuer einen
+ * unbekannten Namen lief bisher gar kein scrypt, die Anmeldung war nach 1,9 ms
+ * abgelehnt statt nach 41 ms. Ein Angreifer konnte gueltige Namen damit
+ * einfach durchprobieren, obwohl Text und Status identisch waren.
+ *
+ * `verifyAgainstDummy()` verbrennt dieselbe Rechenzeit und liefert immer false.
+ */
+const DUMMY = { salt: crypto.randomBytes(16).toString('hex'), hash: null };
+DUMMY.hash = crypto.scryptSync(crypto.randomBytes(32).toString('hex'), DUMMY.salt, SCRYPT_KEYLEN).toString('hex');
+
+export async function verifyAgainstDummy(password) {
+  await verifyPassword(password, DUMMY.hash, DUMMY.salt);
+  return false;
+}
+
+/** Setzt das Passwort eines Zugangs neu. Salt wird dabei erneuert. */
+export async function changePassword(id, newPassword) {
+  const { hash, salt } = await hashPassword(newPassword);
+  await dbRun('UPDATE api_users SET pw_hash = ?, pw_salt = ? WHERE id = ?', [hash, salt, id]);
 }
 
 export async function findByUsername(username) {
@@ -71,7 +106,7 @@ export async function findById(id) {
 export async function createUser({ username, password, role }) {
   const name = String(username).toLowerCase();
   if (!ROLES.includes(role)) throw new Error(`Unbekannte Rolle: ${role}`);
-  const { hash, salt } = hashPassword(password);
+  const { hash, salt } = await hashPassword(password);
   const id = `usr_${crypto.randomBytes(9).toString('base64url')}`;
   await dbRun(
     `INSERT INTO api_users (id, username, pw_hash, pw_salt, role, created_at, disabled)

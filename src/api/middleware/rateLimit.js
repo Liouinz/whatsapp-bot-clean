@@ -32,6 +32,29 @@ function make({ windowMs, limit }) {
 /** Anmeldung und Token-Erneuerung: streng, das ist die Bruteforce-Flaeche. */
 export const authLimiter = make({ windowMs: 15 * 60_000, limit: 10 });
 
+/**
+ * Zweites Kontingent fuer die Anmeldung, gezaehlt am KONTO statt an der IP.
+ *
+ * Das IP-Limit allein traegt nicht weit: wer ueber viele Adressen verfuegt,
+ * laeuft daran vorbei, und ohne vorgelagerten Proxy laesst sich `req.ip` per
+ * X-Forwarded-For frei setzen (hinter Render nicht — dort haengt der Proxy die
+ * echte Adresse rechts an, und `trust proxy: 1` loest korrekt auf; nachgemessen).
+ * Gegen das Durchprobieren des Passworts EINES Kontos hilft nur ein Zaehler an
+ * diesem Konto.
+ *
+ * Steht hinter der Eingabepruefung, damit `req.valid.username` vorliegt —
+ * fehlerhafte Anfragen sollen kein Kontingent verbrauchen.
+ */
+export const usernameLimiter = rateLimit({
+  windowMs: 15 * 60_000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `n:${String(req.valid?.username || '?').toLowerCase()}`,
+  handler: (_req, _res, next) =>
+    next(new ApiError('RATE_LIMITED', 'Zu viele Anmeldeversuche fuer dieses Konto — bitte spaeter erneut.')),
+});
+
 /** Lesende Endpunkte: grosszuegig genug fuer eine Status-Ansicht, die pollt. */
 export const readLimiter = make({ windowMs: 60_000, limit: 120 });
 
