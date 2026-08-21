@@ -617,7 +617,7 @@ a.list-item { text-decoration: none; color: inherit; cursor: pointer; }
 }
 .list-btn:hover { background: var(--surface-2); border-color: var(--line-strong); filter: none; }
 .lb-main { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.lb-title { font-size: var(--fs-base); font-weight: 560; }
+.lb-title { font-size: var(--fs-md); font-weight: 560; }
 .lb-tags { display: flex; gap: var(--s2); flex-wrap: wrap; flex: none; }
 .lb-flags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
 .lb-chev { flex: none; color: var(--text-faint); font-size: var(--fs-lg); line-height: 1; }
@@ -678,7 +678,7 @@ a.list-item { text-decoration: none; color: inherit; cursor: pointer; }
 .cmdk-input {
   width: 100%; border: 0; border-bottom: 1px solid var(--line);
   border-radius: 0; background: var(--surface); min-height: 52px;
-  font-size: var(--fs-base); padding: 0 var(--s4);
+  font-size: var(--fs-md); padding: 0 var(--s4);
 }
 .cmdk-input:focus { border-color: var(--line); outline: none; }
 .cmdk-list { max-height: 48vh; overflow-y: auto; }

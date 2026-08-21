@@ -15,7 +15,9 @@ sind. Terminal-Ausgaben filtern (`grep`/`head`), statt ganze Logs auszugeben.
 src/index.js        Bootstrap, Baileys-Lifecycle, Reconnect, Watchdog, Self-Ping
 src/router.js       Dispatch: fester Befehl → Custom/FAQ → KI-Fallback. Permissions, Rate-Limit, XP, AFK
 src/loader.js       rekursive Command-Autodiscovery (einzige Registrierungsquelle)
-src/config.js       alle Env-Zugriffe; sonst nirgends process.env lesen
+src/config.js       Env-Zugriffe. Ausnahmen: preflight.js (prueft die Rohwerte,
+                    bevor es eine Konfiguration gibt) und die bewusst dynamisch
+                    gelesenen GEMINI_API_KEY/ACCESS_SECRET. Sonst nichts.
 src/preflight.js    Env- und DB-Check vor dem Start, Klartext-Fehler
 src/db.js           Re-Export von core/database/* plus XP-/Stat-Schreibpuffer, Tagesschluessel
 src/core/database/  client (dbRun/dbRows/dbBatch) · schema (initDb, DATA_TABLES) · guard · wipe
@@ -25,12 +27,17 @@ src/queue.js        serielle Sende-Queue mit Jitter
 src/permissions.js  LID-aware Rollen (USER < GROUP_ADMIN < COMMUNITY_OWNER < BOT_OWNER)
 src/identity.js     Nutzeranzeige: JID → "+49 170 1234567 (Max Mustermann)", Batch-Aufloesung, Kontaktaufnahme
 src/moderation.js   Auto-Mod, Warn-Eskalation, Anti-Raid
-src/scheduler.js    Tick-Loop: geplante Nachrichten, Nachtmodus, Geburtstage, Wochenreport
+src/scheduler.js    Tick-Loop (30 s): geplante Nachrichten, Nachtmodus, Ablauf der
+                    Anti-Raid-Sperren, Geburtstage, Umfragen-Autoschluss,
+                    Wochenreport, automatisches Wochenend-Event
 src/ai.js           Gemini nur als Fallback, Cooldown + Tageslimit + Circuit-Breaker
-src/dashboard.js    Express-Panel, ~40 Routen, alle hinter requireAuth
-src/dashboard-ui.js gesamte Panel-UI als JS-String-Templates (~2400 Z. — nicht komplett lesen)
+src/dashboard.js    Express-Panel, 41 Routen. Der komplette /api-Router plus /,
+                    /qr und /logout liegen hinter requireAuth; oeffentlich sind
+                    /health, /robots.txt, /manifest.webmanifest, /icon.svg,
+                    GET+POST /login und die drei statischen Assets.
+src/dashboard-ui.js gesamte Panel-UI als JS-String-Templates (~2460 Z. — nicht komplett lesen)
 src/data/           statische Daten: Saison-Events
-test/               10 .mjs-Dateien, `npm test` = `node --test`
+test/               12 .mjs-Dateien, `npm test` = `node --test`
 ```
 
 Die Service-Schicht sind die flachen `src/*.js` (`moderation.js`,
@@ -92,11 +99,20 @@ Insgesamt 75 Befehle (126 Schlüssel inkl. Aliassen).
   denselben Tagesbegriff benutzen, auch der Chart im Panel (`/api/stats`
   liefert die Tagesliste deshalb mit).
 - Neue Tabelle angelegt? Dann auch in `DATA_TABLES` (`schema.js`) eintragen,
-  sonst überlebt sie jeden Panel-Wipe.
+  sonst überlebt sie jeden Panel-Wipe. `initDb()` erzwingt das beim Start in
+  **beide** Richtungen: jede Tabelle aus `DATA_TABLES` muss angelegt werden, und
+  jede angelegte Tabelle muss in `DATA_TABLES` stehen oder geschützt sein.
+- **`LEGACY_TABLES`** sind die Tabellen entfernter Features (Economy, Spiele,
+  `allowed_chats`). Sie werden **nicht mehr angelegt** — eine frische Datenbank
+  bekommt sie gar nicht erst, und `initDb()` bricht ab, falls jemand eine davon
+  wieder ins Schema schreibt. Bestehende Datenbanken behalten sie: ein
+  `DROP TABLE` wäre eine destruktive Migration gegen Produktionsdaten. Der Wipe
+  leert sie weiterhin, sofern vorhanden — abgeglichen gegen `sqlite_master`,
+  damit ein `DELETE` auf eine fehlende Tabelle nicht den ganzen Batch kippt.
 
 ## Tests
 
-`npm ci && npm test`. Stand: **126 pass / 0 fail** (kalte DB).
+`npm ci && npm test`. Stand: **136 pass / 0 fail** (kalte DB).
 
 Wichtig: **Test-DBs vor dem Lauf löschen** (`rm -f .test-*.db*`). Die Dateien
 sind gitignored, und ein warmer Zustand hat früher einen echten Fehler verdeckt
@@ -124,6 +140,18 @@ KI-Erreichbarkeitstest, volle Ringgroesse im Log, Rueckgabewert von
 Tests schlagen gegen den Stand vor den Fixes fehl — per `git stash` geprueft,
 nicht angenommen. Die drei uebrigen sichern ab, dass dabei nichts kaputtgeht
 (Guard, Auth-Tabellen ueberleben den Wipe, Datumsformat).
+
+`test/regression-phase1.test.mjs` deckt die Bereinigung aus Phase 1 ab (10
+Tests): die Level-Rechnung samt Vertrag von `levelProgress()`, die fertigen
+Antworttexte von `!rank` und `!profil` (weder `undefined` noch `NaN`),
+`profil-setzen` unter der aufgeloesten JID, und die Altlasten-Tabellen — eine
+frische DB legt keine an, ein Wipe leert vorhandene mit, ohne sie zu loeschen,
+und die Session ueberlebt. 7 der 10 schlagen gegen den Stand vor den Fixes
+fehl, per `git stash` geprueft. Die Command-Tests fuehren die echten
+`run()`-Handler gegen eine echte DB aus und pruefen den Antworttext — genau so
+faellt ein kaputter Vertrag zwischen Funktion und Aufrufer auf, und genau das
+hat vorher gefehlt: die XP-/Level-Mathematik hatte **keinen einzigen Test**,
+weshalb 126 gruene Tests an "Level undefined" vorbeigelaufen sind.
 
 `test/contacts.test.mjs` deckt die Kontaktaufnahme und die Nutzersuche ab
 (28 Tests): Einspielen von `Contact`-Objekten, LID+Nummer als *eine* Person,
