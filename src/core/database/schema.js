@@ -9,7 +9,7 @@ export const DATA_TABLES = [
   'custom_commands', 'faq', 'active_event', 'global_settings',
   'group_daily', 'command_toggles', 'blocked_words', 'antiraid',
   'audit_log', 'ai_usage', 'members', 'nightmode', 'contacts',
-  'user_profiles', 'groups', 'daily_stats',
+  'user_profiles', 'groups', 'daily_stats', 'afk',
 ];
 
 /**
@@ -59,6 +59,12 @@ export async function initDb() {
     `CREATE TABLE IF NOT EXISTS faq (keyword TEXT PRIMARY KEY, answer TEXT, by_jid TEXT, created_at INTEGER)`,
     `CREATE TABLE IF NOT EXISTS nightmode (group_jid TEXT PRIMARY KEY, enabled INTEGER DEFAULT 0, start_hhmm TEXT DEFAULT '22:00', end_hhmm TEXT DEFAULT '07:00', is_closed INTEGER DEFAULT 0)`,
     `CREATE TABLE IF NOT EXISTS custom_commands (name TEXT PRIMARY KEY, reply TEXT, by_jid TEXT, created_at INTEGER)`,
+    // commands/afk.js liest und schreibt diese Tabelle seit jeher — angelegt
+    // wurde sie nie. loadAfk() bekam beim Start still ein leeres Ergebnis
+    // (dbRows glaettet den Fehler), und jeder Schreibvorgang lief in ein
+    // .catch(() => {}). AFK funktionierte damit nur im RAM und war nach jedem
+    // Neustart weg, waehrend im Panel-Log "no such table: afk" auflief.
+    `CREATE TABLE IF NOT EXISTS afk (user_jid TEXT PRIMARY KEY, reason TEXT, since INTEGER)`,
     `CREATE TABLE IF NOT EXISTS birthdays (user_jid TEXT PRIMARY KEY, name TEXT, day INTEGER, month INTEGER, year INTEGER, group_jid TEXT, last_congratulated TEXT)`,
     `CREATE TABLE IF NOT EXISTS polls (id INTEGER PRIMARY KEY AUTOINCREMENT, group_jid TEXT, question TEXT, options TEXT, created_by TEXT, created_at INTEGER, open INTEGER DEFAULT 1)`,
     `CREATE TABLE IF NOT EXISTS poll_votes (poll_id INTEGER, user_jid TEXT, option_idx INTEGER, PRIMARY KEY (poll_id, user_jid))`,

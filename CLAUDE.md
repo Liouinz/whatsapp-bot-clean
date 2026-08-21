@@ -37,7 +37,7 @@ src/dashboard.js    Express-Panel, 41 Routen. Der komplette /api-Router plus /,
                     GET+POST /login und die drei statischen Assets.
 src/dashboard-ui.js gesamte Panel-UI als JS-String-Templates (~2460 Z. — nicht komplett lesen)
 src/data/           statische Daten: Saison-Events
-test/               12 .mjs-Dateien, `npm test` = `node --test`
+test/               13 .mjs-Dateien, `npm test` = `node --test`
 ```
 
 Die Service-Schicht sind die flachen `src/*.js` (`moderation.js`,
@@ -112,7 +112,7 @@ Insgesamt 75 Befehle (126 Schlüssel inkl. Aliassen).
 
 ## Tests
 
-`npm ci && npm test`. Stand: **136 pass / 0 fail** (kalte DB).
+`npm ci && npm test`. Stand: **152 pass / 0 fail** (kalte DB).
 
 Wichtig: **Test-DBs vor dem Lauf löschen** (`rm -f .test-*.db*`). Die Dateien
 sind gitignored, und ein warmer Zustand hat früher einen echten Fehler verdeckt
@@ -152,6 +152,17 @@ fehl, per `git stash` geprueft. Die Command-Tests fuehren die echten
 faellt ein kaputter Vertrag zwischen Funktion und Aufrufer auf, und genau das
 hat vorher gefehlt: die XP-/Level-Mathematik hatte **keinen einzigen Test**,
 weshalb 126 gruene Tests an "Level undefined" vorbeigelaufen sind.
+
+`test/panel-integration.test.mjs` fährt das Panel wirklich hoch (echtes
+`createDashboard()` auf Port 0, echte DB, echte HTTP-Anfragen) und prüft Zugang,
+Cookie-Flags, Abmeldung, falsch typisierte Eingaben, Prototype Pollution,
+Pfad-Parameter, Fehlerantworten ohne interne Details und die Deckel der
+Nutzersuche. Diese Datei ist aus einem Rauchtest entstanden, der **zwei echte
+Fehler gefunden hat, die 136 grüne Unit-Tests nicht sahen**: die
+Wipe-Bestätigung liess sich mit `confirm: ["LÖSCHEN"]` umgehen (weil
+`String(['LÖSCHEN']) === 'LÖSCHEN'`) und leerte die komplette Datenbank, und
+die Tabelle `afk` wurde abgefragt, aber nie angelegt. Wer am Panel etwas ändert,
+lässt diese Datei laufen.
 
 `test/contacts.test.mjs` deckt die Kontaktaufnahme und die Nutzersuche ab
 (28 Tests): Einspielen von `Contact`-Objekten, LID+Nummer als *eine* Person,

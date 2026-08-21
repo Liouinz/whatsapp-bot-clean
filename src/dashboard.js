@@ -753,7 +753,13 @@ export function createDashboard() {
 
   let lastWipeAt = 0;
   api.post('/db/wipe', async (req, res) => {
-    if (String(req.body?.confirm || '') !== 'LÖSCHEN') {
+    // Strikt auf den String pruefen, nicht auf String(...). JavaScript wandelt
+    // ein einelementiges Array in genau sein Element um: String(['LÖSCHEN'])
+    // ist 'LÖSCHEN'. Ein Client, der `confirm` versehentlich als Array oder
+    // als Objekt mit passender toString() schickt, hat damit die
+    // Sicherheitsabfrage umgangen und die komplette Datenbank geleert —
+    // nachgestellt und bestaetigt, bevor das hier geaendert wurde.
+    if (req.body?.confirm !== 'LÖSCHEN') {
       return res.status(400).json({ error: 'Bestätigung fehlt — bitte exakt "LÖSCHEN" eingeben.' });
     }
     if (Date.now() - lastWipeAt < 30_000) {

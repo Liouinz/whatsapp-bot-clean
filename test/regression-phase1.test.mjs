@@ -181,3 +181,79 @@ test('der Wipe leert Altlasten mit, laesst die Tabellen aber stehen', async () =
   await db.execute('DROP TABLE coins');
   await db.execute("DELETE FROM auth_creds WHERE id = 'phase1'");
 });
+
+// ── Jede benutzte Tabelle muss auch angelegt werden ─────────────────
+
+test('keine SQL-Abfrage nennt eine Tabelle, die es nicht gibt', async () => {
+  const { readdirSync, readFileSync, statSync } = await import('node:fs');
+  const { join: j } = await import('node:path');
+  const { DATA_TABLES, LEGACY_TABLES, PROTECTED_TABLES_SET } =
+    await import('../src/core/database/schema.js');
+
+  const files = [];
+  (function walk(dir) {
+    for (const name of readdirSync(dir)) {
+      const p = j(dir, name);
+      if (statSync(p).isDirectory()) walk(p);
+      else if (name.endsWith('.js')) files.push(p);
+    }
+  })(j(root, 'src'));
+
+  // SQLite-interne Tabellen und CTE-Namen sind keine echten Tabellen.
+  const ignore = new Set(['sqlite_master', 'sqlite_sequence', 'cand', 'enriched']);
+  const known = new Set([...DATA_TABLES, ...LEGACY_TABLES, ...PROTECTED_TABLES_SET, ...ignore]);
+
+  // Kommentare vorher entfernen: der Code ist deutsch kommentiert, und Woerter
+  // wie "eines" oder "ohne" stehen dort hinter "from"/"into" und waeren sonst
+  // Fehltreffer. `SET` ist ausgenommen, das kommt aus `DO UPDATE SET`.
+  const stripComments = (s) =>
+    s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+
+  const unknown = new Map();
+  for (const file of files) {
+    const src = stripComments(readFileSync(file, 'utf8'));
+    for (const m of src.matchAll(
+      /\b(?:FROM|INTO|UPDATE|JOIN)\s+([a-z_][a-z0-9_]*)/gi
+    )) {
+      const table = m[1].toLowerCase();
+      if (table === 'set') continue;
+      // Template-Platzhalter wie `FROM ${t}` liefern kein Wort — die fallen
+      // durch die Regex und muessen ohnehin aus einer Allowlist stammen.
+      if (!known.has(table)) {
+        if (!unknown.has(table)) unknown.set(table, file.replace(root + '/', ''));
+      }
+    }
+  }
+
+  assert.deepEqual(
+    [...unknown.entries()],
+    [],
+    'Diese Tabellen werden abgefragt, aber nie angelegt:\n' +
+      [...unknown.entries()].map(([t, f]) => `  ${t}  (${f})`).join('\n')
+  );
+});
+
+test('die afk-Tabelle existiert und ueberlebt einen Neustart', async () => {
+  const { setAfk, loadAfk, getAfk } = await import('../src/commands/afk.js');
+  const db = getDb();
+  await db.execute('DELETE FROM afk');
+
+  await setAfk(USER, 'Mittagspause');
+  const persisted = (await db.execute('SELECT user_jid, reason FROM afk')).rows;
+  assert.equal(persisted.length, 1, 'setAfk() muss wirklich schreiben, nicht nur in den RAM');
+  assert.equal(persisted[0].reason, 'Mittagspause');
+
+  // Neustart nachstellen: Cache verwerfen, aus der DB neu laden.
+  await loadAfk();
+  assert.equal(getAfk([USER])?.reason, 'Mittagspause', 'AFK muss den Neustart ueberleben');
+
+  await db.execute('DELETE FROM afk');
+});
+
+// ── Die Wipe-Bestaetigung darf sich nicht per Typ umgehen lassen ────
+
+test('String([\'LÖSCHEN\']) ist \'LÖSCHEN\' — deshalb strikt vergleichen', () => {
+  // Der Grund, warum die Route nicht mehr String(...) benutzt.
+  assert.equal(String(['LÖSCHEN']), 'LÖSCHEN');
+  assert.notEqual(['LÖSCHEN'], 'LÖSCHEN');
+});
