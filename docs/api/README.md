@@ -8,7 +8,7 @@ Die vollständige Beschreibung liegt maschinenlesbar in
 `test/api-openapi.test.mjs` an den Code gebunden: eine Route ohne Eintrag oder
 ein Eintrag ohne Route lässt den Testlauf scheitern. Was hier steht, gilt.
 
-**Basis:** `/api/v1` · **24 Endpunkte** · läuft im selben Prozess wie der Bot
+**Basis:** `/api/v1` · **25 Endpunkte** · läuft im selben Prozess wie der Bot
 
 ---
 
@@ -53,6 +53,21 @@ Danach an jede Anfrage:
 ```http
 Authorization: Bearer <accessToken>
 ```
+
+### Passwort ändern
+
+```http
+POST /api/v1/auth/password
+{ "currentPassword": "…", "newPassword": "…" }
+```
+
+**Wichtig nach dem Bootstrap:** Das Owner-Passwort ist zunächst *identisch* mit
+`ACCESS_SECRET` — dem Passwort des Web-Panels. Solange das so bleibt, öffnet ein
+Leck automatisch beides. Der erste Schritt nach der Einrichtung sollte deshalb
+ein Passwortwechsel sein.
+
+Beim Wechsel werden alle **anderen** Geräte-Sitzungen widerrufen; die eigene
+bleibt bestehen, damit sich die App nicht selbst abmeldet.
 
 ### Der allererste Zugang
 
@@ -149,6 +164,7 @@ Getrennte Kontingente je Bereich — sie teilen sich nichts.
 | Bereich | Grenze | gezählt nach |
 |---|---|---|
 | Anmeldung, Token-Erneuerung | 10 / 15 Min | IP-Präfix |
+| Anmeldung, zusätzlich | 5 / 15 Min | **Konto** |
 | Lesen | 120 / Min | Zugang |
 | Suche, Mitgliederlisten | 30 / Min | Zugang |
 | Bot-Steuerung | 5 / 10 Min | Zugang |

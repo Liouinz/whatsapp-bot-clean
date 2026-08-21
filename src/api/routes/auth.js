@@ -3,11 +3,11 @@ import { ApiError } from '../errors.js';
 import { validate } from '../middleware/validate.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
-import { authLimiter, readLimiter, adminLimiter } from '../middleware/rateLimit.js';
+import { authLimiter, usernameLimiter, readLimiter, adminLimiter } from '../middleware/rateLimit.js';
 import { audit } from '../../moderation.js';
 import {
-  findByUsername, findById, verifyPassword, createUser, listUsers, setDisabled,
-  bootstrapOwnerIfEmpty, permissionsFor, ROLES,
+  findByUsername, findById, verifyPassword, verifyAgainstDummy, createUser, listUsers,
+  setDisabled, changePassword, bootstrapOwnerIfEmpty, permissionsFor, ROLES,
 } from '../services/apiUsers.js';
 import {
   createSession, issueTokenPair, rotateRefreshToken, revokeSession,
@@ -29,6 +29,12 @@ authRoutes.post(
     deviceLabel: { type: 'string', max: 64 },
     appVersion: { type: 'string', max: 32 },
   }),
+  // Nach der Pruefung, damit der Benutzername vorliegt: ein zweites Kontingent
+  // je KONTO. Das IP-Limit allein schuetzt nicht — wer viele Adressen hat,
+  // laeuft daran vorbei, und ohne vorgelagerten Proxy laesst sich req.ip
+  // ohnehin frei setzen. Gegen das Durchprobieren EINES Passworts hilft nur
+  // ein Zaehler am Konto.
+  usernameLimiter,
   async (req, res) => {
     const { username, password, deviceLabel, appVersion } = req.valid;
 
@@ -45,9 +51,17 @@ authRoutes.post(
 
     // Ein einziger Fehlertext fuer "kein solcher Nutzer" und "falsches
     // Passwort" — sonst liesse sich damit herausfinden, welche Namen existieren.
+    //
+    // Der gleiche Text allein genuegt aber nicht: ohne Nutzer lief frueher gar
+    // kein scrypt, und die Antwort kam nach 1,9 statt 41 ms zurueck. Die Zeit
+    // war damit das Orakel, das der Text verschweigen sollte. Deshalb wird auch
+    // fuer einen unbekannten Namen gerechnet.
     const invalid = new ApiError('UNAUTHENTICATED', 'Benutzername oder Passwort ist falsch.');
-    if (!user) throw invalid;
-    if (!verifyPassword(password, user.pw_hash, user.pw_salt)) throw invalid;
+    if (!user) {
+      await verifyAgainstDummy(password);
+      throw invalid;
+    }
+    if (!(await verifyPassword(password, user.pw_hash, user.pw_salt))) throw invalid;
     if (Number(user.disabled) === 1) {
       throw new ApiError('FORBIDDEN', 'Dieser Zugang ist deaktiviert.');
     }
@@ -132,6 +146,42 @@ authRoutes.delete('/sessions/:id', requireAuth(), async (req, res) => {
   await audit('api.session_revoke', '', session.id, `api:${req.auth.user.username}`, `req=${req.id}`);
   res.json({ ok: true });
 });
+
+// ── Eigenes Passwort aendern ───────────────────────────────────────
+
+authRoutes.post(
+  '/password',
+  requireAuth(),
+  adminLimiter,
+  validate({
+    currentPassword: { type: 'string', required: true, min: 1, max: 256, trim: false },
+    newPassword: { type: 'string', required: true, min: 12, max: 256, trim: false },
+  }),
+  async (req, res) => {
+    // Ohne diesen Endpunkt bliebe das Owner-Passwort fuer immer identisch mit
+    // ACCESS_SECRET — dem Passwort des Web-Panels. Ein Leck haette damit
+    // automatisch beides geoeffnet, und die in der Doku beschriebene Trennung
+    // zwischen Panel- und API-Zugang gaebe es gar nicht.
+    const user = await findByUsername(req.auth.user.username);
+    if (!user) throw new ApiError('NOT_FOUND', 'Zugang nicht gefunden.');
+
+    if (!(await verifyPassword(req.valid.currentPassword, user.pw_hash, user.pw_salt))) {
+      throw new ApiError('UNAUTHENTICATED', 'Das aktuelle Passwort ist falsch.');
+    }
+    await changePassword(user.id, req.valid.newPassword);
+
+    // Alle ANDEREN Geraete abmelden. Wer sein Passwort aendert, tut das oft,
+    // weil er einen Fremdzugriff vermutet — dann muessen die fremden Sitzungen
+    // weg. Die eigene bleibt, sonst fliegt man aus der eigenen App.
+    const sessions = await listSessions(user.id);
+    for (const s of sessions) {
+      if (s.id !== req.auth.session.id && !s.revoked_at) await revokeSession(s.id);
+    }
+
+    await audit('api.password_change', '', user.id, `api:${user.username}`, `req=${req.id}`);
+    res.json({ ok: true, otherSessionsRevoked: sessions.filter((s) => s.id !== req.auth.session.id && !s.revoked_at).length });
+  }
+);
 
 // ── Zugaenge verwalten (nur Owner) ─────────────────────────────────
 
