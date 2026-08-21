@@ -32,6 +32,19 @@ export const LEGACY_TABLES = [
 
 export const PROTECTED_TABLES_SET = new Set(['auth_creds', 'auth_keys']);
 
+/**
+ * Infrastruktur der Control API: Zugaenge, Geraete-Sitzungen, Tokens.
+ *
+ * Bewusst **nicht** in DATA_TABLES. "Alle Daten loeschen" im Panel meint die
+ * Community-Daten des Bots — nicht die Zugaenge, mit denen man ihn bedient.
+ * Wuerde ein Wipe diese Tabellen leeren, sperrte er jedes gekoppelte Geraet
+ * aus und loeschte alle angelegten API-Nutzer gleich mit.
+ *
+ * Anders als PROTECTED_TABLES_SET sind sie normal beschreibbar — der Guard in
+ * guard.js schuetzt ausschliesslich auth_creds/auth_keys.
+ */
+export const INFRA_TABLES = ['api_users', 'api_sessions', 'api_tokens'];
+
 export async function initDb() {
   const db = getDb();
   
@@ -65,6 +78,20 @@ export async function initDb() {
     // .catch(() => {}). AFK funktionierte damit nur im RAM und war nach jedem
     // Neustart weg, waehrend im Panel-Log "no such table: afk" auflief.
     `CREATE TABLE IF NOT EXISTS afk (user_jid TEXT PRIMARY KEY, reason TEXT, since INTEGER)`,
+
+    // ── Control API (Phase 2) ────────────────────────────────────────
+    // Zugaenge fuer die spaetere Android-App. Passwoerter als scrypt-Hash mit
+    // eigenem Salt je Nutzer; der Klartext existiert nur im Request.
+    `CREATE TABLE IF NOT EXISTS api_users (id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, pw_hash TEXT NOT NULL, pw_salt TEXT NOT NULL, role TEXT NOT NULL, created_at INTEGER, disabled INTEGER DEFAULT 0)`,
+    // Ein Eintrag je gekoppeltem Geraet. Ueber revoked_at laesst sich ein
+    // einzelnes Geraet abmelden, ohne die anderen zu stoeren.
+    `CREATE TABLE IF NOT EXISTS api_sessions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_label TEXT, app_version TEXT, created_at INTEGER, last_used_at INTEGER, revoked_at INTEGER)`,
+    // Nur der SHA-256-Hash des Tokens wird gespeichert. Wer die Datenbank
+    // liest, bekommt damit keinen gueltigen Token in die Hand.
+    `CREATE TABLE IF NOT EXISTS api_tokens (token_hash TEXT PRIMARY KEY, session_id TEXT NOT NULL, kind TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER, revoked_at INTEGER)`,
+    `CREATE INDEX IF NOT EXISTS idx_api_tokens_session ON api_tokens(session_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_api_tokens_expires ON api_tokens(expires_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_api_sessions_user ON api_sessions(user_id)`,
     `CREATE TABLE IF NOT EXISTS birthdays (user_jid TEXT PRIMARY KEY, name TEXT, day INTEGER, month INTEGER, year INTEGER, group_jid TEXT, last_congratulated TEXT)`,
     `CREATE TABLE IF NOT EXISTS polls (id INTEGER PRIMARY KEY AUTOINCREMENT, group_jid TEXT, question TEXT, options TEXT, created_by TEXT, created_at INTEGER, open INTEGER DEFAULT 1)`,
     `CREATE TABLE IF NOT EXISTS poll_votes (poll_id INTEGER, user_jid TEXT, option_idx INTEGER, PRIMARY KEY (poll_id, user_jid))`,
@@ -148,13 +175,13 @@ export async function initDb() {
     }
   }
 
-  const known = new Set([...DATA_TABLES, ...PROTECTED_TABLES_SET]);
+  const known = new Set([...DATA_TABLES, ...PROTECTED_TABLES_SET, ...INFRA_TABLES]);
   for (const sql of schemas) {
     const m = /create table if not exists\s+(\w+)/i.exec(sql);
     if (m && !known.has(m[1])) {
       throw new Error(
         `[SCHEMA ERROR] Tabelle '${m[1]}' wird angelegt, fehlt aber in DATA_TABLES ` +
-          '(und ist nicht geschuetzt) — sie wuerde jeden Wipe ueberleben.'
+          '(und ist weder geschuetzt noch API-Infrastruktur) — sie wuerde jeden Wipe ueberleben.'
       );
     }
   }

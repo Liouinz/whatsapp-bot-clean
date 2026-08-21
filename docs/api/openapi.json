@@ -1,0 +1,2351 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "WhatsApp-Community-Bot — Control API",
+    "version": "1.0.0",
+    "description": "Steuer- und Leseschnittstelle des Bots. Einziger vorgesehener Client ist die Android-App; ein direkter Zugriff auf Datenbank, WhatsApp-Session oder Serverdateien ist ausdruecklich nicht Teil dieser API.\n\n**Authentifizierung:** `Authorization: Bearer <accessToken>`. Access-Tokens leben 15 Minuten, Refresh-Tokens 30 Tage. Ein Refresh rotiert beide; ein bereits eingetauschter Refresh-Token beendet bei erneuter Vorlage die gesamte Geraete-Sitzung.\n\n**Fehler** haben immer dieselbe Form (siehe Schema `Error`) und tragen die `requestId`, die auch im Header `X-Request-Id` steht.\n\n**Rollen:** `viewer` liest, `admin` steuert zusaetzlich den Bot, `owner` verwaltet zusaetzlich Zugaenge. Das je Endpunkt noetige Recht steht als `x-required-permission`."
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "auth",
+      "description": "Anmeldung, Tokens, Geraete, Zugaenge"
+    },
+    {
+      "name": "system",
+      "description": "Health, Version, Ressourcen"
+    },
+    {
+      "name": "bot",
+      "description": "Zustand und Steuerung des Bots"
+    },
+    {
+      "name": "users",
+      "description": "Personen, die der Bot kennt"
+    },
+    {
+      "name": "groups",
+      "description": "WhatsApp-Gruppen"
+    },
+    {
+      "name": "logs",
+      "description": "Betriebsmeldungen"
+    },
+    {
+      "name": "settings",
+      "description": "Konfiguration, ohne Geheimnisse"
+    }
+  ],
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Anmelden und Token-Paar erhalten",
+        "security": [],
+        "description": "Solange **kein einziger** Zugang existiert, gilt einmalig `ACCESS_SECRET` als Passwort fuer den Benutzernamen `owner` und legt diesen Zugang an. Danach ist dieser Weg geschlossen.\n\nRate-Limit: 10 Anfragen je 15 Minuten und IP, geteilt mit `/auth/refresh`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username",
+                  "password"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 64
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "deviceLabel": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "description": "Anzeigename des Geraets in der Geraeteliste"
+                  },
+                  "appVersion": {
+                    "type": "string",
+                    "maxLength": 32
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Angemeldet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenPair"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN — Zugang deaktiviert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Token-Paar erneuern",
+        "security": [],
+        "description": "Rotiert **beide** Tokens. Der eingereichte Refresh-Token wird dabei entwertet.\n\nWird ein bereits entwerteter Token erneut vorgelegt, gilt das als Diebstahl-Anzeichen: die komplette Geraete-Sitzung wird widerrufen und die Antwort ist `TOKEN_INVALID`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "refreshToken"
+                ],
+                "properties": {
+                  "refreshToken": {
+                    "type": "string",
+                    "minLength": 20,
+                    "maxLength": 512
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Erneuert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenPair"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "TOKEN_INVALID oder TOKEN_EXPIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Aktuelle Geraete-Sitzung beenden",
+        "description": "Widerruft die Sitzung des benutzten Tokens samt aller ihrer Tokens.",
+        "responses": {
+          "200": {
+            "description": "Abgemeldet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Eigener Zugang und Rechte",
+        "responses": {
+          "200": {
+            "description": "Zugangsdaten",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/sessions": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Eigene Geraete auflisten",
+        "description": "Nur eigene Sitzungen. Tokens sind nie Teil der Antwort.",
+        "responses": {
+          "200": {
+            "description": "Geraeteliste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Session"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/sessions/{id}": {
+      "delete": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Ein Geraet abmelden",
+        "description": "Nur eigene Sitzungen. Eine fremde Sitzungs-ID ergibt 404 — ihre Existenz wird nicht bestaetigt.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Sitzungs-ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Abgemeldet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/users": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Zugaenge auflisten",
+        "x-required-permission": "apiusers.manage",
+        "responses": {
+          "200": {
+            "description": "Zugaenge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ApiUser"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Zugang anlegen",
+        "x-required-permission": "apiusers.manage",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username",
+                  "password",
+                  "role"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 64,
+                    "pattern": "^[a-z0-9._-]+$"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 12,
+                    "maxLength": 256
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "viewer",
+                      "admin",
+                      "owner"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICT — Name vergeben",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/users/{id}": {
+      "patch": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Zugang aktivieren oder deaktivieren",
+        "x-required-permission": "apiusers.manage",
+        "description": "Beim Deaktivieren werden alle Sitzungen dieses Zugangs sofort widerrufen. Der eigene Zugang laesst sich nicht deaktivieren.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Zugangs-ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "disabled"
+                ],
+                "properties": {
+                  "disabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Geaendert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICT — eigener Zugang",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Liveness und Readiness",
+        "security": [],
+        "description": "Oeffentlich, damit Ueberwachung sie ohne Zugang abfragen kann. Enthaelt deshalb ausschliesslich Zustaende, keine Kennzahlen. **200** wenn bereit, **503** wenn nicht.",
+        "responses": {
+          "200": {
+            "description": "Bereit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Nicht bereit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/details": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Health mit Latenzen und KI-Kontingent",
+        "x-required-permission": "system.read",
+        "responses": {
+          "200": {
+            "description": "Ausfuehrlich",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/version": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Version von Bot und API",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Versionen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "string",
+                      "examples": [
+                        "3.0.0"
+                      ]
+                    },
+                    "api": {
+                      "type": "string",
+                      "examples": [
+                        "v1"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/system": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Ressourcen des Prozesses",
+        "x-required-permission": "system.read",
+        "description": "Alle Werte sind gemessen. `cpuPercent` ist `null`, wenn seit der letzten Abfrage zu wenig Zeit fuer eine belastbare Messung vergangen ist.",
+        "responses": {
+          "200": {
+            "description": "Ressourcen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/bot/status": {
+      "get": {
+        "tags": [
+          "bot"
+        ],
+        "summary": "Zustand des Bots",
+        "x-required-permission": "bot.read",
+        "responses": {
+          "200": {
+            "description": "Zustand",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/bot/restart": {
+      "post": {
+        "tags": [
+          "bot"
+        ],
+        "summary": "Bot neu starten",
+        "x-required-permission": "bot.control",
+        "description": "Antwortet **202** und faehrt danach ueber den gemeinsamen Shutdown-Pfad herunter (inklusive Sicherung der WhatsApp-Signal-Keys). Parallele Anfragen ergeben **409** — es laeuft immer nur ein Neustart. Danach greift eine Sperre von 60 Sekunden.\n\nRate-Limit: 5 Anfragen je 10 Minuten und Zugang. Wird im Audit-Log festgehalten.",
+        "responses": {
+          "202": {
+            "description": "Angenommen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Accepted"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICT — laeuft bereits oder Sperre aktiv",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/bot/relink": {
+      "post": {
+        "tags": [
+          "bot"
+        ],
+        "summary": "WhatsApp-Verknuepfung zuruecksetzen",
+        "x-required-permission": "bot.control",
+        "description": "Danach ist ein neuer QR-Code noetig. Wird im Audit-Log festgehalten.",
+        "responses": {
+          "202": {
+            "description": "Angenommen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Accepted"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "BOT_NOT_READY",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Personen suchen und blaettern",
+        "x-required-permission": "users.read",
+        "description": "`limit` ist bei 100 gedeckelt; ein groesserer Wunsch wird heruntergesetzt, nicht abgelehnt. `q` braucht mindestens 2 Zeichen; `%` und `_` sind keine Platzhalter.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 120
+            },
+            "description": "Name, Nummer oder JID (Teilzeichenkette)"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "name",
+                "activity",
+                "xp",
+                "warnings"
+              ],
+              "default": "name"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "default": "asc"
+            }
+          },
+          {
+            "name": "filter",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "groups",
+                "warned",
+                "muted"
+              ],
+              "default": "groups"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Treffer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "users",
+                    "pagination"
+                  ],
+                  "properties": {
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/UserSummary"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RATE_LIMITED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{jid}": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Eine Person im Detail",
+        "x-required-permission": "users.read",
+        "parameters": [
+          {
+            "name": "jid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "WhatsApp-Kennung, z. B. 491701234567@s.whatsapp.net"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Person",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/groups": {
+      "get": {
+        "tags": [
+          "groups"
+        ],
+        "summary": "Gruppen auflisten",
+        "x-required-permission": "groups.read",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "description": "Filter auf den Gruppennamen"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Gruppen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "groups",
+                    "pagination"
+                  ],
+                  "properties": {
+                    "groups": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Group"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/groups/{jid}": {
+      "get": {
+        "tags": [
+          "groups"
+        ],
+        "summary": "Eine Gruppe",
+        "x-required-permission": "groups.read",
+        "parameters": [
+          {
+            "name": "jid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Gruppen-Kennung, endet auf @g.us"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Gruppe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Group"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/groups/{jid}/members": {
+      "get": {
+        "tags": [
+          "groups"
+        ],
+        "summary": "Mitglieder einer Gruppe",
+        "x-required-permission": "groups.read",
+        "description": "Geblaettert: eine Gruppe fasst bis zu 1024 Personen. Namen werden nur fuer die sichtbare Seite aufgeloest, in einem Durchgang.",
+        "parameters": [
+          {
+            "name": "jid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Gruppen-Kennung"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mitglieder",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "members",
+                    "pagination"
+                  ],
+                  "properties": {
+                    "members": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/GroupMember"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "BOT_NOT_READY",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/logs": {
+      "get": {
+        "tags": [
+          "logs"
+        ],
+        "summary": "Betriebsmeldungen",
+        "x-required-permission": "logs.read",
+        "description": "Aus dem Ring-Puffer im Arbeitsspeicher, neueste zuerst. Stacktraces werden auf die erste Zeile gekuerzt. `level` wirkt aufwaerts: `warn` liefert auch `error`.",
+        "parameters": [
+          {
+            "name": "level",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "debug",
+                "info",
+                "success",
+                "warn",
+                "error"
+              ]
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Nur Eintraege ab diesem Zeitstempel (ms)"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Meldungen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "logs",
+                    "pagination"
+                  ],
+                  "properties": {
+                    "logs": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/LogEntry"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/settings": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Konfiguration, ohne Geheimnisse",
+        "x-required-permission": "settings.read",
+        "description": "Bewusst Feld fuer Feld zusammengestellt. Zugangsdaten (Datenbank, Panel-Passwort, KI-Schluessel) sind niemals Teil der Antwort — nur die Aussage, **ob** eine KI eingerichtet ist.",
+        "responses": {
+          "200": {
+            "description": "Einstellungen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/settings/commands": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Befehle mit Schaltzustand",
+        "x-required-permission": "settings.read",
+        "responses": {
+          "200": {
+            "description": "Befehle",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "commands": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Command"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Access-Token aus /auth/login"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Maschinenlesbar und stabil — hierauf schalten, nicht auf message.",
+                "examples": [
+                  "UNAUTHENTICATED",
+                  "TOKEN_EXPIRED",
+                  "FORBIDDEN",
+                  "VALIDATION_FAILED",
+                  "CONFLICT",
+                  "RATE_LIMITED",
+                  "BOT_NOT_READY"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "description": "Fuer Menschen. Darf sich aendern."
+              },
+              "requestId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Auch im Header X-Request-Id."
+              },
+              "details": {
+                "type": "array",
+                "description": "Nur bei VALIDATION_FAILED.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "field": {
+                      "type": "string"
+                    },
+                    "problem": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "required": [
+          "page",
+          "limit",
+          "total",
+          "pages"
+        ],
+        "properties": {
+          "page": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "pages": {
+            "type": "integer"
+          }
+        }
+      },
+      "TokenPair": {
+        "type": "object",
+        "required": [
+          "accessToken",
+          "refreshToken",
+          "tokenType",
+          "expiresIn"
+        ],
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "refreshToken": {
+            "type": "string"
+          },
+          "tokenType": {
+            "type": "string",
+            "examples": [
+              "Bearer"
+            ]
+          },
+          "expiresIn": {
+            "type": "integer",
+            "description": "Sekunden bis der Access-Token ablaeuft."
+          },
+          "refreshExpiresIn": {
+            "type": "integer"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/ApiUser"
+          }
+        }
+      },
+      "ApiUser": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "viewer",
+              "admin",
+              "owner"
+            ]
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "disabled": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "Me": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/ApiUser"
+          },
+          "session": {
+            "$ref": "#/components/schemas/Session"
+          }
+        }
+      },
+      "Session": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "deviceLabel": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "appVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "lastUsedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "revoked": {
+            "type": "boolean"
+          },
+          "current": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "required": [
+          "status",
+          "live",
+          "ready",
+          "checks"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "degraded"
+            ]
+          },
+          "live": {
+            "type": "boolean"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "checks": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "HealthDetails": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Health"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string"
+              },
+              "uptimeSeconds": {
+                "type": "integer"
+              }
+            }
+          }
+        ]
+      },
+      "SystemInfo": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "node": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "uptimeSeconds": {
+            "type": "integer"
+          },
+          "startedAt": {
+            "type": "integer"
+          },
+          "memory": {
+            "type": "object",
+            "properties": {
+              "rssBytes": {
+                "type": "integer"
+              },
+              "heapUsedBytes": {
+                "type": "integer"
+              },
+              "heapTotalBytes": {
+                "type": "integer"
+              }
+            }
+          },
+          "cpuPercent": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "null, wenn die Messspanne zu kurz war."
+          },
+          "totalMemoryBytes": {
+            "type": "integer"
+          }
+        }
+      },
+      "BotStatus": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "online",
+              "connecting",
+              "stopped"
+            ]
+          },
+          "whatsapp": {
+            "type": "string"
+          },
+          "authenticated": {
+            "type": "boolean"
+          },
+          "stopped": {
+            "type": "boolean"
+          },
+          "stopReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "uptimeSeconds": {
+            "type": "integer"
+          },
+          "startedAt": {
+            "type": "integer"
+          },
+          "lastConnectedAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "string"
+          },
+          "counters": {
+            "type": "object",
+            "properties": {
+              "sentToday": {
+                "type": "integer"
+              },
+              "commandsToday": {
+                "type": "integer"
+              },
+              "queuePending": {
+                "type": "integer"
+              },
+              "groups": {
+                "type": "integer"
+              }
+            }
+          },
+          "ai": {
+            "type": "object",
+            "properties": {
+              "used": {
+                "type": "integer"
+              },
+              "limit": {
+                "type": "integer"
+              }
+            }
+          },
+          "flags": {
+            "type": "object",
+            "properties": {
+              "xp": {
+                "type": "boolean"
+              },
+              "maintenance": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "Accepted": {
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "action": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        }
+      },
+      "UserIdentity": {
+        "type": "object",
+        "description": "Anzeigeform. Die JID bleibt die Identitaet.",
+        "properties": {
+          "jid": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nameSource": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string",
+            "examples": [
+              "+49 170 1234567 (Max Mustermann)"
+            ]
+          }
+        }
+      },
+      "UserSummary": {
+        "type": "object",
+        "properties": {
+          "jid": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserIdentity"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "jid": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "xp": {
+            "type": "integer"
+          },
+          "warnings": {
+            "type": "integer"
+          },
+          "muted": {
+            "type": "boolean"
+          },
+          "lastActive": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "inGroups": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UserDetail": {
+        "type": "object",
+        "properties": {
+          "jid": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserIdentity"
+          },
+          "lid": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "knownFrom": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "firstSeen": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "names": {
+            "type": "object",
+            "properties": {
+              "pushName": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "contactName": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "verifiedName": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "xp": {
+            "type": "integer"
+          },
+          "level": {
+            "type": "integer"
+          },
+          "messages": {
+            "type": "integer"
+          },
+          "lastActive": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "mutes": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "bans": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "Group": {
+        "type": "object",
+        "properties": {
+          "jid": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "members": {
+            "type": "integer"
+          },
+          "botAdmin": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "antilink": {
+            "type": "boolean"
+          },
+          "antispam": {
+            "type": "boolean"
+          },
+          "welcome": {
+            "type": "boolean"
+          },
+          "levelup_announce": {
+            "type": "boolean"
+          },
+          "antiraid": {
+            "type": "boolean"
+          },
+          "nightmode": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "start": {
+                "type": "string"
+              },
+              "end": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "GroupMember": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "pn": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "admin": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "admin",
+              "superadmin",
+              null
+            ]
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserIdentity"
+          }
+        }
+      },
+      "LogEntry": {
+        "type": "object",
+        "properties": {
+          "ts": {
+            "type": "integer"
+          },
+          "level": {
+            "type": "string"
+          },
+          "context": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "Settings": {
+        "type": "object",
+        "properties": {
+          "bot": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "prefix": {
+                "type": "string"
+              },
+              "timezone": {
+                "type": "string"
+              }
+            }
+          },
+          "features": {
+            "type": "object",
+            "properties": {
+              "xpEnabled": {
+                "type": "boolean"
+              },
+              "maintenance": {
+                "type": "boolean"
+              },
+              "aiConfigured": {
+                "type": "boolean"
+              }
+            }
+          },
+          "moderation": {
+            "type": "object"
+          },
+          "limits": {
+            "type": "object"
+          }
+        }
+      },
+      "Command": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "usage": {
+            "type": "string"
+          },
+          "adminOnly": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

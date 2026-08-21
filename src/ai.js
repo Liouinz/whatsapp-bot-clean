@@ -225,6 +225,17 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * Ist die KI ueberhaupt eingerichtet und beim Start erreichbar gewesen?
+ *
+ * Die Health-Pruefung der API braucht diese Unterscheidung: "kein Schluessel
+ * gesetzt" ist ein bewusster Zustand und kein Ausfall — sonst meldete jede
+ * Installation ohne Gemini dauerhaft einen roten Dienst.
+ */
+export function isAiEnabled() {
+  return aiEnabled;
+}
+
 export function getAiQuota() {
   quotaOk();
   return { used: dailyCalls, limit: config.ai.dailyLimit };

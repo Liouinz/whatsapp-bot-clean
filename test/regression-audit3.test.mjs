@@ -135,7 +135,10 @@ test('T-12: Einstellungs-Route verwirft den Gruppen-Cache', async () => {
   const start = src.indexOf("api.post('/groups/:jid/settings'");
   assert.ok(start > 0, 'Route gefunden');
   const handler = src.slice(start, src.indexOf("api.post('/groups/:jid/send'"));
-  assert.match(handler, /groupCache\.at = 0/, 'Cache wird im Handler verworfen');
+  // Seit Phase 2 heisst der Aufruf invalidateGroupCache() — die Cache-Logik
+  // liegt in services/query.js, damit Panel und /api/v1 dieselbe benutzen.
+  // Frueher stand hier ein `groupCache.at = 0` mitten im Routen-Code.
+  assert.match(handler, /invalidateGroupCache\(\)/, 'Cache wird im Handler verworfen');
   assert.match(handler, /invalidateSettings\(jid\)/, 'Moderations-Cache bleibt ebenfalls invalidiert');
 });
 
