@@ -8,7 +8,7 @@ die Sitzung liegt in der Datenbank statt auf der Platte.
 Mitgeliefert ist ein Web-Panel, über das der Bot verknüpft, überwacht und
 konfiguriert wird — Gruppen-Einstellungen, Moderation, Statistik, Logs.
 
-**Stand:** 75 Befehle · 152 Tests · Node ≥ 20 · ESM
+**Stand:** 75 Befehle · 24 API-Endpunkte · 198 Tests · Node ≥ 20 · ESM
 
 ---
 
@@ -225,6 +225,8 @@ src/
   logger.js         Ring-Puffer für die Log-Ansicht des Panels
   dashboard.js      Express-Panel: Auth, JSON-API, SSE
   dashboard-ui.js   Panel-UI als String-Templates (CSS, HTML, Client-JS)
+  api/              Control API v1 für die spätere Android-App
+  services/         gemeinsame Abfrage-Schicht für Panel und API
   core/database/    client (dbRun/dbRows/dbBatch) · schema · guard · wipe
   core/cache/       TTLCache
   commands/         16 Dateien, 75 Befehle
@@ -246,6 +248,10 @@ Auto-Schluss von Umfragen, Wochenreport, automatisches Wochenend-Event.
 Rechte werden **deklarativ** gesetzt (`adminOnly`, `ownerOnly`, `botOwnerOnly`,
 `groupOnly`) und zentral in `router.js` durchgesetzt.
 
+**Control API.** Unter `/api/v1` liegt eine getrennte, Token-authentifizierte
+Schnittstelle für die spätere Android-App — eigene Anmeldung, Rollen, Limits und
+Fehlerformat, im selben Prozess. Beschreibung: [`docs/api/`](docs/api/).
+
 Ausführlicher: [`ARCHITECTURE.md`](ARCHITECTURE.md) ·
 Entwicklungsregeln: [`CLAUDE.md`](CLAUDE.md) ·
 Panel-Gestaltung: [`DESIGN.md`](DESIGN.md)
@@ -259,7 +265,7 @@ rm -f .test-*.db*   # wichtig: nur ein kalter Lauf ist aussagekräftig
 npm test            # node --test
 ```
 
-Stand: **152 Tests, 0 Fehler.** Kein ESLint, kein Prettier, keine CI.
+Stand: **198 Tests, 0 Fehler.** Kein ESLint, kein Prettier, keine CI.
 
 Die Tests laufen gegen echte lokale SQLite-Dateien, nicht gegen Mocks; die
 Panel-Tests starten ein echtes `createDashboard()` auf einem freien Port und

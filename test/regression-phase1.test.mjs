@@ -187,7 +187,7 @@ test('der Wipe leert Altlasten mit, laesst die Tabellen aber stehen', async () =
 test('keine SQL-Abfrage nennt eine Tabelle, die es nicht gibt', async () => {
   const { readdirSync, readFileSync, statSync } = await import('node:fs');
   const { join: j } = await import('node:path');
-  const { DATA_TABLES, LEGACY_TABLES, PROTECTED_TABLES_SET } =
+  const { DATA_TABLES, LEGACY_TABLES, INFRA_TABLES, PROTECTED_TABLES_SET } =
     await import('../src/core/database/schema.js');
 
   const files = [];
@@ -201,7 +201,7 @@ test('keine SQL-Abfrage nennt eine Tabelle, die es nicht gibt', async () => {
 
   // SQLite-interne Tabellen und CTE-Namen sind keine echten Tabellen.
   const ignore = new Set(['sqlite_master', 'sqlite_sequence', 'cand', 'enriched']);
-  const known = new Set([...DATA_TABLES, ...LEGACY_TABLES, ...PROTECTED_TABLES_SET, ...ignore]);
+  const known = new Set([...DATA_TABLES, ...LEGACY_TABLES, ...INFRA_TABLES, ...PROTECTED_TABLES_SET, ...ignore]);
 
   // Kommentare vorher entfernen: der Code ist deutsch kommentiert, und Woerter
   // wie "eines" oder "ohne" stehen dort hinter "from"/"into" und waeren sonst

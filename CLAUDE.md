@@ -36,8 +36,12 @@ src/dashboard.js    Express-Panel, 41 Routen. Der komplette /api-Router plus /,
                     /health, /robots.txt, /manifest.webmanifest, /icon.svg,
                     GET+POST /login und die drei statischen Assets.
 src/dashboard-ui.js gesamte Panel-UI als JS-String-Templates (~2460 Z. — nicht komplett lesen)
+src/api/            Control API v1 (Phase 2) — eigene Auth (Bearer), eigenes
+                    Fehlerformat, eigene Limits. index.js · router.js · errors.js
+                    · middleware/ · routes/ · services/
+src/services/       gemeinsame Abfrage-Schicht fuer Panel UND API (query.js)
 src/data/           statische Daten: Saison-Events
-test/               13 .mjs-Dateien, `npm test` = `node --test`
+test/               16 .mjs-Dateien, `npm test` = `node --test`
 ```
 
 Die Service-Schicht sind die flachen `src/*.js` (`moderation.js`,
@@ -112,7 +116,7 @@ Insgesamt 75 Befehle (126 Schlüssel inkl. Aliassen).
 
 ## Tests
 
-`npm ci && npm test`. Stand: **152 pass / 0 fail** (kalte DB).
+`npm ci && npm test`. Stand: **198 pass / 0 fail** (kalte DB).
 
 Wichtig: **Test-DBs vor dem Lauf löschen** (`rm -f .test-*.db*`). Die Dateien
 sind gitignored, und ein warmer Zustand hat früher einen echten Fehler verdeckt
@@ -178,6 +182,41 @@ beendet den String — beides hat hier schon echte Fehler erzeugt, die
 `node --check` auf der Datei selbst *nicht* sieht.
 
 Kein ESLint, kein Prettier, keine CI.
+
+## Control API (`/api/v1`)
+
+Schnittstelle fuer die spaetere Android-App. Laeuft im **selben** Express-Prozess
+wie das Panel — kein zweiter Server, kein zweiter Port, kein Worker.
+
+Regeln, die beim Aendern zaehlen:
+
+- **Die Reihenfolge in `dashboard.js` ist kritisch.** `app.use(API_BASE, ...)`
+  steht vor `express.json()` (sonst landen Parse-Fehler im Panel-Handler und
+  werden zu 500 statt 400/413) und vor `app.use('/api', requireAuth, api)`
+  (jener Aufruf matcht auch `/api/v1/*`).
+- **Neue Routen nur ueber `apiRouter()`** aus `src/api/router.js`. Der haengt
+  jedem Handler sein `.catch(next)` an — ohne das wird die abgelehnte Promise
+  eines `async`-Handlers in Express 4 zur `unhandledRejection`.
+- **Jede Route nennt ihr Recht ausdruecklich** (`requirePermission('...')`). Es
+  gibt bewusst keine Voreinstellung "eingeloggt reicht".
+- **Handler lesen nur aus `req.valid`**, nie aus `req.body`/`req.query`. Der
+  Validierer verwirft unbekannte Felder — das ist der Schutz gegen Mass
+  Assignment.
+- **Keine Antwort gibt ein Konfigurationsobjekt direkt heraus.** `/settings` ist
+  Feld fuer Feld zusammengestellt; in `config` stehen alle Zugangsdaten.
+- **Tokens werden nur als SHA-256-Hash gespeichert.** Rollen: `viewer` liest,
+  `admin` steuert zusaetzlich den Bot, `owner` verwaltet zusaetzlich Zugaenge.
+- **`api_users`/`api_sessions`/`api_tokens` stehen in `INFRA_TABLES`**, nicht in
+  `DATA_TABLES` — der Panel-Wipe loescht keine Zugaenge und sperrt damit keine
+  Geraete aus.
+- Der Zugriffs-Log laeuft auf `debug`, nicht auf `info`: bei einer App, die den
+  Status pollt, waere der 500-Zeilen-Ringpuffer sonst binnen Minuten voll. 4xx
+  als `warn`; `res.locals.expectedStatus` nimmt entworfene Faelle davon aus
+  (`/health` meldet 503, solange der Bot nicht bereit ist).
+
+`docs/api/openapi.json` ist durch `test/api-openapi.test.mjs` an den Router
+gebunden: eine Route ohne Eintrag oder ein Eintrag ohne Route laesst den
+Testlauf scheitern. Leitfaden fuer den Client: `docs/api/README.md`.
 
 ## Panel-API
 
